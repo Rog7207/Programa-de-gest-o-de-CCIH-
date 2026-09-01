@@ -17,3 +17,7 @@ miniapps.zip
 node_modules/
 *.trava.json
 Dados CCIH.lnk
+
+# Versões específicas desta instalação (Tasy/HNSC) — só a genérica vai ao repositório
+RELATORIOS-PARA-TI.docx
+RELATORIOS-PARA-TI.pdf

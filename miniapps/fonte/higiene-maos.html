@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CCIH — Higiene das mãos</title>
+<style>
+* { box-sizing: border-box; } body { font-family: system-ui, sans-serif; margin: 0; background: #f2f4f7; color: #1f2933; }
+header { background: #14532d; color: #fff; padding: 14px 16px; font-size: 18px; font-weight: 700; }
+main { padding: 12px; max-width: 560px; margin: 0 auto; }
+.cartao { background: #fff; border: 1px solid #dde3ea; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+label { display: block; font-size: 13px; color: #61707f; margin-top: 8px; }
+input, select { width: 100%; font-size: 16px; padding: 9px; border: 1px solid #c3ccd6; border-radius: 8px; background: #fff; }
+.linha { display: flex; gap: 8px; } .linha > div { flex: 1; }
+button { font-size: 16px; font-weight: 700; border-radius: 10px; padding: 16px 8px; border: none; cursor: pointer; width: 100%; }
+.acoes { display: flex; gap: 8px; margin-top: 10px; }
+.alcool { background: #14532d; color: #fff; } .agua { background: #185fa5; color: #fff; } .nao { background: #a32d2d; color: #fff; }
+button:disabled { opacity: .35; }
+.cronometro { text-align: center; margin-top: 10px; display: none; }
+.cronometro .tempo { font-size: 44px; font-weight: 700; color: #14532d; font-variant-numeric: tabular-nums; }
+.concluir { background: #e5b95c; color: #412402; margin-top: 8px; }
+.numeros { display: flex; gap: 8px; text-align: center; margin-top: 10px; }
+.numeros div { flex: 1; background: #f2f4f7; border-radius: 8px; padding: 8px; }
+.numeros strong { font-size: 20px; display: block; }
+.suave { color: #61707f; font-size: 13px; }
+.secundario { background: #fff; color: #14532d; border: 1px solid #14532d; margin-top: 10px; font-weight: 600; }
+.desfazer { background: #fdf3dd; color: #633806; border: 1px solid #e5b95c; margin-top: 8px; font-weight: 600; }
+.excluir { background: none; border: none; color: #b03a2e; font-size: 14px; margin-top: 6px; }
+.aviso { border-left: 5px solid #e5b95c; background: #fdf3dd; color: #633806; }
+.aviso p { margin: 6px 0 0; font-size: 14px; }
+.versao { font-size: 12px; font-weight: 400; opacity: .7; }
+</style>
+</head>
+<body>
+<header>Auditoria de higiene das mãos <span class="versao">v26.08</span></header>
+<main>
+  <div class="cartao aviso" id="avisoAbertura">
+    <strong>Este arquivo precisa ser aberto no navegador.</strong>
+    <p>Você está vendo apenas a pré-visualização do arquivo, que não executa o aplicativo.
+       Toque nos três pontinhos (⋮) no canto da tela e escolha <strong>Abrir com → Chrome</strong>,
+       ou baixe o arquivo e abra-o pela pasta Downloads.</p>
+  </div>
+  <div class="cartao aviso" id="avisoArmazenamento" style="display:none">
+    <strong>Os registros não estão sendo salvos neste aparelho.</strong>
+    <p>Se fechar a página, perde o que digitou. Baixe o arquivo e abra-o pelo navegador.</p>
+  </div>
+  <div class="cartao">
+    <div class="linha">
+      <div><label>Setor</label><input type="text" id="setor" placeholder="UTI Adulto"></div>
+      <div><label>Observador</label><input type="text" id="observador" placeholder="seu nome"></div>
+    </div>
+    <div class="linha">
+      <div><label>Tipo de higienização</label>
+        <select id="tipo"><option>Simples</option><option>Cirúrgica</option></select></div>
+      <div><label>Categoria profissional</label>
+        <select id="categoria">
+          <option>Médico</option><option>Enfermeiro</option><option>Técnico de enfermagem</option>
+          <option>Fisioterapeuta</option><option>Outro</option>
+        </select></div>
+    </div>
+    <div id="linhaMomento">
+      <label>Momento (OMS)</label>
+      <select id="momento">
+        <option value="1">1 — Antes de tocar o paciente</option>
+        <option value="2">2 — Antes de procedimento asséptico</option>
+        <option value="3">3 — Após risco de exposição a fluidos</option>
+        <option value="4">4 — Após tocar o paciente</option>
+        <option value="5">5 — Após tocar áreas próximas</option>
+      </select>
+    </div>
+  </div>
+  <div class="cartao">
+    <p class="suave" style="margin:0 0 4px">Ao iniciar a higienização, toque no produto — o cronômetro dispara. Toque em concluir quando terminar.</p>
+    <div class="acoes">
+      <button class="alcool" data-acao="Álcool">Álcool</button>
+      <button class="agua" data-acao="Água e sabão">Água e sabão</button>
+      <button class="nao" data-acao="Não higienizou">Não higienizou</button>
+    </div>
+    <div class="cronometro" id="cronometro">
+      <div class="tempo" id="tempo">0 s</div>
+      <div class="suave" id="acaoAtual"></div>
+      <button class="concluir" id="concluir">Concluir higienização e registrar</button>
+    </div>
+    <div class="numeros">
+      <div><strong id="nTotal">0</strong><span class="suave">oportunidades</span></div>
+      <div><strong id="nAdesao">—</strong><span class="suave">adesão</span></div>
+      <div><strong id="nTempo">—</strong><span class="suave">tempo médio</span></div>
+    </div>
+    <button class="desfazer" id="desfazer">Desfazer último registro</button>
+  </div>
+  <div class="cartao">
+    <button class="secundario" id="exportar">Exportar e enviar planilha</button>
+    <button class="excluir" id="limpar" style="width:100%">Apagar registros do aparelho</button>
+  </div>
+</main>
+<script>
+const CHAVE = 'ccih.higiene.v2';
+const EMAIL_DESTINO = 'defina-o-email-da-ccih@exemplo.br';
+const ENVIO_URL = '';
+const ENVIO_SEGREDO = 'troque-este-segredo';
+const $ = id => document.getElementById(id);
+
+/* O aviso de abertura fica visível por padrão e some assim que o script roda: se a página
+   for aberta num visualizador que não executa JavaScript (a pré-visualização do Google
+   Drive, por exemplo), o usuário lê o que fazer em vez de encontrar um formulário morto. */
+$('avisoAbertura').style.display = 'none';
+
+/* Esses mesmos visualizadores rodam a página numa caixa sem armazenamento, e aí tocar em
+   localStorage lança exceção. Sem esta proteção o miniapp morria na primeira linha. */
+let armazenamentoOk = true;
+const guardadoNaMemoria = {};
+function lerLocal(chave) {
+  try { return localStorage.getItem(chave); }
+  catch (e) { armazenamentoOk = false; return chave in guardadoNaMemoria ? guardadoNaMemoria[chave] : null; }
+}
+function gravarLocal(chave, valor) {
+  try { localStorage.setItem(chave, valor); }
+  catch (e) { armazenamentoOk = false; guardadoNaMemoria[chave] = valor; }
+}
+function conferirArmazenamento() {
+  $('avisoArmazenamento').style.display = armazenamentoOk ? 'none' : '';
+}
+$('setor').value = lerLocal(CHAVE + '.setor') || '';
+$('observador').value = lerLocal(CHAVE + '.observador') || '';
+$('tipo').value = lerLocal(CHAVE + '.tipo') || 'Simples';
+let registros = JSON.parse(lerLocal(CHAVE) || '[]');
+let cronometro = null;
+
+$('tipo').addEventListener('change', () => {
+  $('linhaMomento').style.display = $('tipo').value === 'Cirúrgica' ? 'none' : '';
+});
+$('tipo').dispatchEvent(new Event('change'));
+
+function gravar() { gravarLocal(CHAVE, JSON.stringify(registros)); conferirArmazenamento(); desenhar(); }
+function desenhar() {
+  const total = registros.length;
+  const nao = registros.filter(r => r.Acao === 'Não higienizou').length;
+  const tempos = registros.map(r => Number(r.DuracaoSegundos)).filter(t => t > 0);
+  $('nTotal').textContent = total;
+  $('nAdesao').textContent = total ? Math.round((total - nao) / total * 100) + '%' : '—';
+  $('nTempo').textContent = tempos.length ? Math.round(tempos.reduce((a, b) => a + b, 0) / tempos.length) + ' s' : '—';
+}
+
+function registrar(acao, duracao) {
+  registros.push({
+    ID_Observacao: Date.now() + '-' + Math.floor(Math.random() * 10000),
+    Data: new Date().toISOString().slice(0, 10),
+    Setor: $('setor').value.trim(), Observador: $('observador').value.trim(),
+    TipoHigienizacao: $('tipo').value, Categoria: $('categoria').value,
+    Momento: $('tipo').value === 'Cirúrgica' ? '' : $('momento').value,
+    Acao: acao, DuracaoSegundos: duracao ? String(duracao) : '',
+    CriadoEm: new Date().toISOString()
+  });
+  gravar();
+}
+
+function alternarBotoes(desabilitar) {
+  document.querySelectorAll('.acoes button').forEach(b => b.disabled = desabilitar);
+}
+
+document.querySelectorAll('.acoes button').forEach(botao => {
+  botao.onclick = () => {
+    if (!$('setor').value.trim() || !$('observador').value.trim()) { alert('Preencha setor e observador.'); return; }
+    gravarLocal(CHAVE + '.setor', $('setor').value.trim());
+    gravarLocal(CHAVE + '.observador', $('observador').value.trim());
+    gravarLocal(CHAVE + '.tipo', $('tipo').value);
+    const acao = botao.dataset.acao;
+    if (acao === 'Não higienizou') { registrar(acao, 0); return; }
+    cronometro = { acao, inicio: Date.now() };
+    $('acaoAtual').textContent = acao + ' — higienização em andamento';
+    $('tempo').textContent = '0 s';
+    $('cronometro').style.display = 'block';
+    alternarBotoes(true);
+    cronometro.intervalo = setInterval(() => {
+      $('tempo').textContent = Math.round((Date.now() - cronometro.inicio) / 1000) + ' s';
+    }, 250);
+  };
+});
+
+$('concluir').onclick = () => {
+  if (!cronometro) return;
+  clearInterval(cronometro.intervalo);
+  const duracao = Math.max(1, Math.round((Date.now() - cronometro.inicio) / 1000));
+  registrar(cronometro.acao, duracao);
+  cronometro = null;
+  $('cronometro').style.display = 'none';
+  alternarBotoes(false);
+};
+
+$('desfazer').onclick = () => { registros.pop(); gravar(); };
+
+function csvCampo(v) { v = String(v == null ? '' : v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+function tabelaCSV(nome, objetos) {
+  let saida = '##' + nome + '\n';
+  if (!objetos.length) return saida;
+  const colunas = Object.keys(objetos[0]);
+  saida += colunas.join(';') + '\n';
+  saida += objetos.map(o => colunas.map(c => csvCampo(o[c])).join(';')).join('\n') + '\n';
+  return saida;
+}
+function avisar(texto, erro) {
+  let el = document.getElementById('statusExporte');
+  if (!el) {
+    el = document.createElement('p');
+    el.id = 'statusExporte';
+    document.getElementById('exportar').after(el);
+  }
+  el.style.cssText = 'font-weight:600;font-size:14px;margin-top:8px;color:' + (erro ? '#b03a2e' : '#14532d');
+  el.textContent = texto;
+}
+async function entregarArquivo(nome, texto) {
+  if (ENVIO_URL) {
+    try {
+      await fetch(ENVIO_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ segredo: ENVIO_SEGREDO, nome: nome, conteudo: texto }) });
+      avisar('Enviado para a pasta da CCIH no Drive: ' + nome);
+      return true;
+    } catch (e) {
+      avisar('Sem conexão para o envio direto — salvando o arquivo para enviar por e-mail.', true);
+    }
+  }
+  try {
+    /* Blob + createObjectURL, e não data: URI: o celular bloqueia o download de data:
+       quando o arquivo passa de alguns KB, e a exportação falhava calada. */
+    const blob = new Blob(['﻿' + texto], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nome;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    avisar('Arquivo "' + nome + '" salvo na pasta Downloads.');
+    /* O e-mail fica num botão para o usuário tocar: disparar duas navegações seguidas
+       (download + mailto) faz o celular cancelar uma das duas. */
+    const status = document.getElementById('statusExporte');
+    const email = document.createElement('a');
+    email.href = 'mailto:' + EMAIL_DESTINO + '?subject=' + encodeURIComponent('CCIH — ' + nome)
+      + '&body=' + encodeURIComponent('Segue em anexo o arquivo ' + nome + ' (anexe-o pela pasta Downloads).');
+    email.textContent = '✉ Abrir e-mail para ' + EMAIL_DESTINO + ' (anexe o arquivo baixado)';
+    email.style.cssText = 'display:block;margin-top:8px;padding:10px;border:1px solid #14532d;border-radius:8px;'
+      + 'color:#14532d;font-weight:700;text-align:center;text-decoration:none';
+    status.appendChild(email);
+    const baixar = document.createElement('a');
+    baixar.href = url;
+    baixar.download = nome;
+    baixar.textContent = '↓ Baixar de novo';
+    baixar.style.cssText = 'display:block;margin-top:6px;color:#61707f;font-size:13px;text-align:center';
+    status.appendChild(baixar);
+    return true;
+  } catch (e) {
+    avisar('Não foi possível exportar: ' + e.message, true);
+    return false;
+  }
+}
+$('exportar').onclick = async () => {
+  if (!registros.length) { avisar('Nenhum registro para exportar.', true); return; }
+  const setor = ($('setor').value.trim() || 'setor').replace(/[^A-Za-z0-9]+/g, '-');
+  const nome = `HM_${setor}_${new Date().toISOString().slice(0, 10)}.csv`;
+  const texto = '##ccih-miniapp;tipo=higiene_maos;versao=3\n' + tabelaCSV('observacoes', registros);
+  await entregarArquivo(nome, texto);
+};
+$('limpar').onclick = () => { if (confirm('Apagar todos os registros deste aparelho?')) { registros = []; gravar(); } };
+desenhar();
+</script>
+</body>
+</html>

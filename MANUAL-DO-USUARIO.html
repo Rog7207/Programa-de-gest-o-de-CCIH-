@@ -1,0 +1,132 @@
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Aplicativo CCIH — Manual do usuário</title><style>body { font-family: "Segoe UI", system-ui, sans-serif; max-width: 820px; margin: 30px auto; padding: 0 20px; color: #1f2933; line-height: 1.55; }
+h1 { color: #14532d; border-bottom: 2px solid #cfe3d6; padding-bottom: 6px; }
+h2 { color: #14532d; margin-top: 28px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th { background: #e8f3ec; color: #14532d; text-align: left; }
+th, td { border: 1px solid #dde3ea; padding: 6px 9px; }
+tr:nth-child(even) td { background: #f7f9fb; }
+code { background: #f0f2f5; padding: 1px 5px; border-radius: 4px; }
+hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
+</style></head><body><h1>Aplicativo CCIH — Manual do usuário</h1>
+<p><em>Versão de setembro/2026. Este manual acompanha o aplicativo e cresce com ele.</em></p>
+<hr>
+<h2>1. Começando</h2>
+<ul>
+<li>Abra o <strong><code>index.html</code></strong> no Google Chrome ou Microsoft Edge (outros navegadores não têm acesso a pastas). Não há instalação.</li>
+<li><strong>Identifique-se pelo nome</strong> — ele assina tudo que você importar ou alterar na sessão.</li>
+<li><strong>Aponte a pasta de dados</strong> da CCIH (na rede do hospital). O app lembra as últimas pastas usadas. Na primeira vez numa pasta vazia, ele pergunta antes de criar o banco — se você esperava dados e a pasta veio vazia, escolheu a pasta errada: cancele.</li>
+</ul>
+<p>Os dados são planilhas Excel dentro dessa pasta — dá para abrir qualquer uma no Excel para conferir (só não edite com o app aberto ao mesmo tempo). O aplicativo em si não guarda nada: <strong>atualizar o app é substituir a pasta do programa inteira; os dados ficam intactos.</strong> Após atualizar, use Ctrl+Shift+R na primeira abertura.</p>
+<hr>
+<h2>2. Importando dados</h2>
+<h3>O que pode ser importado (aba Importar)</h3>
+<table><thead><tr><th>Tipo</th><th>O que traz</th><th>De onde vem</th></tr></thead><tbody>
+<tr><td>Culturas (laboratório)</td><td>exames, germes, antibiograma</td><td>planilha/PDF do laboratório</td></tr>
+<tr><td>Internações (censo)</td><td>entradas, altas, setores, nomes, telefones</td><td>Tasy</td></tr>
+<tr><td>Altas</td><td>fecha internações abertas</td><td>Tasy</td></tr>
+<tr><td>Cirurgias realizadas</td><td>procedimentos, profilaxia</td><td>relatório do centro cirúrgico</td></tr>
+<tr><td>Dispositivos invasivos</td><td>CVC/VM/SVD, instalação e retirada</td><td>Tasy</td></tr>
+<tr><td>Pacientes em isolamento</td><td>foto de quem está isolado agora</td><td>Tasy</td></tr>
+<tr><td>Óbitos</td><td>desfecho das internações</td><td>Tasy</td></tr>
+<tr><td>Antibióticos prescritos</td><td>prescrições em janelas renovadas</td><td>Tasy</td></tr>
+<tr><td>Higiene das mãos</td><td>observações dos 5 momentos</td><td>miniapp</td></tr>
+<tr><td>Protocolo de sepse</td><td>ficha dos enfermeiros</td><td>planilha própria</td></tr>
+<tr><td>Casos de IRAS</td><td>migração de outro sistema</td><td>eventual</td></tr>
+<tr><td>Catálogo de antimicrobianos</td><td>padronização da farmácia</td><td>farmácia</td></tr>
+</tbody></table>
+<h3>Como importar</h3>
+<p><strong>Arraste o arquivo</strong> (ou clique para escolher) na aba Importar. O assistente tem 5 passos: arquivo → tipo e cabeçalho → mapeamento de colunas → prévia e validação → gravação.</p>
+<ul>
+<li><strong>O app memoriza o layout</strong>: na segunda vez que o mesmo relatório chegar, ele reconhece pelas colunas e sugere tudo sozinho. Mudou o layout no hospital? Ele pede o mapeamento uma vez e memoriza de novo.</li>
+<li><strong>Termos novos</strong> (setor, germe, material que o app não conhece) aparecem para você decidir: termo novo, sinônimo de um existente, ou descarte. A decisão fica memorizada.</li>
+<li><strong>Importar pasta</strong>: o botão "Importar pasta" varre uma pasta inteira e importa tudo que já tem layout memorizado — ideal para o lote diário de anexos.</li>
+<li><strong>Arquivos de miniapp entram sozinhos</strong>, sem assistente (o cabeçalho já diz o que são).</li>
+</ul>
+<h3>Atualizações e reimportação — pode repetir sem medo</h3>
+<p>A regra geral do app é: <strong>reimportar não duplica</strong>. Cada tipo tem sua identidade (nº do exame do laboratório, atendimento+data, etc.) e o que já existe é ignorado ou atualizado. Na prática:</p>
+<ul>
+<li><strong>Períodos sobrepostos são bem-vindos</strong> — exporte sempre "últimos 30 dias".</li>
+<li><strong>Internações</strong>: reimportar atualiza alta, desfecho e setor das que mudaram.</li>
+<li><strong>Isolamentos</strong>: cada lista importada é uma <em>foto de agora</em> — quem estava na foto anterior e sumiu tem a precaução encerrada automaticamente na data da foto.</li>
+<li><strong>Miniapp da UTI</strong>: reexportar o mesmo dia substitui a visita (correções valem).</li>
+<li>O relatório original é sempre <strong>arquivado</strong> em <code>importados/AAAA-MM/</code> dentro da pasta de dados — nada se perde.</li>
+</ul>
+<hr>
+<h2>3. Culturas — triagem e revisão</h2>
+<p>Ao importar, o app <strong>pré-classifica sozinho</strong> o que não pede julgamento clínico: cultura sem crescimento → <strong>Negativa</strong>; swab de vigilância e pesquisa de SGB → <strong>Colonização</strong>; leite e água → controles. Essas ficam com status <code>triagem</code> e <strong>fora do painel</strong> (há um seletor no relatório para vê-las quando quiser).</p>
+<p>O que sobra na <strong>fila de revisão</strong> (aba Culturas) é o que pode ser infecção. Clique na linha: o detalhe abre embaixo dela, com antibiograma e o botão "Ver ficha do paciente". Classifique: Presente na admissão / IRAS (pede topografia e dispositivo) / Colonização / Contaminação / Repetição / Não é cultura.</p>
+<ul>
+<li>Classificar como <strong>IRAS abre uma suspeita de notificação</strong> — que só vira notificação oficial depois que <em>outro profissional</em> confirmar (ver seção 7).</li>
+<li>Culturas colhidas em torno de um protocolo de sepse levam o selo <strong>🩸 sepse</strong> e nunca somem do relatório, mesmo negativas — a ausência de germe é o resultado do protocolo.</li>
+</ul>
+<p>O <strong>Relatório microbiológico</strong> (aba Relatórios) filtra por período, setor, material, germe, resistência e classificação, mostra o antibiograma acumulado (%S só de painéis completos) e exporta para Excel.</p>
+<hr>
+<h2>4. Antibióticos</h2>
+<p>O extrato do hospital traz <em>janelas de prescrição</em> renovadas a cada 1–3 dias. O app funde as janelas contíguas do mesmo paciente + droga num <strong>curso de tratamento</strong> — é o curso que aparece na ficha do paciente, na fila e nos indicadores.</p>
+<p>A aba Antibióticos traz:</p>
+<ul>
+<li><strong>Alertas</strong>: 🦠 germe do paciente resistente ao antibiótico em uso (culturas de até 30 dias) · 💊 dose diária acima do teto usual de adulto (setores pediátricos ficam fora) · ⏱ curso com 10+ dias sem interrupção. Os alertas também aparecem no painel inicial.</li>
+<li><strong>Fila de avaliação</strong>: como a de culturas — clique no curso, o cartão mostra as culturas recentes com o resultado daquele antibiótico, e você registra Avaliação + Recomendação (Manter / Ajustar dose / Descalonar / Modificar / Suspender) com parecer. A avaliação vale pelo curso; se ele continuar correndo, volta à fila em 7 dias.</li>
+<li><strong>Indicadores</strong>: DOT (dias de terapia) por semana, por setor, por droga e por classe (quando o catálogo da farmácia estiver importado), duração média dos cursos.</li>
+<li><strong>Página remota dos médicos</strong>: gera um HTML cifrado com os pacientes pendentes para os prescritores avaliarem de fora; o retorno entra pela aba Importar.</li>
+</ul>
+<hr>
+<h2>5. Miniapps (celular)</h2>
+<p>Dois miniaplicativos rodam <strong>offline no celular</strong>, distribuídos por QR code (aba Configurações → distribuição):</p>
+<ul>
+<li><strong>Visita à UTI</strong>: dispositivos por paciente (com indicação e "sugerir retirada"), avaliação de antibióticos à beira do leito e <strong>suspeita de IRAS</strong> com foco.</li>
+<li><strong>Higiene das mãos</strong>: observação dos 5 momentos com cronômetro de fricção.</li>
+</ul>
+<p>Ao final, o miniapp <strong>exporta um arquivo</strong> (compartilhe pelo próprio celular — e-mail ou WhatsApp para você mesmo). No computador, arraste esse arquivo na aba Importar: entra sozinho. O que acontece na importação:</p>
+<ul>
+<li>visitas viram os indicadores da aba UTI (dispositivo-dia, retiradas sugeridas — e o app confere depois se <strong>foram retiradas de fato</strong>);</li>
+<li>suspeitas de IRAS viram casos aguardando confirmação;</li>
+<li>os pacientes são identificados pelo número anotado (prontuário <em>ou</em> atendimento).</li>
+</ul>
+<p>A aba UTI também gera o <strong>📋 resumo para levar à visita</strong> (último mês do setor: MDR, isolamentos, adesão à higiene, pendências) — enviado por WhatsApp para o celular de quem vai fazer a visita, com pacientes em iniciais.</p>
+<hr>
+<h2>6. Isolamentos</h2>
+<p>Duas fontes se encontram na aba Isolamentos:</p>
+<ul>
+<li>A <strong>lista diária de isolados</strong> importada do hospital (foto do momento — encerra sozinha quem saiu).</li>
+<li>As <strong>pendências geradas pelo app</strong>: multirresistente novo sem precaução ativa nem decisão registrada. Para cada pendência, registre a precaução iniciada ou "não indicado" com justificativa.</li>
+</ul>
+<p>Encerrar uma precaução manualmente também é feito ali. O painel inicial mostra o total de pendências abertas.</p>
+<hr>
+<h2>7. Notificação de IRAS — dupla assinatura</h2>
+<p>Toda suspeita de infecção hospitalar — venha da revisão de culturas, da avaliação remota, do miniapp da UTI ou da vigilância pós-alta — entra como <strong>"em investigação"</strong>. A notificação oficial só nasce na <strong>aba Infecções</strong>, onde um segundo profissional:</p>
+<ul>
+<li>abre a suspeita (a lista fica no topo da aba, e o painel inicial avisa);</li>
+<li>completa topografia, dispositivo, germe e critério;</li>
+<li><strong>confirma</strong> (fica registrado quem notificou e quem confirmou) ou <strong>descarta</strong>.</li>
+</ul>
+<p>Se você tentar confirmar uma suspeita que você mesmo abriu, o app avisa — não impede, mas o ideal é que sejam duas pessoas. Os indicadores contam apenas as confirmadas.</p>
+<hr>
+<h2>8. Vigilância pós-alta (cirurgias)</h2>
+<p>A aba Pós-alta acompanha infecção de sítio cirúrgico depois da alta:</p>
+<ul>
+<li><strong>Triagem</strong>: cirurgias de 30 a 120 dias aparecem com checkbox — próteses/implantes e cesarianas já marcadas. Confirme para colocar <strong>sob vigilância</strong>.</li>
+<li><strong>WhatsApp</strong>: mensagem-modelo editável (com {nome}, {procedimento}, {data}); o clique abre a conversa e marca "mensagem enviada" (reversível com ↩).</li>
+<li><strong>Desfecho</strong>: "✓ Sem infecção" encerra; "⚠ Investigação" abre a ficha (tipo de ISC, observações) e cria a suspeita de IRAS.</li>
+<li><strong>Validação</strong>: um segundo profissional valida — só então a infecção é confirmada.</li>
+<li>Quem passa de 120 dias sem resposta é encerrado "sem contato".</li>
+</ul>
+<hr>
+<h2>9. As outras abas, em uma linha cada</h2>
+<ul>
+<li><strong>Painel</strong> — alertas do dia (surtos, MDR 10 dias, antimicrobianos, suspeitas de IRAS, pendências) e gráficos rápidos.</li>
+<li><strong>Pacientes</strong> — cadastro, busca e unificação de registros provisórios do laboratório.</li>
+<li><strong>Ficha do paciente</strong> — tudo sobre uma pessoa numa linha do tempo (internações, culturas, antibióticos por curso, cirurgias, dispositivos, sepse, isolamentos, óbito); abre clicando no nome em qualquer tela.</li>
+<li><strong>Sepse</strong> — indicadores do protocolo (tempos, bundle, desfechos) e perfil microbiológico IRAS × admissão.</li>
+<li><strong>Surtos</strong> — investigação das suspeitas do painel, com cruzamento automático do que os pacientes têm em comum e anexos.</li>
+<li><strong>Higiene de mãos</strong> — adesão por momento da OMS, setor e categoria profissional.</li>
+<li><strong>Eventos</strong> — séries temporais de qualquer fonte do banco.</li>
+<li><strong>Configurações</strong> — vocabulários (com unificação de termos), distribuição dos miniapps.</li>
+</ul>
+<hr>
+<h2>10. Segurança e boas práticas</h2>
+<ul>
+<li><strong>Backup</strong> = copiar a pasta de dados inteira. Os scripts de manutenção também deixam cópias em <code>backups/</code> antes de qualquer mudança em massa.</li>
+<li><strong>Multiusuário</strong>: cada arquivo tem trava; se outra pessoa estiver gravando, o app pede para aguardar. Evite editar as planilhas no Excel com o app aberto.</li>
+<li><strong>LGPD</strong>: arquivos que saem do app (miniapps, resumos por WhatsApp) carregam o mínimo — registro ou iniciais, nunca a ficha completa. A pasta de dados nunca deve ser publicada ou sincronizada em nuvem pública.</li>
+</ul></body></html>

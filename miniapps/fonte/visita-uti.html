@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CCIH — Visita à UTI</title>
+<style>
+* { box-sizing: border-box; } body { font-family: system-ui, sans-serif; margin: 0; background: #f2f4f7; color: #1f2933; }
+header { background: #14532d; color: #fff; padding: 14px 16px; font-size: 18px; font-weight: 700; }
+main { padding: 12px; max-width: 560px; margin: 0 auto; }
+.cartao { background: #fff; border: 1px solid #dde3ea; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+label { display: block; font-size: 13px; color: #61707f; margin-top: 8px; }
+input[type=text], input[type=date], select { width: 100%; font-size: 16px; padding: 9px; border: 1px solid #c3ccd6; border-radius: 8px; background: #fff; }
+.linha { display: flex; gap: 8px; } .linha > div { flex: 1; }
+.chk { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-weight: 600; }
+.chk input { width: 22px; height: 22px; }
+.bloco { border-left: 3px solid #cfe3d6; padding-left: 10px; margin: 6px 0 6px 6px; }
+.itemlista { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+.itemlista select { flex: 1; }
+button { font-size: 15px; font-weight: 600; border-radius: 8px; padding: 11px; border: none; cursor: pointer; width: 100%; margin-top: 8px; }
+.principal { background: #14532d; color: #fff; } .secundario { background: #fff; color: #14532d; border: 1px solid #14532d; }
+.mini { width: auto; padding: 6px 10px; font-size: 13px; margin: 6px 0 0; background: #e8f3ec; color: #14532d; }
+.remover { width: auto; background: none; color: #b03a2e; font-size: 18px; padding: 4px 8px; margin: 0; }
+.item { border-bottom: 1px solid #eef1f5; padding: 10px 0; font-size: 14px; cursor: pointer; }
+.item:active { background: #f4faf6; }
+.selos span { background: #e8f3ec; color: #14532d; border-radius: 10px; padding: 2px 8px; font-size: 12px; margin-right: 4px; }
+.selos .enviado { background: #fdf3dd; color: #633806; }
+.excluir { background: none; border: none; color: #b03a2e; font-size: 13px; width: auto; padding: 2px 6px; margin: 0; float: right; }
+.suave { color: #61707f; font-size: 13px; }
+.oculto { display: none; }
+.aviso { border-left: 5px solid #e5b95c; background: #fdf3dd; color: #633806; }
+.aviso p { margin: 6px 0 0; font-size: 14px; }
+.versao { font-size: 12px; font-weight: 400; opacity: .7; }
+</style>
+</head>
+<body>
+<header>Visita da CCIH à UTI <span class="versao">v26.08</span></header>
+<main>
+  <div class="cartao aviso" id="avisoAbertura">
+    <strong>Este arquivo precisa ser aberto no navegador.</strong>
+    <p>Você está vendo apenas a pré-visualização do arquivo, que não executa o aplicativo.
+       Toque nos três pontinhos (⋮) no canto da tela e escolha <strong>Abrir com → Chrome</strong>,
+       ou baixe o arquivo e abra-o pela pasta Downloads.</p>
+  </div>
+  <div class="cartao aviso" id="avisoArmazenamento" style="display:none">
+    <strong>Os registros não estão sendo salvos neste aparelho.</strong>
+    <p>Se fechar a página, perde o que digitou. Baixe o arquivo e abra-o pelo navegador.</p>
+  </div>
+  <div class="cartao">
+    <div class="linha">
+      <div><label>Data</label><input type="date" id="data"></div>
+      <div><label>Setor</label><input type="text" id="setor" placeholder="UTI Adulto"></div>
+    </div>
+    <label>Quem está visitando</label><input type="text" id="observador" placeholder="seu nome">
+  </div>
+
+  <div class="cartao" id="formPaciente">
+    <div class="linha">
+      <div><label>Leito</label><input type="text" id="leito"></div>
+      <div><label>Prontuário</label><input type="text" id="prontuario" inputmode="numeric"></div>
+    </div>
+
+    <div class="chk"><input type="checkbox" id="temCvc"><span>Cateter venoso central</span></div>
+    <div class="bloco oculto" id="blocoCvc">
+      <div id="listaCateteres"></div>
+      <button class="mini" id="maisCateter">+ outro cateter central</button>
+    </div>
+
+    <div class="chk"><input type="checkbox" id="temVm"><span>Ventilação mecânica</span></div>
+    <div class="bloco oculto" id="blocoVm"><label>Indicação</label><select id="vmInd"></select>
+      <label style="display:flex;align-items:center;gap:6px;margin-top:6px"><input type="checkbox" id="vmRetirar" style="width:18px;height:18px"> sugerir retirada</label></div>
+
+    <div class="chk"><input type="checkbox" id="temSvd"><span>Sonda vesical de demora</span></div>
+    <div class="bloco oculto" id="blocoSvd"><label>Indicação</label><select id="svdInd"></select>
+      <label style="display:flex;align-items:center;gap:6px;margin-top:6px"><input type="checkbox" id="svdRetirar" style="width:18px;height:18px"> sugerir retirada</label></div>
+
+    <div class="chk"><input type="checkbox" id="temNpt"><span>Nutrição parenteral</span></div>
+
+    <div class="chk"><input type="checkbox" id="temAtb"><span>Avaliar antimicrobiano</span></div>
+    <div class="bloco oculto" id="blocoAtb">
+      <div id="listaAtbs"></div>
+      <button class="mini" id="maisAtb">+ avaliar novo antimicrobiano</button>
+    </div>
+
+    <div class="chk"><input type="checkbox" id="suspeita"><span>Suspeita de IRAS</span></div>
+    <div class="bloco oculto" id="blocoFoco"><label>Foco suspeito</label><select id="foco"></select></div>
+    <label>Observações</label><input type="text" id="obs">
+    <button class="principal" id="salvar">Salvar paciente</button>
+    <button class="secundario oculto" id="cancelar">Cancelar edição</button>
+  </div>
+
+  <div class="cartao">
+    <div id="lista"></div>
+    <p class="suave" id="resumo"></p>
+    <button class="secundario" id="exportar">Exportar planilha do dia</button>
+    <p class="suave">Após exportar, os registros continuam editáveis por 24 h — reexporte e reimporte no aplicativo que os dados são substituídos.</p>
+    <button class="excluir" id="limpar" style="width:100%">Apagar todos os registros do aparelho</button>
+  </div>
+</main>
+<script>
+const CHAVE = 'ccih.visita.uti.v2';
+const EMAIL_DESTINO = 'defina-o-email-da-ccih@exemplo.br';
+const ENVIO_URL = '';
+const ENVIO_SEGREDO = 'troque-este-segredo';
+const $ = id => document.getElementById(id);
+
+/* O aviso de abertura fica visível por padrão e some assim que o script roda: se a página
+   for aberta num visualizador que não executa JavaScript (a pré-visualização do Google
+   Drive, por exemplo), o usuário lê o que fazer em vez de encontrar um formulário morto. */
+$('avisoAbertura').style.display = 'none';
+
+/* Esses mesmos visualizadores rodam a página numa caixa sem armazenamento, e aí tocar em
+   localStorage lança exceção. Sem esta proteção o miniapp morria na primeira linha. */
+let armazenamentoOk = true;
+const guardadoNaMemoria = {};
+function lerLocal(chave) {
+  try { return localStorage.getItem(chave); }
+  catch (e) { armazenamentoOk = false; return chave in guardadoNaMemoria ? guardadoNaMemoria[chave] : null; }
+}
+function gravarLocal(chave, valor) {
+  try { localStorage.setItem(chave, valor); }
+  catch (e) { armazenamentoOk = false; guardadoNaMemoria[chave] = valor; }
+}
+function conferirArmazenamento() {
+  $('avisoArmazenamento').style.display = armazenamentoOk ? 'none' : '';
+}
+
+const IND_CVC =['Drogas vasoativas', 'Monitorização hemodinâmica', 'Antibioticoterapia prolongada', 'Nutrição parenteral', 'Acesso venoso difícil', 'Hemodiálise', 'Quimioterapia', 'Outros'];
+const IND_VM = ['Insuficiência respiratória', 'Proteção de via aérea / rebaixamento', 'Pós-operatório', 'Desmame em curso', 'Outros'];
+const IND_SVD = ['Débito urinário rigoroso', 'Retenção urinária', 'Lesão sacral/perineal', 'Pós-operatório', 'Sedação profunda / bloqueio', 'Outros'];
+const IND_ATB = ['Pneumonia', 'ITU', 'Infecção de pele e partes moles', 'Infecção abdominal', 'Corrente sanguínea / sepse', 'Sítio cirúrgico', 'Meningite / SNC', 'Profilaxia', 'Outros'];
+const FOCOS = ['Pulmonar / PAV', 'Urinário', 'Corrente sanguínea / cateter', 'Sítio cirúrgico', 'Pele e partes moles', 'Abdominal', 'SNC', 'Sem foco definido', 'Outros'];
+const AVALIACOES = ['Correto', 'Parcialmente correto', 'Incorreto'];
+const RECOMENDACOES = ['Manter', 'Suspender', 'Modificar', 'Ajustar dose'];
+/* Lista fechada, igual ao vocabulário do aplicativo: digitado à mão, o mesmo antibiótico
+   viraria "Tazocin", "pipe-tazo" e "Piperacilina+Tazobactam" no banco. Quem não estiver
+   na lista entra por "Outro", que é raro e cai na revisão do vocabulário na importação. */
+const OUTRO_ATB = 'Outro (digitar)';
+const ATBS = ['Amicacina', 'Amoxicilina', 'Amoxicilina + Ácido Clavulânico', 'Ampicilina',
+  'Ampicilina-sulbactam', 'Azitromicina', 'Aztreonam', 'Cefalotina', 'Cefazolina', 'Cefepima',
+  'Cefoxitina', 'Ceftazidima', 'Ceftazidima-avibactam', 'Ceftriaxona', 'Cefuroxima',
+  'Ciprofloxacino', 'Clindamicina', 'Colistina', 'Daptomicina', 'Eritromicina', 'Ertapenem',
+  'Gentamicina', 'Imipenem', 'Levofloxacino', 'Linezolida', 'Meropenem', 'Metronidazol',
+  'Nitrofurantoína', 'Norfloxacino', 'Oxacilina', 'Penicilina', 'Piperacilina-tazobactam',
+  'Polimixina B', 'Rifampicina', 'Sulfametoxazol-trimetoprima', 'Teicoplanina', 'Tigeciclina',
+  'Vancomicina',
+  /* Antifúngicos: a avaliação da UTI também os cobre (na primeira visita real já
+     apareceu fluconazol para suspeita de candidíase invasiva). */
+  'Anfotericina B lipossomal', 'Anidulafungina', 'Caspofungina', 'Fluconazol', 'Micafungina',
+  'Voriconazol',
+  /* Antivirais de uso comum na UTI. */
+  'Aciclovir', 'Oseltamivir'];
+ATBS.sort((a, b) => a.localeCompare(b, 'pt'));
+
+function encherSelect(sel, opcoes, valor) {
+  sel.innerHTML = opcoes.map(o => `<option${o === valor ? ' selected' : ''}>${o}</option>`).join('');
+}
+encherSelect($('vmInd'), IND_VM);
+encherSelect($('svdInd'), IND_SVD);
+encherSelect($('foco'), FOCOS);
+
+$('data').value = new Date().toISOString().slice(0, 10);
+$('setor').value = lerLocal(CHAVE + '.setor') || '';
+$('observador').value = lerLocal(CHAVE + '.observador') || '';
+let registros = JSON.parse(lerLocal(CHAVE) || '[]');
+registros = registros.filter(r => !r.exportadoEm || Date.now() - r.exportadoEm < 24 * 3600 * 1000);
+registros.forEach(r => { r.cateteres = (r.cateteres || []).map(c => typeof c === 'string' ? { ind: c, retirar: false } : c); });
+$('suspeita').addEventListener('change', () => $('blocoFoco').classList.toggle('oculto', !$('suspeita').checked));
+let editando = -1;
+
+['temCvc', 'temVm', 'temSvd', 'temAtb'].forEach(id => {
+  $(id).addEventListener('change', () => {
+    $('bloco' + id.slice(3)).classList.toggle('oculto', !$(id).checked);
+    if (id === 'temCvc' && $(id).checked && !$('listaCateteres').children.length) adicionarCateter();
+    if (id === 'temAtb' && $(id).checked && !$('listaAtbs').children.length) adicionarAtb();
+  });
+});
+
+function adicionarCateter(valor, retirar) {
+  const div = document.createElement('div');
+  div.className = 'itemlista';
+  const sel = document.createElement('select');
+  encherSelect(sel, IND_CVC, valor && valor.ind !== undefined ? valor.ind : valor);
+  const ret = document.createElement('label');
+  ret.style.cssText = 'display:flex;align-items:center;gap:4px;font-size:12px;color:#61707f';
+  ret.innerHTML = '<input type="checkbox" style="width:18px;height:18px"' + (retirar ? ' checked' : '') + '> retirar';
+  const rem = document.createElement('button');
+  rem.className = 'remover'; rem.textContent = '×';
+  rem.onclick = () => div.remove();
+  div.append(sel, ret, rem);
+  $('listaCateteres').appendChild(div);
+}
+$('maisCateter').onclick = () => adicionarCateter();
+
+function adicionarAtb(dados) {
+  dados = dados || {};
+  const div = document.createElement('div');
+  div.className = 'bloco';
+  div.innerHTML = '<label>Antimicrobiano em uso</label><select class="atbNome"></select>'
+    + '<input type="text" class="atbOutro" placeholder="qual antibiótico?" style="display:none;margin-top:6px">'
+    + '<label>Indicação</label><select class="atbInd"></select>'
+    + '<label>Avaliação</label><select class="atbAval"></select>'
+    + '<label>Recomendação da CCIH</label><select class="atbRec"></select>';
+  const rem = document.createElement('button');
+  rem.className = 'remover'; rem.textContent = '× remover este antimicrobiano';
+  rem.style.width = '100%'; rem.style.fontSize = '13px';
+  rem.onclick = () => div.remove();
+  div.appendChild(rem);
+  $('listaAtbs').appendChild(div);
+  /* Antibiótico gravado que não está na lista (registro antigo ou digitado em "Outro")
+     reabre já em "Outro", com o nome preservado no campo de texto. */
+  const selAtb = div.querySelector('.atbNome');
+  const outroAtb = div.querySelector('.atbOutro');
+  const conhecido = dados.atb && ATBS.includes(dados.atb);
+  encherSelect(selAtb, [''].concat(ATBS, [OUTRO_ATB]), conhecido ? dados.atb : (dados.atb ? OUTRO_ATB : ''));
+  /* O texto da opção vazia é só rótulo: sem fixar value='', o próprio rótulo viraria
+     o valor do campo e seria gravado como se fosse o nome de um antibiótico. */
+  selAtb.options[0].textContent = '— escolha o antimicrobiano —';
+  selAtb.options[0].value = '';
+  const alternarOutro = () => {
+    outroAtb.style.display = selAtb.value === OUTRO_ATB ? '' : 'none';
+    if (selAtb.value === OUTRO_ATB) outroAtb.focus();
+  };
+  selAtb.addEventListener('change', alternarOutro);
+  if (dados.atb && !conhecido) outroAtb.value = dados.atb;
+  outroAtb.style.display = selAtb.value === OUTRO_ATB ? '' : 'none';
+  encherSelect(div.querySelector('.atbInd'), IND_ATB, dados.ind);
+  encherSelect(div.querySelector('.atbAval'), AVALIACOES, dados.aval);
+  encherSelect(div.querySelector('.atbRec'), RECOMENDACOES, dados.rec);
+}
+$('maisAtb').onclick = () => adicionarAtb();
+
+/* Nome escolhido na lista, ou o que foi digitado quando a escolha foi "Outro". */
+function nomeDoAntibiotico(bloco) {
+  const sel = bloco.querySelector('.atbNome');
+  return (sel.value === OUTRO_ATB ? bloco.querySelector('.atbOutro').value : sel.value).trim();
+}
+
+function limparFormulario() {
+  editando = -1;
+  $('salvar').textContent = 'Salvar paciente';
+  $('cancelar').classList.add('oculto');
+  ['leito', 'prontuario', 'obs'].forEach(id => $(id).value = '');
+  ['temCvc', 'temVm', 'temSvd', 'temAtb', 'temNpt', 'suspeita', 'vmRetirar', 'svdRetirar'].forEach(id => $(id).checked = false);
+  $('blocoFoco').classList.add('oculto');
+  ['Cvc', 'Vm', 'Svd', 'Atb'].forEach(s => $('bloco' + s).classList.add('oculto'));
+  $('listaCateteres').innerHTML = '';
+  $('listaAtbs').innerHTML = '';
+}
+
+function carregarNoFormulario(i) {
+  const r = registros[i];
+  editando = i;
+  $('salvar').textContent = 'Atualizar paciente';
+  $('cancelar').classList.remove('oculto');
+  $('leito').value = r.Leito; $('prontuario').value = r.Prontuario; $('obs').value = r.obs || '';
+  $('suspeita').checked = r.suspeita;
+  $('temCvc').checked = r.cateteres.length > 0;
+  $('blocoCvc').classList.toggle('oculto', !r.cateteres.length);
+  $('listaCateteres').innerHTML = '';
+  r.cateteres.forEach(c => adicionarCateter(c.ind, c.retirar));
+  $('temVm').checked = !!r.vm; $('blocoVm').classList.toggle('oculto', !r.vm);
+  if (r.vm) encherSelect($('vmInd'), IND_VM, r.vm);
+  $('vmRetirar').checked = !!r.vmRetirar;
+  $('temSvd').checked = !!r.svd; $('blocoSvd').classList.toggle('oculto', !r.svd);
+  if (r.svd) encherSelect($('svdInd'), IND_SVD, r.svd);
+  $('svdRetirar').checked = !!r.svdRetirar;
+  $('temNpt').checked = !!r.npt;
+  $('blocoFoco').classList.toggle('oculto', !r.suspeita);
+  if (r.foco) encherSelect($('foco'), FOCOS, r.foco);
+  $('temAtb').checked = r.atbs.length > 0;
+  $('blocoAtb').classList.toggle('oculto', !r.atbs.length);
+  $('listaAtbs').innerHTML = '';
+  r.atbs.forEach(a => adicionarAtb(a));
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+$('cancelar').onclick = limparFormulario;
+
+$('salvar').onclick = () => {
+  if (!$('leito').value.trim() || !$('prontuario').value.trim()) { alert('Preencha leito e prontuário.'); return; }
+  gravarLocal(CHAVE + '.setor', $('setor').value.trim());
+  gravarLocal(CHAVE + '.observador', $('observador').value.trim());
+  const registro = {
+    Leito: $('leito').value.trim(), Prontuario: $('prontuario').value.trim(),
+    cateteres: $('temCvc').checked ? [...$('listaCateteres').children].map(d => ({ ind: d.querySelector('select').value, retirar: d.querySelector('input[type=checkbox]').checked })) : [],
+    vm: $('temVm').checked ? $('vmInd').value : '',
+    vmRetirar: $('temVm').checked && $('vmRetirar').checked,
+    svd: $('temSvd').checked ? $('svdInd').value : '',
+    svdRetirar: $('temSvd').checked && $('svdRetirar').checked,
+    npt: $('temNpt').checked,
+    foco: $('suspeita').checked ? $('foco').value : '',
+    atbs: $('temAtb').checked ? [...$('listaAtbs').querySelectorAll('.bloco')].map(b => ({
+      atb: nomeDoAntibiotico(b), ind: b.querySelector('.atbInd').value,
+      aval: b.querySelector('.atbAval').value, rec: b.querySelector('.atbRec').value
+    })).filter(a => a.atb) : [],
+    suspeita: $('suspeita').checked, obs: $('obs').value.trim(),
+    exportadoEm: editando >= 0 ? null : null
+  };
+  if (editando >= 0) registros[editando] = { ...registros[editando], ...registro, exportadoEm: null };
+  else registros.push(registro);
+  limparFormulario();
+  gravar();
+};
+
+function gravar() { gravarLocal(CHAVE, JSON.stringify(registros)); conferirArmazenamento(); desenhar(); }
+
+function desenhar() {
+  const lista = $('lista');
+  lista.innerHTML = '';
+  registros.forEach((r, i) => {
+    const div = document.createElement('div');
+    div.className = 'item';
+    const selos = [];
+    if (r.cateteres.length) selos.push('CVC×' + r.cateteres.length);
+    if (r.vm) selos.push('VM');
+    if (r.svd) selos.push('SVD');
+    if (r.atbs.length) selos.push('ATB×' + r.atbs.length);
+    if (r.npt) selos.push('NPT');
+    if (r.cateteres.some(x => x.retirar) || r.vmRetirar || r.svdRetirar) selos.push('RETIRAR');
+    if (r.suspeita) selos.push('SUSPEITA' + (r.foco ? ': ' + r.foco : ''));
+    div.innerHTML = `<strong>Leito ${r.Leito}</strong> · ${r.Prontuario} <span class="selos">${selos.map(s => `<span>${s}</span>`).join('')}${r.exportadoEm ? '<span class="enviado">enviado</span>' : ''}</span><span class="suave"> toque para editar</span>`;
+    const btn = document.createElement('button');
+    btn.className = 'excluir'; btn.textContent = 'excluir';
+    btn.onclick = e => { e.stopPropagation(); registros.splice(i, 1); if (editando === i) limparFormulario(); gravar(); };
+    div.prepend(btn);
+    div.onclick = () => carregarNoFormulario(i);
+    lista.appendChild(div);
+  });
+  $('resumo').textContent = registros.length + ' pacientes registrados';
+}
+
+function csvCampo(v) { v = String(v == null ? '' : v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+function tabelaCSV(nome, objetos) {
+  let saida = '##' + nome + '\n';
+  if (!objetos.length) return saida;
+  const colunas = Object.keys(objetos[0]);
+  saida += colunas.join(';') + '\n';
+  saida += objetos.map(o => colunas.map(c => csvCampo(o[c])).join(';')).join('\n') + '\n';
+  return saida;
+}
+function avisar(texto, erro) {
+  let el = document.getElementById('statusExporte');
+  if (!el) {
+    el = document.createElement('p');
+    el.id = 'statusExporte';
+    document.getElementById('exportar').after(el);
+  }
+  el.style.cssText = 'font-weight:600;font-size:14px;margin-top:8px;color:' + (erro ? '#b03a2e' : '#14532d');
+  el.textContent = texto;
+}
+async function entregarArquivo(nome, texto) {
+  if (ENVIO_URL) {
+    try {
+      await fetch(ENVIO_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ segredo: ENVIO_SEGREDO, nome: nome, conteudo: texto }) });
+      avisar('Enviado para a pasta da CCIH no Drive: ' + nome);
+      return true;
+    } catch (e) {
+      avisar('Sem conexão para o envio direto — salvando o arquivo para enviar por e-mail.', true);
+    }
+  }
+  try {
+    /* Blob + createObjectURL, e não data: URI: o celular bloqueia o download de data:
+       quando o arquivo passa de alguns KB, e a exportação falhava calada. */
+    const blob = new Blob(['﻿' + texto], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nome;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    avisar('Arquivo "' + nome + '" salvo na pasta Downloads.');
+    /* O e-mail fica num botão para o usuário tocar: disparar duas navegações seguidas
+       (download + mailto) faz o celular cancelar uma das duas. */
+    const status = document.getElementById('statusExporte');
+    const email = document.createElement('a');
+    email.href = 'mailto:' + EMAIL_DESTINO + '?subject=' + encodeURIComponent('CCIH — ' + nome)
+      + '&body=' + encodeURIComponent('Segue em anexo o arquivo ' + nome + ' (anexe-o pela pasta Downloads).');
+    email.textContent = '✉ Abrir e-mail para ' + EMAIL_DESTINO + ' (anexe o arquivo baixado)';
+    email.style.cssText = 'display:block;margin-top:8px;padding:10px;border:1px solid #14532d;border-radius:8px;'
+      + 'color:#14532d;font-weight:700;text-align:center;text-decoration:none';
+    status.appendChild(email);
+    const baixar = document.createElement('a');
+    baixar.href = url;
+    baixar.download = nome;
+    baixar.textContent = '↓ Baixar de novo';
+    baixar.style.cssText = 'display:block;margin-top:6px;color:#61707f;font-size:13px;text-align:center';
+    status.appendChild(baixar);
+    return true;
+  } catch (e) {
+    avisar('Não foi possível exportar: ' + e.message, true);
+    return false;
+  }
+}
+function montarPacote() {
+  const base = { Data: $('data').value, Setor: $('setor').value.trim(), CriadoPor: $('observador').value.trim() };
+  const agora = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  const visitas = registros.map(r => ({
+    Data: base.Data, Setor: base.Setor, Leito: r.Leito, Prontuario: r.Prontuario,
+    CVC: r.cateteres.length ? 'S' : 'N', CVC_Qtd: String(r.cateteres.length || ''),
+    CVC_Indicacoes: r.cateteres.map(c => c.ind + (c.retirar ? ' [retirar]' : '')).join(' | '),
+    CVC_Retirar: r.cateteres.length ? (r.cateteres.some(c => c.retirar) ? 'S' : 'N') : '',
+    VM: r.vm ? 'S' : 'N', VM_Indicacao: r.vm, VM_Retirar: r.vm ? (r.vmRetirar ? 'S' : 'N') : '',
+    SVD: r.svd ? 'S' : 'N', SVD_Indicacao: r.svd, SVD_Retirar: r.svd ? (r.svdRetirar ? 'S' : 'N') : '',
+    NPT: r.npt ? 'S' : 'N',
+    SuspeitaIRAS: r.suspeita ? 'S' : 'N', FocoSuspeito: r.foco || '', Observacoes: r.obs,
+    CriadoPor: base.CriadoPor, CriadoEm: agora
+  }));
+  const avaliacoes = [];
+  registros.forEach(r => r.atbs.forEach(a => avaliacoes.push({
+    Data: base.Data, Setor: base.Setor, Leito: r.Leito, Prontuario: r.Prontuario,
+    Antibiotico: a.atb, Indicacao: a.ind, Avaliacao: a.aval, Recomendacao: a.rec,
+    CriadoPor: base.CriadoPor, CriadoEm: agora
+  })));
+  return '##ccih-miniapp;tipo=uti;versao=3\n' + tabelaCSV('visitas', visitas) + tabelaCSV('avaliacoes_atb', avaliacoes);
+}
+
+$('exportar').onclick = async () => {
+  if (!registros.length) { avisar('Nenhum registro para exportar.', true); return; }
+  const setor = ($('setor').value.trim() || 'UTI').replace(/[^A-Za-z0-9]+/g, '-');
+  const nome = `UTI_${setor}_${$('data').value}.csv`;
+  if (await entregarArquivo(nome, montarPacote())) {
+    registros.forEach(r => r.exportadoEm = Date.now());
+    gravar();
+  }
+};
+$('limpar').onclick = () => { if (confirm('Apagar todos os registros deste aparelho?')) { registros = []; limparFormulario(); gravar(); } };
+desenhar();
+</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+# Dados de pacientes NUNCA entram no repositório.
+# (a pasta de dados vive fora do projeto; estas são cópias avulsas de trabalho)
+Culturas/
+Visitas UTI/
+Higiene das maos/
+_pasta-de-teste-vazia-NAO-USAR/
+
+# Valores desta instalação (e-mail da CCIH, segredo do Apps Script)
+miniapps/fonte/config-local.json
+
+# Miniapps montados embutem os valores locais — cada instalação monta os seus
+# com: node scripts/montar-miniapps.js
+miniapps/*.html
+miniapps.zip
+
+# Diversos
+node_modules/
+*.trava.json
+Dados CCIH.lnk

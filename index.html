@@ -1,0 +1,35 @@
+<!--
+  Aplicativo CCIH — vigilância de infecções relacionadas à assistência à saúde.
+  © 2026 Rogério Sobroza de Mello.
+  Software livre sob a GNU GPL v3.0 — ver o arquivo LICENSE.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aplicativo CCIH</title>
+  <!-- A folha de estilo também leva selo de tempo: sem isso, uma tela nova chegava com
+       o visual antigo em cache e parecia que a alteração não tinha sido feita. -->
+  <script>document.write('<link rel="stylesheet" href="css/app.css?v=' + Date.now() + '">');</script>
+</head>
+<body>
+  <div id="app"></div>
+  <script src="lib/xlsx.full.min.js"></script>
+  <script src="lib/pdf.min.js"></script>
+  <script src="lib/qrcode.min.js"></script>
+  <!-- Os arquivos do aplicativo são carregados com um selo de tempo para o navegador nunca
+       servir uma versão antiga depois de uma atualização (as bibliotecas acima, que não
+       mudam, continuam sendo cacheadas normalmente). -->
+  <script>
+    (function () {
+      var arquivos = ['esquemas', 'leitura', 'importacao', 'excel', 'config', 'alertas',
+        'avaliacao', 'ui-importar', 'ui-abas', 'ui-relatorios', 'ui-sepse', 'ui-surtos', 'ui-paciente', 'ui-higiene', 'ui-infeccoes', 'ui-vigilancia', 'ui-antibioticos', 'app'];
+      var selo = Date.now();
+      arquivos.forEach(function (nome) {
+        document.write('<script src="js/' + nome + '.js?v=' + selo + '"><\/script>');
+      });
+    })();
+  </script>
+</body>
+</html>

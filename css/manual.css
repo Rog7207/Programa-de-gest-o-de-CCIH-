@@ -1,0 +1,9 @@
+body { font-family: "Segoe UI", system-ui, sans-serif; max-width: 820px; margin: 30px auto; padding: 0 20px; color: #1f2933; line-height: 1.55; }
+h1 { color: #14532d; border-bottom: 2px solid #cfe3d6; padding-bottom: 6px; }
+h2 { color: #14532d; margin-top: 28px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th { background: #e8f3ec; color: #14532d; text-align: left; }
+th, td { border: 1px solid #dde3ea; padding: 6px 9px; }
+tr:nth-child(even) td { background: #f7f9fb; }
+code { background: #f0f2f5; padding: 1px 5px; border-radius: 4px; }
+hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }

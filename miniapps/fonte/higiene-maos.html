@@ -32,7 +32,7 @@ button:disabled { opacity: .35; }
 </style>
 </head>
 <body>
-<header>Auditoria de higiene das mãos <span class="versao">v26.08</span></header>
+<header>Auditoria de higiene das mãos <span class="versao">v01.09</span></header>
 <main>
   <div class="cartao aviso" id="avisoAbertura">
     <strong>Este arquivo precisa ser aberto no navegador.</strong>
@@ -46,7 +46,7 @@ button:disabled { opacity: .35; }
   </div>
   <div class="cartao">
     <div class="linha">
-      <div><label>Setor</label><input type="text" id="setor" placeholder="UTI Adulto"></div>
+      <div><label>Setor</label><select id="setor"></select><input type="text" id="setorOutro" placeholder="digite o setor" style="display:none;margin-top:4px"></div>
       <div><label>Observador</label><input type="text" id="observador" placeholder="seu nome"></div>
     </div>
     <div class="linha">
@@ -94,6 +94,40 @@ button:disabled { opacity: .35; }
   </div>
 </main>
 <script>
+const SETORES = [];  /* o montador injeta aqui os setores do hospital */
+
+/* Setor vem da lista do hospital (injetada pelo montador a partir do config.xlsx).
+   Sem lista (fonte cru, sem montar), o campo vira texto livre como antes. "Outro" cobre
+   setor novo que ainda não entrou no vocabulário. */
+const OUTRO_SETOR = '__outro__';
+function montarSeletorSetor() {
+  const sel = $('setor');
+  if (!SETORES.length) {
+    const texto = document.createElement('input');
+    texto.type = 'text'; texto.id = 'setor'; texto.placeholder = 'setor';
+    sel.replaceWith(texto);
+    return;
+  }
+  sel.append(new Option('— escolha o setor —', ''));
+  SETORES.forEach(s => sel.append(new Option(s, s)));
+  sel.append(new Option('Outro (digitar)', OUTRO_SETOR));
+  sel.addEventListener('change', () => {
+    $('setorOutro').style.display = sel.value === OUTRO_SETOR ? '' : 'none';
+  });
+}
+function setorAtual() {
+  const el = $('setor');
+  if (el.tagName === 'INPUT') return el.value.trim();
+  return el.value === OUTRO_SETOR ? $('setorOutro').value.trim() : el.value;
+}
+function restaurarSetor(salvo) {
+  const el = $('setor');
+  if (!salvo) return;
+  if (el.tagName === 'INPUT') { el.value = salvo; return; }
+  if (SETORES.includes(salvo)) el.value = salvo;
+  else { el.value = OUTRO_SETOR; $('setorOutro').value = salvo; $('setorOutro').style.display = ''; }
+}
+
 const CHAVE = 'ccih.higiene.v2';
 const EMAIL_DESTINO = 'defina-o-email-da-ccih@exemplo.br';
 const ENVIO_URL = '';
@@ -120,7 +154,8 @@ function gravarLocal(chave, valor) {
 function conferirArmazenamento() {
   $('avisoArmazenamento').style.display = armazenamentoOk ? 'none' : '';
 }
-$('setor').value = lerLocal(CHAVE + '.setor') || '';
+montarSeletorSetor();
+restaurarSetor(lerLocal(CHAVE + '.setor') || '');
 $('observador').value = lerLocal(CHAVE + '.observador') || '';
 $('tipo').value = lerLocal(CHAVE + '.tipo') || 'Simples';
 let registros = JSON.parse(lerLocal(CHAVE) || '[]');
@@ -145,7 +180,7 @@ function registrar(acao, duracao) {
   registros.push({
     ID_Observacao: Date.now() + '-' + Math.floor(Math.random() * 10000),
     Data: new Date().toISOString().slice(0, 10),
-    Setor: $('setor').value.trim(), Observador: $('observador').value.trim(),
+    Setor: setorAtual(), Observador: $('observador').value.trim(),
     TipoHigienizacao: $('tipo').value, Categoria: $('categoria').value,
     Momento: $('tipo').value === 'Cirúrgica' ? '' : $('momento').value,
     Acao: acao, DuracaoSegundos: duracao ? String(duracao) : '',
@@ -160,8 +195,8 @@ function alternarBotoes(desabilitar) {
 
 document.querySelectorAll('.acoes button').forEach(botao => {
   botao.onclick = () => {
-    if (!$('setor').value.trim() || !$('observador').value.trim()) { alert('Preencha setor e observador.'); return; }
-    gravarLocal(CHAVE + '.setor', $('setor').value.trim());
+    if (!setorAtual() || !$('observador').value.trim()) { alert('Preencha setor e observador.'); return; }
+    gravarLocal(CHAVE + '.setor', setorAtual());
     gravarLocal(CHAVE + '.observador', $('observador').value.trim());
     gravarLocal(CHAVE + '.tipo', $('tipo').value);
     const acao = botao.dataset.acao;
@@ -254,7 +289,7 @@ async function entregarArquivo(nome, texto) {
 }
 $('exportar').onclick = async () => {
   if (!registros.length) { avisar('Nenhum registro para exportar.', true); return; }
-  const setor = ($('setor').value.trim() || 'setor').replace(/[^A-Za-z0-9]+/g, '-');
+  const setor = (setorAtual() || 'setor').replace(/[^A-Za-z0-9]+/g, '-');
   const nome = `HM_${setor}_${new Date().toISOString().slice(0, 10)}.csv`;
   const texto = '##ccih-miniapp;tipo=higiene_maos;versao=3\n' + tabelaCSV('observacoes', registros);
   await entregarArquivo(nome, texto);

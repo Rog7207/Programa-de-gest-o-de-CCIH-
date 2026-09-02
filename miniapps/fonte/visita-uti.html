@@ -34,7 +34,7 @@ button { font-size: 15px; font-weight: 600; border-radius: 8px; padding: 11px; b
 </style>
 </head>
 <body>
-<header>Visita da CCIH à UTI <span class="versao">v26.08</span></header>
+<header>Visita da CCIH à UTI <span class="versao">v01.09</span></header>
 <main>
   <div class="cartao aviso" id="avisoAbertura">
     <strong>Este arquivo precisa ser aberto no navegador.</strong>
@@ -49,7 +49,7 @@ button { font-size: 15px; font-weight: 600; border-radius: 8px; padding: 11px; b
   <div class="cartao">
     <div class="linha">
       <div><label>Data</label><input type="date" id="data"></div>
-      <div><label>Setor</label><input type="text" id="setor" placeholder="UTI Adulto"></div>
+      <div><label>Setor</label><select id="setor"></select><input type="text" id="setorOutro" placeholder="digite o setor" style="display:none;margin-top:4px"></div>
     </div>
     <label>Quem está visitando</label><input type="text" id="observador" placeholder="seu nome">
   </div>
@@ -135,6 +135,40 @@ const RECOMENDACOES = ['Manter', 'Suspender', 'Modificar', 'Ajustar dose'];
 /* Lista fechada, igual ao vocabulário do aplicativo: digitado à mão, o mesmo antibiótico
    viraria "Tazocin", "pipe-tazo" e "Piperacilina+Tazobactam" no banco. Quem não estiver
    na lista entra por "Outro", que é raro e cai na revisão do vocabulário na importação. */
+const SETORES = [];  /* o montador injeta aqui os setores do hospital */
+
+/* Setor vem da lista do hospital (injetada pelo montador a partir do config.xlsx).
+   Sem lista (fonte cru, sem montar), o campo vira texto livre como antes. "Outro" cobre
+   setor novo que ainda não entrou no vocabulário. */
+const OUTRO_SETOR = '__outro__';
+function montarSeletorSetor() {
+  const sel = $('setor');
+  if (!SETORES.length) {
+    const texto = document.createElement('input');
+    texto.type = 'text'; texto.id = 'setor'; texto.placeholder = 'setor';
+    sel.replaceWith(texto);
+    return;
+  }
+  sel.append(new Option('— escolha o setor —', ''));
+  SETORES.forEach(s => sel.append(new Option(s, s)));
+  sel.append(new Option('Outro (digitar)', OUTRO_SETOR));
+  sel.addEventListener('change', () => {
+    $('setorOutro').style.display = sel.value === OUTRO_SETOR ? '' : 'none';
+  });
+}
+function setorAtual() {
+  const el = $('setor');
+  if (el.tagName === 'INPUT') return el.value.trim();
+  return el.value === OUTRO_SETOR ? $('setorOutro').value.trim() : el.value;
+}
+function restaurarSetor(salvo) {
+  const el = $('setor');
+  if (!salvo) return;
+  if (el.tagName === 'INPUT') { el.value = salvo; return; }
+  if (SETORES.includes(salvo)) el.value = salvo;
+  else { el.value = OUTRO_SETOR; $('setorOutro').value = salvo; $('setorOutro').style.display = ''; }
+}
+
 const OUTRO_ATB = 'Outro (digitar)';
 const ATBS = ['Amicacina', 'Amoxicilina', 'Amoxicilina + Ácido Clavulânico', 'Ampicilina',
   'Ampicilina-sulbactam', 'Azitromicina', 'Aztreonam', 'Cefalotina', 'Cefazolina', 'Cefepima',
@@ -160,7 +194,8 @@ encherSelect($('svdInd'), IND_SVD);
 encherSelect($('foco'), FOCOS);
 
 $('data').value = new Date().toISOString().slice(0, 10);
-$('setor').value = lerLocal(CHAVE + '.setor') || '';
+montarSeletorSetor();
+restaurarSetor(lerLocal(CHAVE + '.setor') || '');
 $('observador').value = lerLocal(CHAVE + '.observador') || '';
 let registros = JSON.parse(lerLocal(CHAVE) || '[]');
 registros = registros.filter(r => !r.exportadoEm || Date.now() - r.exportadoEm < 24 * 3600 * 1000);
@@ -279,7 +314,7 @@ $('cancelar').onclick = limparFormulario;
 
 $('salvar').onclick = () => {
   if (!$('leito').value.trim() || !$('prontuario').value.trim()) { alert('Preencha leito e prontuário.'); return; }
-  gravarLocal(CHAVE + '.setor', $('setor').value.trim());
+  gravarLocal(CHAVE + '.setor', setorAtual());
   gravarLocal(CHAVE + '.observador', $('observador').value.trim());
   const registro = {
     Leito: $('leito').value.trim(), Prontuario: $('prontuario').value.trim(),
@@ -394,7 +429,7 @@ async function entregarArquivo(nome, texto) {
   }
 }
 function montarPacote() {
-  const base = { Data: $('data').value, Setor: $('setor').value.trim(), CriadoPor: $('observador').value.trim() };
+  const base = { Data: $('data').value, Setor: setorAtual(), CriadoPor: $('observador').value.trim() };
   const agora = new Date().toISOString().slice(0, 16).replace('T', ' ');
   const visitas = registros.map(r => ({
     Data: base.Data, Setor: base.Setor, Leito: r.Leito, Prontuario: r.Prontuario,
@@ -418,7 +453,7 @@ function montarPacote() {
 
 $('exportar').onclick = async () => {
   if (!registros.length) { avisar('Nenhum registro para exportar.', true); return; }
-  const setor = ($('setor').value.trim() || 'UTI').replace(/[^A-Za-z0-9]+/g, '-');
+  const setor = (setorAtual() || 'UTI').replace(/[^A-Za-z0-9]+/g, '-');
   const nome = `UTI_${setor}_${$('data').value}.csv`;
   if (await entregarArquivo(nome, montarPacote())) {
     registros.forEach(r => r.exportadoEm = Date.now());

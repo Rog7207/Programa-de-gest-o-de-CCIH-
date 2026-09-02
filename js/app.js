@@ -636,6 +636,94 @@ async function montarConfiguracoes(conteudo) {
           el('td', {}, p.CriadoPor), el('td', {}, p.CriadoEm)))))
     : el('p', { class: 'texto-suave' }, 'Nenhum perfil ainda — o primeiro é criado ao importar um relatório novo.');
   conteudo.append(el('div', { class: 'cartao' }, el('h2', {}, 'Perfis de importação'), listaPerfis));
+
+  /* ---- Auditoria de vocabulário ----
+     Varre vocabulários + dados gravados atrás de termos quase iguais. Pares descartados
+     ("são coisas diferentes") ficam memorizados na meta do config para não voltarem. */
+  const CHAVE_PARES_IGNORADOS = 'auditoria_vocab_ignorados';
+  const chavePar = (vocab, a, b) => [vocab, normalizarTexto(a), normalizarTexto(b)].sort().join('|');
+  const lerParesIgnorados = async () => {
+    try {
+      const meta = (await lerBanco('config')).meta || [];
+      const linha = meta.find(l => l.Chave === CHAVE_PARES_IGNORADOS);
+      return linha ? JSON.parse(linha.Valor) : [];
+    } catch (e) { return []; }
+  };
+  const ignorarPar = async (vocab, a, b) => {
+    await comTrava(['config'], async () => {
+      const banco = await lerBanco('config');
+      const meta = banco.meta || [];
+      const linha = meta.find(l => l.Chave === CHAVE_PARES_IGNORADOS);
+      const lista = [...new Set((linha ? JSON.parse(linha.Valor) : []).concat(chavePar(vocab, a, b)))];
+      banco.meta = meta.filter(l => l.Chave !== CHAVE_PARES_IGNORADOS)
+        .concat({ Chave: CHAVE_PARES_IGNORADOS, Valor: JSON.stringify(lista) });
+      await gravarBanco('config', banco);
+    });
+  };
+  const resultadoAuditoria = el('div');
+  const msgAuditoria = el('p', { class: 'texto-suave' });
+  const rodarAuditoria = async () => {
+    botaoAuditar.disabled = true;
+    botaoAuditar.textContent = 'Auditando…';
+    try {
+      const ignorados = new Set(await lerParesIgnorados());
+      const nomesBancos = [...new Set(Object.values(VOCAB_APLICACAO).flat().map(([b]) => b))];
+      const bancos = {};
+      await Promise.all(nomesBancos.map(async n => {
+        try { bancos[n] = await lerBanco(n); } catch (e) { bancos[n] = {}; }
+      }));
+      const grupos = [];
+      let totalPares = 0;
+      for (const [vocab, aplicacoes] of Object.entries(VOCAB_APLICACAO)) {
+        const frequencias = {};
+        for (const [b, aba, campo] of aplicacoes) {
+          for (const linha of (bancos[b] || {})[aba] || []) {
+            const t = String(linha[campo] || '').trim();
+            if (t) frequencias[t] = (frequencias[t] || 0) + 1;
+          }
+        }
+        const termos = [...new Set([...(config.vocabulario[vocab] || []), ...Object.keys(frequencias)])];
+        const oficiais = (VOCABULARIO_INICIAL[vocab] || []).map(x => typeof x === 'string' ? x : x.Nome);
+        const pares = auditarVocabulario(termos, oficiais, frequencias)
+          .filter(p => !ignorados.has(chavePar(vocab, p.de, p.para)));
+        if (pares.length) { grupos.push([vocab, pares, frequencias]); totalPares += pares.length; }
+      }
+      const usos = (freq, t) => `${fmtInt(freq[t] || 0)} uso${(freq[t] || 0) === 1 ? '' : 's'}`;
+      resultadoAuditoria.replaceChildren(...(grupos.length ? grupos.map(([vocab, pares, freq]) =>
+        el('div', { class: 'secao-termos' },
+          el('h3', {}, VOCAB_ROTULOS[vocab] || vocab),
+          pares.map(p => el('div', { class: 'linha-termo' },
+            el('strong', {}, p.de),
+            el('span', { class: 'texto-suave' }, ` (${usos(freq, p.de)}) → ${p.para} (${usos(freq, p.para)}) — ${p.regra}`),
+            el('button', { class: 'botao-secundario', onclick: async ev => {
+              ev.target.disabled = true;
+              try {
+                const n = await unificarVocabulario(vocab, p.de, p.para);
+                msgAuditoria.textContent = `Unificado: "${p.de}" → "${p.para}" (${fmtInt(n)} registros atualizados).`;
+                await rodarAuditoria();
+              } catch (e) { ev.target.disabled = false; msgAuditoria.textContent = e.message; }
+            } }, 'Unificar'),
+            el('button', { class: 'botao-secundario', title: 'O par não aparece mais nas próximas auditorias',
+              onclick: async ev => { ev.target.disabled = true; await ignorarPar(vocab, p.de, p.para); await rodarAuditoria(); } },
+              'São coisas diferentes')))))
+        : [el('p', { class: 'texto-suave' }, 'Nenhum termo suspeito — vocabulários e dados limpos. 🎉')]));
+      if (grupos.length) msgAuditoria.textContent = `${fmtInt(totalPares)} par(es) suspeito(s). Nada é unificado sem a sua confirmação.`;
+    } finally {
+      botaoAuditar.disabled = false;
+      botaoAuditar.textContent = '🔍 Auditar agora';
+    }
+  };
+  const botaoAuditar = el('button', { onclick: rodarAuditoria }, '🔍 Auditar agora');
+  conteudo.append(el('div', { class: 'cartao' },
+    el('h2', {}, 'Auditoria de vocabulário'),
+    el('div', { class: 'linha-campos' }, botaoAuditar,
+      el('p', { class: 'texto-suave', style: 'margin:0;flex:1' },
+        'Procura termos quase iguais nos vocabulários e nos dados já gravados — grafias diferentes e erros de '
+        + 'digitação que fazem a mesma coisa contar duas vezes nos painéis (ex.: "Linezolida" e "Linezolide"). '
+        + 'Nada é alterado sozinho: cada par encontrado tem um botão para unificar (corrige todos os registros '
+        + 'e memoriza o sinônimo para as próximas importações) ou para marcar que são coisas diferentes.')),
+    resultadoAuditoria, msgAuditoria));
+
   const vocabDiv = el('div', { class: 'cartao' }, el('h2', {}, 'Vocabulários'),
     el('p', { class: 'texto-suave' }, 'Unificar termo: o termo de origem é substituído em todos os dados, removido da lista e memorizado como sinônimo — importações futuras já normalizam.'));
   const msgVocab = el('p', { class: 'aviso-erro-texto' });

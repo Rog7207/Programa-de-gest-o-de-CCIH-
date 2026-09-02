@@ -1714,11 +1714,44 @@ function sugerirUnificacoesVocabulario(termos, oficiais, frequencias) {
       for (const outro of termos) {
         if (outro === t) continue;
         const primeiro = normalizarTexto(String(outro).split(/\s+/)[0]);
-        if (primeiro.length >= 8 && distanciaEdicao(n, primeiro, 2) <= 2 && n !== primeiro) {
-          sugerir(t, outro, 'possível erro de digitação');
+        /* Distância 2 só em termos longos: Eritromicina↔Azitromicina distam 2 letras
+           e são drogas diferentes — em nomes curtos, só 1 letra trocada conta. */
+        const tolerancia = Math.min(n.length, primeiro.length) >= 14 ? 2 : 1;
+        if (primeiro.length >= 8 && distanciaEdicao(n, primeiro, tolerancia) <= tolerancia && n !== primeiro) {
+          /* A direção vem da melhor grafia, não da ordem da lista — senão "Biópsia"
+             (33 usos) era mandada para "Biópsias" (1 uso) e o par voltava invertido. */
+          const canonico = melhorGrafia([t, outro], setOficiais, frequencias);
+          sugerir(canonico === t ? outro : t, canonico, 'possível erro de digitação — confirme');
           break;
         }
       }
+    }
+  }
+  return sugestoes;
+}
+
+/* Auditoria de vocabulário: as sugestões automáticas de sempre MAIS uma varredura por
+   distância de edição sobre o termo inteiro, para pegar erro de digitação em termos
+   compostos ("lavado bronco alveolar") e variantes de sufixo ("Linezolide"). Distância 1
+   sempre conta; 2 só em termos longos (≥14 letras) — senão Eritromicina↔Azitromicina,
+   drogas diferentes a 2 letras uma da outra, viraria par. Por isso mesmo, nada aqui é
+   aplicado sozinho: a regra marca o par como "confirme" e a decisão é humana. */
+function auditarVocabulario(termos, oficiais, frequencias) {
+  const sugestoes = sugerirUnificacoesVocabulario(termos, oficiais, frequencias);
+  const cobertos = new Set(sugestoes.map(s => normalizarTexto(s.de)));
+  const setOficiais = new Set((oficiais || []).map(normalizarTexto));
+  const lista = [...new Set(termos.map(t => String(t == null ? '' : t).trim()).filter(Boolean))];
+  for (let i = 0; i < lista.length; i++) {
+    for (let j = i + 1; j < lista.length; j++) {
+      const a = normalizarTexto(lista[i]), b = normalizarTexto(lista[j]);
+      if (!a || !b || a === b) continue;
+      const tolerancia = Math.min(a.length, b.length) >= 14 ? 2 : 1;
+      if (distanciaEdicao(a, b, tolerancia) > tolerancia) continue;
+      const para = melhorGrafia([lista[i], lista[j]], setOficiais, frequencias);
+      const de = para === lista[i] ? lista[j] : lista[i];
+      if (cobertos.has(normalizarTexto(de))) continue;
+      sugestoes.push({ de, para, regra: 'termos quase iguais — confirme antes de unificar' });
+      cobertos.add(normalizarTexto(de));
     }
   }
   return sugestoes;
@@ -1828,7 +1861,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     normalizarData, normalizarProntuario, normalizarValorAntibiograma,
     sugerirMapeamento, normalizarLinhas, validar, deduplicar, chaveNaturalDe, proximoID,
-    analisarPDFCulturas, ehPseudoProntuario, sugerirUnificacoes, sugerirUnificacoesVocabulario, distanciaEdicao,
+    analisarPDFCulturas, ehPseudoProntuario, sugerirUnificacoes, sugerirUnificacoesVocabulario, auditarVocabulario, distanciaEdicao,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome,
     enriquecerCirurgia, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
     textoAntibiograma, classificacaoCanonica, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,

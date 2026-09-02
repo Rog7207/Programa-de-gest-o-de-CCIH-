@@ -1404,5 +1404,36 @@ console.log('\n== 44. Rotina da instituição e integração visita→antibióti
     imp.vincularAvaliacaoAPrescricao({ Prontuario: '100', Antibiotico: 'VANCOMICINA', Data: '2026-08-26' }, prescricoes) === 'P3');
 }
 
+console.log('\n== 45. Auditoria de vocabulário: pares quase iguais, sem falsos casamentos ==');
+{
+  /* Sufixo trocado a 1 letra: par, apontando para o termo oficial. */
+  const s1 = imp.auditarVocabulario(['Linezolida', 'Linezolide'], ['Linezolida'], { Linezolide: 3 });
+  verificar('Linezolide → Linezolida (oficial ganha mesmo com menos usos)',
+    s1.length === 1 && s1[0].de === 'Linezolide' && s1[0].para === 'Linezolida', JSON.stringify(s1));
+  verificar('par por distância pede confirmação humana', /confirme/.test(s1[0].regra));
+
+  /* Drogas diferentes a 2 letras: NÃO pareiam (12 letras < mínimo de 14 para distância 2). */
+  const s2 = imp.auditarVocabulario(['Eritromicina', 'Azitromicina'], [], {});
+  verificar('Eritromicina ↔ Azitromicina não vira par', s2.length === 0, JSON.stringify(s2));
+
+  /* Termo longo com 2 diferenças (prefixo "H " de outro sistema): par. */
+  const s3 = imp.auditarVocabulario(
+    ['Recuperação Pós Anestésica Obstétrica', 'H RECUPERACAO POS ANESTESICA OBSTETRICA'],
+    ['Recuperação Pós Anestésica Obstétrica'], {});
+  verificar('setor com prefixo de outro sistema vira par para o oficial',
+    s3.length === 1 && s3[0].para === 'Recuperação Pós Anestésica Obstétrica', JSON.stringify(s3));
+
+  /* Espaço no meio do termo composto: caixa/acentos normalizam igual — regra antiga cobre. */
+  const s4 = imp.auditarVocabulario(['lavado broncoalveolar', 'lavado bronco alveolar'], [],
+    { 'lavado broncoalveolar': 18, 'lavado bronco alveolar': 2 });
+  verificar('grafia com espaço a mais aponta para a mais usada',
+    s4.length >= 1 && s4.every(p => p.para === 'lavado broncoalveolar'), JSON.stringify(s4));
+
+  /* Par já sugerido pela regra antiga não duplica na varredura por distância. */
+  const s5 = imp.auditarVocabulario(['Escherichia Coli', 'Escherichia coli'], []);
+  verificar('cada termo de origem aparece uma vez só',
+    new Set(s5.map(p => p.de)).size === s5.length, JSON.stringify(s5));
+}
+
 console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
 process.exit(falharam ? 1 : 0);

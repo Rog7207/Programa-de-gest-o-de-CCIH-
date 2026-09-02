@@ -125,6 +125,13 @@ async function montarRelatorioMicro(conteudo) {
   } catch (e) { conteudo.append(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message)); return; }
   const nomes = new Map(bancoPacientes.pacientes.map(p => [normalizarProntuario(p.Prontuario), p.Nome]));
   const deSepse = c => culturaDeProtocoloSepse(c, indiceSepseUI);
+  /* Índice só dos protocolos CONFIRMADOS: o checkbox de sepse filtra por eles — protocolo
+     aberto e depois descartado ("sepse descartada") não entra. */
+  let indiceSepseConfirmada = new Map();
+  try {
+    indiceSepseConfirmada = indiceSepse(((await lerBanco('sepse')).casos || [])
+      .filter(k => k.SepseConfirmada === 'S'));
+  } catch (e) { /* banco de sepse ainda não existe */ }
   const sensPorCultura = {};
   banco.sensibilidade.forEach(s => { (sensPorCultura[s.ID_Cultura] = sensPorCultura[s.ID_Cultura] || []).push(s); });
   /* Memoizado: inferirMecanismo roda regras sobre o antibiograma e era chamado para as
@@ -167,9 +174,11 @@ async function montarRelatorioMicro(conteudo) {
     el('option', { value: 'positivas' }, 'só o que pode ser infecção'),
     el('option', { value: '' }, 'incluir negativas, colonização e controles'));
   const campoBusca = el('input', { type: 'text', placeholder: 'prontuário ou nome' });
+  const caixaSepse = el('input', { type: 'checkbox',
+    title: 'Só culturas colhidas em torno de um protocolo de sepse CONFIRMADA (±3 dias da abertura)' });
   const area = el('div', {});
 
-  [campoDe, campoAte, selSetor, selMicro, selMaterial, selSitio, selMecanismo, selClasse, selResultado].forEach(c =>
+  [campoDe, campoAte, selSetor, selMicro, selMaterial, selSitio, selMecanismo, selClasse, selResultado, caixaSepse].forEach(c =>
     c.addEventListener('change', desenhar));
   campoBusca.addEventListener('input', aoPararDeDigitar(desenhar));
   conteudo.append(el('div', { class: 'cartao' },
@@ -180,6 +189,7 @@ async function montarRelatorioMicro(conteudo) {
     el('div', { class: 'linha-campos' },
       el('label', {}, 'Microrganismo: ', selMicro), el('label', {}, 'Resistência: ', selMecanismo),
       el('label', {}, 'Classificação: ', selClasse), el('label', {}, 'Resultado: ', selResultado),
+      el('label', {}, caixaSepse, ' 🩸 sepse confirmada'),
       el('label', {}, 'Buscar: ', campoBusca)),
     el('div', { class: 'linha-botoes' },
       el('button', { class: 'botao-secundario', onclick: () => exportar() }, 'Exportar resultado (Excel)'))),
@@ -204,6 +214,9 @@ async function montarRelatorioMicro(conteudo) {
          senão filtrar por "Colonização" devolveria lista vazia. Cultura de protocolo de
          sepse também passa: hemocultura negativa do protocolo é resultado, não ruído. */
       if (selResultado.value === 'positivas' && !selClasse.value && !culturaDoPainel(c) && !deSepse(c)) return false;
+      /* Sepse confirmada: só as culturas do protocolo — inclusive as negativas, que são
+         resultado do protocolo. */
+      if (caixaSepse.checked && !culturaDeProtocoloSepse(c, indiceSepseConfirmada)) return false;
       if (selMecanismo.value === '@mdr' && !mecanismoDe(c)) return false;
       if (selMecanismo.value && selMecanismo.value !== '@mdr' && c.MecanismoResistencia !== selMecanismo.value) return false;
       if (selClasse.value === '@pendente' && c.StatusRevisao !== 'pendente') return false;

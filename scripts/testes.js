@@ -1268,11 +1268,18 @@ console.log('\n== 42. Resumo para a visita técnica da UTI ==');
     ] },
     iras: { casos: [{ Prontuario: '100', Setor: 'CTI - Dr. Joaquim', DataInfeccao: '2026-08-15', Topografia: 'PAV' }] },
     sepse: { casos: [{ Prontuario: '100', Setor: 'CTI - Dr. Joaquim', DataProtocolo: '2026-08-10', AntibioticoAte1h: 'S' }] },
+    /* Metade das observações vem do miniapp com rótulo de setor próprio ("Uti"):
+       precisam casar com o CTI selecionado pela família adulto/neo, não pelo nome. */
     higiene_maos: { observacoes: Array.from({ length: 10 }, (_, i) => ({
-      Setor: 'CTI - Dr. Joaquim', Data: '2026-08-1' + (i % 9),
-      Momento: 'Antes do contato com paciente', Acao: i < 6 ? 'Higienizou' : 'Não higienizou' })) },
+      Setor: i % 2 ? 'Uti' : 'CTI - Dr. Joaquim', Data: '2026-08-1' + (i % 9),
+      Momento: 'Antes do contato com paciente', Acao: i < 6 ? 'Higienizou' : 'Não higienizou' }))
+      .concat([{ Setor: 'UTI Neonatal / Pediátrica', Data: '2026-08-15',
+        Momento: 'Antes do contato com paciente', Acao: 'Não higienizou' }]) },
     uti: { visitas: [
-      { Data: '2026-08-26', Prontuario: '100', Leito: '11', CVC_Retirar: 'S', VM_Retirar: '', SVD_Retirar: '' }
+      { Data: '2026-08-26', Prontuario: '100', Leito: '11', CVC: 'S', VM: '', SVD: 'S',
+        CVC_Retirar: 'S', VM_Retirar: '', SVD_Retirar: '' },
+      { Data: '2026-08-26', Prontuario: '200', Leito: '12', CVC: '', VM: 'S', SVD: 'S',
+        CVC_Retirar: '', VM_Retirar: '', SVD_Retirar: '' }
     ] },
     dispositivos: { dispositivos: [
       { Prontuario: '100', Categoria: 'CVC', DataInstalacao: '2026-08-01', DataRetirada: '' }
@@ -1289,7 +1296,12 @@ console.log('\n== 42. Resumo para a visita técnica da UTI ==');
     /isolamento agora \(1\)/.test(titulos), titulos);
   verificar('IRAS do mês com topografia', r.texto.includes('1× PAV'));
   verificar('sepse com indicador de ATB 1h', r.texto.includes('antibiótico em até 1h: 1 de 1'));
-  verificar('higiene com adesão calculada', r.texto.includes('adesão: 60%'));
+  verificar('higiene do miniapp ("Uti") entra no CTI adulto e a neonatal fica fora',
+    r.texto.includes('adesão: 60% (10 oportunidades)'), r.texto);
+  verificar('utilização de dispositivos vem das avaliações das visitas',
+    r.texto.includes('CVC: 1/2 (50%) · ventilação mecânica: 1/2 (50%) · sonda vesical: 2/2 (100%)'), r.texto);
+  verificar('taxa declara que é fotografia dos dias de visita',
+    r.texto.includes('fotografia de 2 avaliações em 1 dia(s) de visita'));
   verificar('retirada sugerida que segue em uso vira pendência',
     r.texto.includes('CVC — retirada sugerida em 2026-08-26, segue em uso'), r.texto);
   verificar('cabeçalho traz setor e data', r.texto.startsWith('*Resumo CCIH — CTI - Dr. Joaquim — 01/09/2026*'));

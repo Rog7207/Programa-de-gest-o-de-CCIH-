@@ -229,6 +229,12 @@ function iniciaisDe(nome) {
 function resumoParaVisitaUTI(bancos, setor, hoje, mecanismosMonitorados) {
   const corte = new Date(Date.parse(hoje + 'T00:00:00Z') - 30 * 86400000).toISOString().slice(0, 10);
   const doSetor = s => setor ? String(s || '').trim() === setor : ehSetorDeUTI(s);
+  /* O miniapp de higiene usa rótulos próprios de setor ("Uti") que não batem com os nomes
+     vindos do laboratório; além da igualdade exata, casa pela família — ambos UTI/CTI e
+     mesma clientela (adulto × neonatal/pediátrica). */
+  const ehNeoPed = s => /neonat|pedi[aá]tr|\bneo\b/i.test(String(s || ''));
+  const doSetorFamilia = s => doSetor(s)
+    || (Boolean(setor) && ehSetorDeUTI(s) && ehSetorDeUTI(setor) && ehNeoPed(s) === ehNeoPed(setor));
   const nomes = new Map(((bancos.pacientes || {}).pacientes || [])
     .map(p => [normalizarProntuario(p.Prontuario), p.Nome]));
   const rotuloPaciente = (prontuario, leito) => {
@@ -278,7 +284,7 @@ function resumoParaVisitaUTI(bancos, setor, hoje, mecanismosMonitorados) {
 
   /* Higiene das mãos do mês: adesão e o momento mais fraco. */
   const higiene = ((bancos.higiene_maos || {}).observacoes || [])
-    .filter(o => doSetor(o.Setor) && String(o.Data) >= corte);
+    .filter(o => doSetorFamilia(o.Setor) && String(o.Data) >= corte);
   if (higiene.length) {
     const sim = higiene.filter(o => o.Acao === 'Higienizou').length;
     const porMomento = new Map();
@@ -293,6 +299,24 @@ function resumoParaVisitaUTI(bancos, setor, hoje, mecanismosMonitorados) {
     const linhas = [`adesão: ${Math.round(sim / higiene.length * 100)}% (${higiene.length} oportunidades)`];
     if (pior) linhas.push(`momento mais fraco: ${pior[0]} (${Math.round(pior[1].sim / pior[1].total * 100)}%)`);
     blocos.push({ titulo: '🧤 Higiene das mãos no mês', linhas });
+  }
+
+  /* Utilização de dispositivos invasivos: fotografia das avaliações leito a leito das
+     visitas do mês. O censo não dá paciente-dia por setor (o setor registrado é o de
+     entrada), então a taxa honesta é a prevalência pontual nos dias de visita. Visita sem
+     setor gravado conta — o miniapp é da UTI por natureza. */
+  const avaliacoes = ((bancos.uti || {}).visitas || [])
+    .filter(v => String(v.Data) >= corte && (!String(v.Setor || '').trim() || doSetorFamilia(v.Setor)));
+  if (avaliacoes.length) {
+    const uso = [['CVC', 'CVC'], ['VM', 'ventilação mecânica'], ['SVD', 'sonda vesical']]
+      .map(([campo, rotulo]) => {
+        const n = avaliacoes.filter(v => v[campo] === 'S').length;
+        return `${rotulo}: ${n}/${avaliacoes.length} (${Math.round(n / avaliacoes.length * 100)}%)`;
+      });
+    const diasDeVisita = new Set(avaliacoes.map(v => String(v.Data).slice(0, 10))).size;
+    blocos.push({ titulo: '🧰 Uso de dispositivos invasivos',
+      linhas: [uso.join(' · '),
+        `fotografia de ${avaliacoes.length} avaliações em ${diasDeVisita} dia(s) de visita`] });
   }
 
   /* Pendências da última visita: retirada sugerida e o dispositivo segue em uso. */

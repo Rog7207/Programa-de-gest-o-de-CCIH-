@@ -16,7 +16,16 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 <li><strong>Identifique-se pelo nome</strong> — ele assina tudo que você importar ou alterar na sessão.</li>
 <li><strong>Aponte a pasta de dados</strong> da CCIH (na rede do hospital). O app lembra as últimas pastas usadas. Na primeira vez numa pasta vazia, ele pergunta antes de criar o banco — se você esperava dados e a pasta veio vazia, escolheu a pasta errada: cancele.</li>
 </ul>
-<p>Os dados são planilhas Excel dentro dessa pasta — dá para abrir qualquer uma no Excel para conferir (só não edite com o app aberto ao mesmo tempo). O aplicativo em si não guarda nada: <strong>atualizar o app é substituir a pasta do programa inteira; os dados ficam intactos.</strong> Após atualizar, use Ctrl+Shift+R na primeira abertura.</p>
+<p>Os dados são planilhas Excel dentro dessa pasta — dá para abrir qualquer uma no Excel para conferir (só não edite com o app aberto ao mesmo tempo). O aplicativo em si não guarda nada: atualizar o app <strong>nunca toca nos dados</strong>.</p>
+<h3>Como atualizar o aplicativo</h3>
+<p>O app é composto por <strong>4 itens</strong>: <code>index.html</code> + as pastas <code>js/</code>, <code>css/</code> e <code>lib/</code>. Para atualizar:</p>
+<ul>
+<li>Baixe a versão atual em &lt;https://github.com/Rog7207/Programa-de-gest-o-de-CCIH-&gt; (botão <strong>Code → Download ZIP</strong>) — o ZIP traz exatamente esses itens, na versão publicada.</li>
+<li>Na pasta do aplicativo, <strong>apague as pastas <code>js/</code> e <code>css/</code> antigas</strong> e cole as novas por cima, junto com o <code>index.html</code> e a <code>lib/</code> (apagar antes garante espelho exato; copiar por cima poderia deixar arquivo velho órfão).</li>
+<li>Abra o app e tecle <strong>Ctrl+Shift+R</strong> na primeira vez (limpa o cache do navegador).</li>
+</ul>
+<p>Na primeira conexão, a versão nova <strong>atualiza a estrutura do banco sozinha</strong> — acrescenta colunas e abas que ainda não existiam, preservando todos os dados.</p>
+<p><strong>Regra de ouro: só para frente.</strong> Nunca use uma versão antiga do app numa pasta de dados que já foi aberta por versão mais nova — a antiga não conhece as colunas novas.</p>
 <hr>
 <h2>2. Importando dados</h2>
 <h3>O que pode ser importado (aba Importar)</h3>

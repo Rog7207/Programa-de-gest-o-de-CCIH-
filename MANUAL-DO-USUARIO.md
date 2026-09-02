@@ -15,8 +15,25 @@
 
 Os dados são planilhas Excel dentro dessa pasta — dá para abrir qualquer uma no Excel para
 conferir (só não edite com o app aberto ao mesmo tempo). O aplicativo em si não guarda
-nada: **atualizar o app é substituir a pasta do programa inteira; os dados ficam intactos.**
-Após atualizar, use Ctrl+Shift+R na primeira abertura.
+nada: atualizar o app **nunca toca nos dados**.
+
+### Como atualizar o aplicativo
+
+O app é composto por **4 itens**: `index.html` + as pastas `js/`, `css/` e `lib/`.
+Para atualizar:
+
+1. Baixe a versão atual em <https://github.com/Rog7207/Programa-de-gest-o-de-CCIH->
+   (botão **Code → Download ZIP**) — o ZIP traz exatamente esses itens, na versão publicada.
+2. Na pasta do aplicativo, **apague as pastas `js/` e `css/` antigas** e cole as novas por
+   cima, junto com o `index.html` e a `lib/` (apagar antes garante espelho exato; copiar
+   por cima poderia deixar arquivo velho órfão).
+3. Abra o app e tecle **Ctrl+Shift+R** na primeira vez (limpa o cache do navegador).
+
+Na primeira conexão, a versão nova **atualiza a estrutura do banco sozinha** — acrescenta
+colunas e abas que ainda não existiam, preservando todos os dados.
+
+**Regra de ouro: só para frente.** Nunca use uma versão antiga do app numa pasta de dados
+que já foi aberta por versão mais nova — a antiga não conhece as colunas novas.
 
 ---
 

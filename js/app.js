@@ -61,16 +61,30 @@ function mostrarIdentificacao(continuar) {
     continuar();
   };
   campo.addEventListener('keydown', e => { if (e.key === 'Enter') entrar(campo.value); });
+  const areaBotoes = el('div', { class: 'linha-botoes', style: 'flex-wrap:wrap;justify-content:center' });
   const recentes = usuariosRecentes();
+  recentes.forEach(u => areaBotoes.append(el('button', { class: 'botao-secundario', onclick: () => entrar(u) }, u)));
   raiz.replaceChildren(el('div', { class: 'tela-central' },
     el('div', { class: 'cartao cartao-conexao' },
       el('h1', {}, 'Quem está usando?'),
       el('p', { class: 'texto-suave' }, 'O nome fica registrado em tudo que for importado ou alterado nesta sessão.'),
-      recentes.length ? el('div', { class: 'linha-botoes', style: 'flex-wrap:wrap;justify-content:center' },
-        recentes.map(u => el('button', { class: 'botao-secundario', onclick: () => entrar(u) }, u))) : null,
+      areaBotoes,
       campo,
       el('button', { class: 'botao-primario', style: 'margin-top:10px;width:100%', onclick: () => entrar(campo.value) }, 'Entrar'))));
   campo.focus();
+  /* A equipe cadastrada substitui os "recentes" do navegador: nome padronizado no botão é
+     nome padronizado no log. A pasta já está restaurada neste ponto, então dá para ler o
+     config — se falhar (primeira execução), ficam os recentes. */
+  (async () => {
+    try {
+      const dados = await lerBanco('config');
+      const nomes = [...new Set((dados.profissionais || []).map(pr => String(pr.Nome || '').trim()).filter(Boolean))];
+      if (nomes.length) {
+        areaBotoes.replaceChildren(...nomes.map(n =>
+          el('button', { class: 'botao-secundario', onclick: () => entrar(n) }, '👤 ' + n)));
+      }
+    } catch (e) { /* config ainda não existe */ }
+  })();
 }
 
 /* Tela de espera com etapa visível: o clique tem de mudar a tela NA HORA — sem isto,
@@ -470,6 +484,82 @@ async function montarConfiguracoes(conteudo) {
         localStorage.setItem('ccih.usuario', app.usuario);
         document.querySelector('.menu-rodape').textContent = app.usuario;
       } }, 'Salvar'))));
+  /* ---- Equipe e funções ----
+     Quem faz o quê, e de quanto em quanto tempo. Os nomes cadastrados viram os botões da
+     tela de entrada (padroniza o log: acaba o "Rogerio"/"Rogério" como pessoas diferentes)
+     e as funções+periodicidade alimentarão a lista de pendências por profissional. */
+  const areaEquipe = el('div', {});
+  function desenharEquipe(nomeEmEdicao) {
+    const nomes = config.nomesDaEquipe();
+    const rotuloFuncao = Object.fromEntries(FUNCOES_CCIH);
+    const tabelaEquipe = nomes.length ? el('table', { class: 'tabela' },
+      el('thead', {}, el('tr', {}, ['Profissional', 'Funções (a cada N dias)'].map(c => el('th', {}, c)))),
+      el('tbody', {}, nomes.map(n => el('tr', { class: 'linha-clicavel', title: 'Clique para editar', onclick: () => desenharEquipe(n) },
+        el('td', {}, el('strong', {}, n)),
+        el('td', { class: 'texto-suave' }, config.funcoesDe(n)
+          .map(f => (rotuloFuncao[f.Funcao] || f.Funcao) + (String(f.CadaDias).trim() ? ` (a cada ${f.CadaDias}d)` : ''))
+          .join(' · ') || '—')))))
+      : el('p', { class: 'texto-suave' }, 'Ninguém cadastrado ainda. A tela de entrada continua aceitando nome livre até o primeiro cadastro.');
+
+    const editando = nomeEmEdicao !== undefined;
+    const campoNomeProf = el('input', { type: 'text', placeholder: 'nome do profissional', value: editando ? nomeEmEdicao : '' });
+    const funcoesAtuais = new Map(editando ? config.funcoesDe(nomeEmEdicao).map(f => [f.Funcao, String(f.CadaDias || '')]) : []);
+    const linhasFuncao = new Map();
+    const gradeFuncoes = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:4px 18px;margin:8px 0' },
+      FUNCOES_CCIH.map(([chave, rotulo]) => {
+        const cb = el('input', { type: 'checkbox', checked: funcoesAtuais.has(chave) ? '' : null });
+        const dias = el('input', { type: 'number', min: '1', style: 'width:64px', placeholder: 'dias',
+          value: funcoesAtuais.get(chave) || '', disabled: funcoesAtuais.has(chave) ? null : '' });
+        cb.addEventListener('change', () => { dias.disabled = !cb.checked; if (!cb.checked) dias.value = ''; });
+        linhasFuncao.set(chave, { cb, dias });
+        return el('label', { style: 'font-size:13px;display:flex;align-items:center;gap:6px' },
+          cb, el('span', { style: 'flex:1' }, rotulo), 'a cada ', dias, ' dias');
+      }));
+    const msgEquipe = el('p', { class: 'aviso-erro-texto' });
+
+    const salvarProfissional = async () => {
+      try {
+        const nome = campoNomeProf.value.trim();
+        if (!nome) { msgEquipe.textContent = 'Informe o nome.'; return; }
+        const linhas = [...linhasFuncao.entries()]
+          .filter(([, { cb }]) => cb.checked)
+          .map(([chave, { dias }]) => ({ Nome: nome, Funcao: chave, CadaDias: String(dias.value || '').trim() }));
+        if (!linhas.length) { msgEquipe.textContent = 'Marque ao menos uma função.'; return; }
+        const outros = config.profissionais.filter(pr =>
+          normalizarTexto(pr.Nome) !== normalizarTexto(nome)
+          && (!editando || normalizarTexto(pr.Nome) !== normalizarTexto(nomeEmEdicao)));
+        config.profissionais = outros.concat(linhas);
+        await config.salvar();
+        desenharEquipe();
+      } catch (e) { msgEquipe.textContent = e.message; }
+    };
+
+    const removerProfissional = async () => {
+      try {
+        if (!confirm(`Remover ${nomeEmEdicao} da equipe? O histórico do que a pessoa já fez não é alterado.`)) return;
+        config.profissionais = config.profissionais.filter(pr => normalizarTexto(pr.Nome) !== normalizarTexto(nomeEmEdicao));
+        await config.salvar();
+        desenharEquipe();
+      } catch (e) { msgEquipe.textContent = e.message; }
+    };
+
+    areaEquipe.replaceChildren(
+      tabelaEquipe,
+      el('div', { class: 'secao-termos' },
+        el('h3', {}, editando ? `Editando: ${nomeEmEdicao}` : 'Novo profissional'),
+        el('div', { class: 'linha-campos' }, campoNomeProf),
+        gradeFuncoes,
+        el('p', { class: 'texto-suave' }, 'Deixe "dias" em branco quando a função não tem periodicidade fixa.'),
+        el('div', { class: 'linha-botoes' },
+          el('button', { class: 'botao-primario', onclick: salvarProfissional },
+            editando ? 'Salvar alterações' : 'Adicionar profissional'),
+          editando ? el('button', { class: 'botao-secundario', onclick: removerProfissional }, 'Remover da equipe') : null,
+          editando ? el('button', { class: 'botao-secundario', onclick: () => desenharEquipe() }, 'Cancelar') : null),
+        msgEquipe));
+  }
+  desenharEquipe();
+  conteudo.append(el('div', { class: 'cartao' }, el('h2', {}, 'Equipe e funções'), areaEquipe));
+
   /* ---- Rotina da instituição ----
      Nem toda CCIH avalia todos os antibióticos nem isola todo mecanismo de resistência.
      Cada lista tem um interruptor: desligado = comportamento completo (padrão de fábrica);

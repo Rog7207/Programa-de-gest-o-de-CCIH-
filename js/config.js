@@ -13,6 +13,8 @@ const config = {
      mecanismos de multirresistência disparam alerta/isolamento. LISTA VAZIA = TUDO —
      quem nunca configurou continua vendo o comportamento completo. */
   rotina: { atbAvaliados: [], mdrMonitorados: [], vigilanciaCategorias: [] },
+  /* Equipe: [{Nome, Funcao (chave de FUNCOES_CCIH), CadaDias}] — uma linha por função. */
+  profissionais: [],
 
   async carregar() {
     const dados = await lerBanco('config');
@@ -20,6 +22,7 @@ const config = {
     this.aliases = dados.aliases || [];
     this.procedimentosNHSN = dados.procedimentos_nhsn || [];
     this.antimicrobianos = dados.antimicrobianos || [];
+    this.profissionais = dados.profissionais || [];
     this.rotina = {
       atbAvaliados: (dados.atb_avaliados || []).map(l => l.Nome).filter(Boolean),
       mdrMonitorados: (dados.mdr_monitorados || []).map(l => l.Nome).filter(Boolean),
@@ -62,7 +65,11 @@ const config = {
       antimicrobianos: this.antimicrobianos, meta,
       atb_avaliados: this.rotina.atbAvaliados.map(n => ({ Nome: n })),
       mdr_monitorados: this.rotina.mdrMonitorados.map(n => ({ Nome: n })),
-      vigilancia_categorias: this.rotina.vigilanciaCategorias.map(n => ({ Nome: n })) };
+      vigilancia_categorias: this.rotina.vigilanciaCategorias.map(n => ({ Nome: n })),
+      /* Profissionais NÃO passam pela fusão com o disco: a tela de edição é uma só, e a
+         fusão impediria excluir alguém (o disco ressuscitaria a linha apagada). Vale a
+         regra de quem salvou por último. */
+      profissionais: this.profissionais };
     for (const v of Object.keys(this.vocabulario)) {
       if (v === 'procedimentos_nhsn') continue;
       abas[v] = this.vocabulario[v].map(nome => ({ Nome: nome }));
@@ -109,6 +116,15 @@ const config = {
     if (!alvo) return '';
     const achado = this.antimicrobianos.find(a => normalizarTexto(a.Nome) === alvo);
     return achado ? (achado.Classe || '') : '';
+  },
+
+  nomesDaEquipe() {
+    return [...new Set(this.profissionais.map(p => String(p.Nome || '').trim()).filter(Boolean))];
+  },
+
+  funcoesDe(nome) {
+    const alvo = normalizarTexto(nome);
+    return this.profissionais.filter(p => normalizarTexto(p.Nome) === alvo && p.Funcao);
   },
 
   /* Vazio = avalia tudo (instituição que não configurou nada). */

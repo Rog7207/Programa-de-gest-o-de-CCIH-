@@ -104,10 +104,26 @@ const ESQUEMAS = {
       atb_avaliados: ['Nome'],
       mdr_monitorados: ['Nome'],
       vigilancia_categorias: ['Nome'],
+      profissionais: ['Nome', 'Funcao', 'CadaDias'],
       meta: ['Chave', 'Valor']
     }
   }
 };
+
+/* Funções da equipe da CCIH. A CHAVE é estável — é por ela que a lista de pendências
+   saberá que fila pertence a quem; o rótulo é só apresentação. "A cada N dias" é a
+   periodicidade com que a pessoa deve zerar a fila daquela função. */
+const FUNCOES_CCIH = [
+  ['gestor', 'Gestor'],
+  ['deteccao_iras', 'Detecção de IRAS (revisão de culturas)'],
+  ['validacao_iras', 'Validação de IRAS (segunda assinatura)'],
+  ['vigilancia_pos_alta', 'Vigilância pós-alta'],
+  ['controle_antibioticos', 'Controle de antibióticos'],
+  ['visita_uti', 'Visita à UTI'],
+  ['investigacao_surtos', 'Investigação de surtos'],
+  ['isolamentos', 'Controle de isolamentos'],
+  ['higiene_maos', 'Auditoria de higiene das mãos']
+];
 
 /* Aumente quando os vocabulários de fábrica mudarem — dispara a fusão nas pastas existentes. */
 const VOCAB_VERSAO = 6;
@@ -575,5 +591,5 @@ const TIPOS_RELATORIO = {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { ESQUEMAS, TIPOS_RELATORIO, VOCABULARIO_INICIAL, VOCAB_ROTULOS, VOCAB_VERSAO, VOCAB_APLICACAO,
-    CLASSIFICACOES_CULTURA, CLASSES_TRIAGEM, SINONIMOS_CLASSIFICACAO };
+    CLASSIFICACOES_CULTURA, CLASSES_TRIAGEM, SINONIMOS_CLASSIFICACAO, FUNCOES_CCIH };
 }

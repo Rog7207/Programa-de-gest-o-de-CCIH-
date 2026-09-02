@@ -1203,6 +1203,23 @@ console.log('\n== 41. Vigilância pós-alta ==');
   verificar('sem classificação fica desmarcada (decisão manual)',
     cl({ Procedimento: 'Colecistectomia' }).marcar === false);
 
+  /* A instituição escolhe as categorias vigiadas; sem lista, vale o trio de fábrica. */
+  const comRotina = (c, cats) => imp.classificarParaVigilancia(c, cats);
+  verificar('rotina com contaminadas pré-marca a contaminada',
+    comRotina({ Procedimento: 'Colectomia', PotencialContaminacao: 'Contaminada' }, ['contaminada']).marcar === true);
+  verificar('rotina personalizada pode EXCLUIR a prótese',
+    comRotina({ Procedimento: 'Artroplastia Total' }, ['limpa']).marcar === false);
+  verificar('rotina com sem_classificacao pega o campo vazio',
+    comRotina({ Procedimento: 'Colecistectomia' }, ['sem_classificacao']).marcar === true);
+  verificar('potencialmente contaminada é categoria própria, não vira contaminada',
+    imp.categoriaDeVigilancia({ Procedimento: 'Histerectomia', PotencialContaminacao: 'Potencialmente contaminada' }) === 'potencialmente_contaminada');
+  verificar('cesariana ganha do potencial de contaminação',
+    imp.categoriaDeVigilancia({ Procedimento: 'Operação Cesariana', PotencialContaminacao: 'Potencialmente contaminada' }) === 'cesariana');
+  verificar('não cirúrgico nunca entra, qualquer que seja a rotina',
+    comRotina({ Procedimento: 'Cateterismo Cardíaco' }, ['sem_classificacao', 'contaminada']).marcar === false);
+  verificar('lista vazia = padrão de fábrica (limpa entra)',
+    comRotina({ Procedimento: 'Herniorrafia', PotencialContaminacao: 'Limpa' }, []).marcar === true);
+
   verificar('30 dias exatos entram na conta', imp.diasDesde('2026-08-02', '2026-09-01') === 30);
   verificar('data ilegível devolve null', imp.diasDesde('', '2026-09-01') === null);
 

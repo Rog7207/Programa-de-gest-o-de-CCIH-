@@ -12,7 +12,7 @@ const config = {
   /* Rotina da instituição: quais antibióticos entram na avaliação rotineira e quais
      mecanismos de multirresistência disparam alerta/isolamento. LISTA VAZIA = TUDO —
      quem nunca configurou continua vendo o comportamento completo. */
-  rotina: { atbAvaliados: [], mdrMonitorados: [] },
+  rotina: { atbAvaliados: [], mdrMonitorados: [], vigilanciaCategorias: [] },
 
   async carregar() {
     const dados = await lerBanco('config');
@@ -22,7 +22,8 @@ const config = {
     this.antimicrobianos = dados.antimicrobianos || [];
     this.rotina = {
       atbAvaliados: (dados.atb_avaliados || []).map(l => l.Nome).filter(Boolean),
-      mdrMonitorados: (dados.mdr_monitorados || []).map(l => l.Nome).filter(Boolean)
+      mdrMonitorados: (dados.mdr_monitorados || []).map(l => l.Nome).filter(Boolean),
+      vigilanciaCategorias: (dados.vigilancia_categorias || []).map(l => l.Nome).filter(Boolean)
     };
     for (const v of Object.keys(this.vocabulario)) {
       this.vocabulario[v] = (dados[v] || []).map(l => l.Nome).filter(Boolean);
@@ -60,7 +61,8 @@ const config = {
     const abas = { perfis: this.perfis, aliases: this.aliases, procedimentos_nhsn: this.procedimentosNHSN,
       antimicrobianos: this.antimicrobianos, meta,
       atb_avaliados: this.rotina.atbAvaliados.map(n => ({ Nome: n })),
-      mdr_monitorados: this.rotina.mdrMonitorados.map(n => ({ Nome: n })) };
+      mdr_monitorados: this.rotina.mdrMonitorados.map(n => ({ Nome: n })),
+      vigilancia_categorias: this.rotina.vigilanciaCategorias.map(n => ({ Nome: n })) };
     for (const v of Object.keys(this.vocabulario)) {
       if (v === 'procedimentos_nhsn') continue;
       abas[v] = this.vocabulario[v].map(nome => ({ Nome: nome }));

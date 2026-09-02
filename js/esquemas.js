@@ -103,6 +103,7 @@ const ESQUEMAS = {
       motivos_precaucao: ['Nome'],
       atb_avaliados: ['Nome'],
       mdr_monitorados: ['Nome'],
+      vigilancia_categorias: ['Nome'],
       meta: ['Chave', 'Valor']
     }
   }

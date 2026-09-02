@@ -953,19 +953,51 @@ const JANELA_VIGILANCIA = { inicioDias: 30, fimDias: 120, implanteDias: 90 };
 const PROCEDIMENTO_COM_IMPLANTE = /protese|artroplastia|implante|marcapasso|osteossintese|osteosintese|\btela\b|valvar/;
 const PROCEDIMENTO_CESARIANA = /cesariana|cesarea|cesaria/;
 
-function classificarParaVigilancia(cirurgia) {
-  const texto = normalizarTexto(cirurgia.Procedimento) + ' ' + normalizarTexto(cirurgia.ProcedimentoNHSN);
+/* Categorias que uma cirurgia pode ter para fins de vigilância pós-alta, e quais delas
+   entram pré-marcadas por padrão de fábrica. Cada instituição escolhe as suas nas
+   Configurações; lista vazia = padrão. A prioridade importa: prótese ganha de tudo (a
+   vigilância dela é mais longa), cesariana ganha do potencial de contaminação (é
+   potencialmente contaminada por natureza, mas vigiada por ser cesariana). */
+const CATEGORIAS_VIGILANCIA = [
+  ['implante', 'Cirurgias com prótese/implante'],
+  ['cesariana', 'Cesarianas'],
+  ['limpa', 'Cirurgias limpas'],
+  ['potencialmente_contaminada', 'Cirurgias potencialmente contaminadas'],
+  ['contaminada', 'Cirurgias contaminadas'],
+  ['infectada', 'Cirurgias infectadas'],
+  ['sem_classificacao', 'Sem classificação de contaminação']
+];
+const CATEGORIAS_VIGILANCIA_PADRAO = ['implante', 'cesariana', 'limpa'];
+const ROTULO_CATEGORIA_VIGILANCIA = Object.fromEntries(CATEGORIAS_VIGILANCIA);
+
+function categoriaDeVigilancia(cirurgia) {
   if (pareceNaoCirurgia(cirurgia.Procedimento) || pareceNaoCirurgia(cirurgia.ProcedimentoNHSN)) {
-    return { marcar: false, motivo: 'não cirúrgico', implante: false };
+    return 'nao_cirurgico';
   }
-  if (PROCEDIMENTO_COM_IMPLANTE.test(texto)) return { marcar: true, motivo: 'prótese/implante', implante: true };
-  if (PROCEDIMENTO_CESARIANA.test(texto)) return { marcar: true, motivo: 'cesariana', implante: false };
+  const texto = normalizarTexto(cirurgia.Procedimento) + ' ' + normalizarTexto(cirurgia.ProcedimentoNHSN);
+  if (PROCEDIMENTO_COM_IMPLANTE.test(texto)) return 'implante';
+  if (PROCEDIMENTO_CESARIANA.test(texto)) return 'cesariana';
   const potencial = normalizarTexto(cirurgia.PotencialContaminacao);
-  if (potencial === 'limpa') return { marcar: true, motivo: 'cirurgia limpa', implante: false };
-  if (/contaminada|infectada/.test(potencial)) {
-    return { marcar: false, motivo: String(cirurgia.PotencialContaminacao).toLowerCase(), implante: false };
+  if (potencial === 'limpa') return 'limpa';
+  if (potencial.includes('potencialmente')) return 'potencialmente_contaminada';
+  if (/infectada|suja/.test(potencial)) return 'infectada';
+  if (potencial.includes('contaminada')) return 'contaminada';
+  return 'sem_classificacao';
+}
+
+function classificarParaVigilancia(cirurgia, categoriasVigiadas) {
+  const vigiadas = (categoriasVigiadas && categoriasVigiadas.length)
+    ? categoriasVigiadas : CATEGORIAS_VIGILANCIA_PADRAO;
+  const categoria = categoriaDeVigilancia(cirurgia);
+  if (categoria === 'nao_cirurgico') {
+    return { marcar: false, motivo: 'não cirúrgico', implante: false, categoria };
   }
-  return { marcar: false, motivo: 'sem classificação de contaminação', implante: false };
+  return {
+    marcar: vigiadas.includes(categoria),
+    motivo: (ROTULO_CATEGORIA_VIGILANCIA[categoria] || categoria).toLowerCase(),
+    implante: categoria === 'implante',
+    categoria
+  };
 }
 
 function diasDesde(dataISO, hojeISO) {
@@ -1807,7 +1839,8 @@ if (typeof module !== 'undefined' && module.exports) {
     prepararRelatorio, adesaoHigiene, tipoPrecaucao, encerrarIsolamentosAusentes, dataDoRelatorio, vincularAvaliacaoAPrescricao,
     momentoCanonico, categoriaProfissional, normalizarObservacaoHigiene, MOMENTOS_OMS,
     principioAtivo, aplicarObitos,
-    classificarParaVigilancia, diasDesde, telefoneWhatsApp, mensagemVigilancia, linkWhatsApp, JANELA_VIGILANCIA,
+    classificarParaVigilancia, categoriaDeVigilancia, CATEGORIAS_VIGILANCIA, CATEGORIAS_VIGILANCIA_PADRAO,
+    diasDesde, telefoneWhatsApp, mensagemVigilancia, linkWhatsApp, JANELA_VIGILANCIA,
     prescricaoAtiva, analisarDose, cursosDeAntibiotico, alertasDeAntibioticos, DIAS_CURSO_PROLONGADO, TETO_DOSE_DIARIA_MG
   };
 }

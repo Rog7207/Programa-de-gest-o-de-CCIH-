@@ -71,7 +71,8 @@ async function montarVigilancia(conteudo) {
   const porStatus = status => banco.cirurgias.filter(c => c.StatusVigilancia === status);
   const recarregar = () => navegar('vigilancia', { historico: 'substituir' });
 
-  const seloImplante = c => classificarParaVigilancia(c).implante
+  const categoriasVigiadas = config.rotina.vigilanciaCategorias;
+  const seloImplante = c => classificarParaVigilancia(c, categoriasVigiadas).implante
     ? el('span', { class: 'selo', style: 'color:#533ab7;font-weight:600', title: 'Com prótese/implante — vigilância vale até 90 dias' }, ' ⚙ prótese')
     : null;
   const seloVencida = c => janelaVencida(c)
@@ -85,7 +86,7 @@ async function montarVigilancia(conteudo) {
   if (triagem.length) {
     const caixas = new Map();
     const linhasTabela = triagem.map(c => {
-      const regra = classificarParaVigilancia(c);
+      const regra = classificarParaVigilancia(c, categoriasVigiadas);
       const caixa = el('input', { type: 'checkbox', checked: regra.marcar ? '' : null });
       caixas.set(c.ID_Cirurgia, caixa);
       const tr = el('tr', { class: regra.marcar ? '' : 'linha-esmaecida' },
@@ -102,9 +103,10 @@ async function montarVigilancia(conteudo) {
     conteudo.append(el('div', { class: 'cartao' },
       el('h2', {}, `Triagem — ${fmtInt(triagem.length)} cirurgias de 30 a 120 dias`),
       el('p', { class: 'texto-suave' },
-        'Pré-marcadas: próteses/implantes e cesarianas. O relatório do centro cirúrgico ainda não traz o '
-        + 'potencial de contaminação — quando trouxer, as limpas passam a vir marcadas também. '
-        + 'Marque ou desmarque à vontade antes de confirmar.'),
+        'Pré-marcadas conforme a rotina da instituição (Configurações → Rotina → cirurgias vigiadas; '
+        + 'padrão de fábrica: próteses/implantes, cesarianas e limpas). O relatório do centro cirúrgico '
+        + 'ainda não traz o potencial de contaminação — enquanto isso, as categorias que dependem dele '
+        + 'aparecem como "sem classificação". Marque ou desmarque à vontade antes de confirmar.'),
       el('table', { class: 'tabela' },
         el('thead', {}, el('tr', {}, ['Vigiar', 'Cirurgia', 'Paciente', 'Procedimento', 'Regra'].map(t => el('th', {}, t)))),
         el('tbody', {}, linhasTabela)),

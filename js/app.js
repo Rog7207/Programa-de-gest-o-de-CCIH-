@@ -474,25 +474,30 @@ async function montarConfiguracoes(conteudo) {
      Nem toda CCIH avalia todos os antibióticos nem isola todo mecanismo de resistência.
      Cada lista tem um interruptor: desligado = comportamento completo (padrão de fábrica);
      ligado = só o que estiver marcado entra na fila/nos alertas. */
-  const grupoRotina = (titulo, explicacao, opcoes, selecionados, aoSalvar) => {
+  /* opcoes: lista de strings OU de pares [valor, rótulo]. `textoPadrao` descreve o que
+     acontece com a lista desligada — "tudo entra" nos vocabulários, o trio de fábrica nas
+     cirurgias vigiadas. */
+  const grupoRotina = (titulo, explicacao, opcoes, selecionados, aoSalvar, textoPadrao) => {
     const usarLista = el('input', { type: 'checkbox', checked: selecionados.length ? '' : null });
     const caixas = new Map();
     const grade = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:2px 14px;margin:8px 0;'
       + (selecionados.length ? '' : 'opacity:.45;pointer-events:none') });
     const marcados = new Set(selecionados.map(normalizarTexto));
     for (const opcao of opcoes) {
-      const cb = el('input', { type: 'checkbox', checked: marcados.has(normalizarTexto(opcao)) ? '' : null });
-      caixas.set(opcao, cb);
-      grade.append(el('label', { style: 'font-size:13px' }, cb, ' ', opcao));
+      const [valor, rotulo] = Array.isArray(opcao) ? opcao : [opcao, opcao];
+      const cb = el('input', { type: 'checkbox', checked: marcados.has(normalizarTexto(valor)) ? '' : null });
+      caixas.set(valor, cb);
+      grade.append(el('label', { style: 'font-size:13px' }, cb, ' ', rotulo));
     }
     usarLista.addEventListener('change', () => {
       grade.style.opacity = usarLista.checked ? '' : '.45';
       grade.style.pointerEvents = usarLista.checked ? '' : 'none';
     });
     const msg = el('span', { class: 'texto-suave' });
+    const padrao = textoPadrao || 'tudo entra, como de fábrica';
     return el('div', { class: 'secao-termos' },
       el('h3', {}, titulo),
-      el('label', {}, usarLista, ' usar lista personalizada (desligado = tudo entra, como de fábrica)'),
+      el('label', {}, usarLista, ` usar lista personalizada (desligado = ${padrao})`),
       el('p', { class: 'texto-suave' }, explicacao),
       grade,
       el('div', { class: 'linha-botoes' },
@@ -502,7 +507,7 @@ async function montarConfiguracoes(conteudo) {
               ? [...caixas.entries()].filter(([, cb]) => cb.checked).map(([o]) => o)
               : [];
             await aoSalvar(lista);
-            msg.textContent = usarLista.checked ? `Salvo: ${lista.length} selecionado(s).` : 'Salvo: tudo entra (padrão).';
+            msg.textContent = usarLista.checked ? `Salvo: ${lista.length} selecionado(s).` : `Salvo: ${padrao}.`;
           } catch (e) { msg.textContent = e.message; }
         } }, 'Salvar rotina'), msg));
   };
@@ -525,7 +530,13 @@ async function montarConfiguracoes(conteudo) {
       'Só os mecanismos marcados geram alerta de MDR no painel e pendência de isolamento. Vale para o painel, a aba Isolamentos e o resumo da visita à UTI.',
       mecanismosConhecidos,
       config.rotina.mdrMonitorados,
-      async lista => { config.rotina.mdrMonitorados = lista; await config.salvar(); })));
+      async lista => { config.rotina.mdrMonitorados = lista; await config.salvar(); }),
+    grupoRotina('Cirurgias com vigilância pós-alta',
+      'Quais categorias entram PRÉ-MARCADAS na triagem da aba Pós-alta. As demais aparecem esmaecidas e podem ser marcadas à mão, caso a caso. Prótese e cesariana são reconhecidas pelo nome do procedimento; as categorias de contaminação dependem do campo vir preenchido no relatório do centro cirúrgico.',
+      CATEGORIAS_VIGILANCIA,
+      config.rotina.vigilanciaCategorias,
+      async lista => { config.rotina.vigilanciaCategorias = lista; await config.salvar(); },
+      'padrão de fábrica: próteses/implantes + cesarianas + limpas')));
 
   const listaPerfis = config.perfis.length
     ? el('table', { class: 'tabela' },

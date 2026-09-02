@@ -309,7 +309,7 @@ async function ingerirMiniapp(tipo, dadosPorAba, arquivo, silencioso) {
   if (tipo === 'uti') {
     const linhas = dadosPorAba.visitas || [];
     const avaliacoes = (dadosPorAba.avaliacoes_atb || []).filter(a => a.Antibiotico);
-    resumo = await comTrava(['uti', 'iras'], async () => {
+    resumo = await comTrava(['uti', 'iras', 'antibioticos'], async () => {
       const banco = await lerBanco('uti');
       /* A visita é identificada por paciente e dia, não pelo leito: dois pacientes no
          mesmo leito no mesmo dia (troca de leito, ou leito digitado errado) faziam um
@@ -380,7 +380,34 @@ async function ingerirMiniapp(tipo, dadosPorAba, arquivo, silencioso) {
         banco.avaliacoes_atb.push({ ...a, Prontuario: normalizarProntuario(a.Prontuario), CriadoEm: a.CriadoEm || agora });
       }
       if (novos || atualizados || avaliacoes.length) await gravarBanco('uti', banco);
-      return { rotulo: 'Visita à UTI', novos, ignorados: 0, atualizados, avaliacoesATB: avaliacoes.length, semIdentificacao };
+
+      /* A avaliação feita à beira do leito DÁ BAIXA na fila de antibióticos: vira uma
+         avaliação no banco de antibióticos, ligada à prescrição do extrato quando ela
+         existir. Sem isto, o mesmo antibiótico avaliado na visita reaparecia como
+         pendente na aba Antibióticos e na página remota dos médicos. */
+      let avaliacoesIntegradas = 0;
+      if (avaliacoes.length) {
+        const bancoAtb = await lerBanco('antibioticos');
+        bancoAtb.avaliacoes = bancoAtb.avaliacoes || [];
+        const jaTem = new Set(bancoAtb.avaliacoes.map(a =>
+          normalizarProntuario(a.Prontuario) + '|' + normalizarTexto(a.Antibiotico) + '|' + String(a.DataDados).slice(0, 10)));
+        for (const a of avaliacoes) {
+          const chave = normalizarProntuario(a.Prontuario) + '|' + normalizarTexto(a.Antibiotico) + '|' + String(a.Data).slice(0, 10);
+          if (jaTem.has(chave)) continue;
+          jaTem.add(chave);
+          bancoAtb.avaliacoes.push({
+            ID_Prescricao: vincularAvaliacaoAPrescricao(a, bancoAtb.prescricoes || []),
+            Prontuario: normalizarProntuario(a.Prontuario), Antibiotico: a.Antibiotico,
+            Indicacao: a.Indicacao || '', Avaliacao: a.Avaliacao || '', Recomendacao: a.Recomendacao || '',
+            ParecerTexto: 'Avaliado na visita técnica da UTI',
+            Avaliador: a.CriadoPor || app.usuario, DataDados: String(a.Data).slice(0, 10), CriadoEm: agora
+          });
+          avaliacoesIntegradas++;
+        }
+        if (avaliacoesIntegradas) await gravarBanco('antibioticos', bancoAtb);
+      }
+      return { rotulo: 'Visita à UTI', novos, ignorados: 0, atualizados, avaliacoesATB: avaliacoes.length,
+        avaliacoesIntegradas, semIdentificacao };
     });
   } else if (tipo === 'avaliacao_atb') {
     const linhas = (dadosPorAba.avaliacoes || []).filter(a => a.ID_Prescricao);
@@ -493,6 +520,7 @@ async function ingerirMiniapp(tipo, dadosPorAba, arquivo, silencioso) {
     + (resumo.atualizados ? `, ${fmtInt(resumo.atualizados)} atualizados (reenvio)` : '')
     + (resumo.ignorados ? `, ${fmtInt(resumo.ignorados)} já existentes ignorados` : '')
     + (resumo.avaliacoesATB ? `, ${fmtInt(resumo.avaliacoesATB)} avaliações de antibiótico` : '')
+    + (resumo.avaliacoesIntegradas ? ` (${fmtInt(resumo.avaliacoesIntegradas)} deram baixa na fila de antibióticos)` : '')
     + (resumo.suspeitas ? `, ${fmtInt(resumo.suspeitas)} suspeitas de IRAS abertas para investigação` : '')
     + (resumo.culturas ? `, ${fmtInt(resumo.culturas)} culturas classificadas` : '')
     + (resumo.culturasIgnoradas ? `, ${fmtInt(resumo.culturasIgnoradas)} culturas já revisadas ignoradas` : '')

@@ -436,7 +436,8 @@ async function montarIsolamentos(conteudo) {
   const nomeDe = pr => nomes.get(normalizarProntuario(pr)) || '';
   const ativas = banco.precaucoes.filter(p => !String(p.DataFim || '').trim());
   const pendencias = pendenciasIsolamento(
-    bancoCulturas.culturas, bancoCulturas.sensibilidade, banco.precaucoes, banco.decisoes, hojeISO());
+    bancoCulturas.culturas, bancoCulturas.sensibilidade, banco.precaucoes, banco.decisoes, hojeISO(),
+    null, config.rotina.mdrMonitorados);
 
   conteudo.append(el('div', { class: 'grade-cartoes' }, ...[
     ['Pendências de isolamento', pendencias.length],
@@ -694,7 +695,7 @@ async function montarUti(conteudo) {
     const caixaTexto = el('textarea', { rows: 10, style: 'width:100%;font-family:inherit', readonly: '' });
     const msgResumo = el('span', { class: 'texto-suave' });
     const gerar = () => {
-      caixaTexto.value = resumoParaVisitaUTI(bancosResumo, selSetorResumo.value, hojeISO()).texto;
+      caixaTexto.value = resumoParaVisitaUTI(bancosResumo, selSetorResumo.value, hojeISO(), config.rotina.mdrMonitorados).texto;
     };
     selSetorResumo.addEventListener('change', gerar);
     gerar();

@@ -330,7 +330,8 @@ async function montarPainel(conteudo) {
     return !inv || inv.Situacao !== 'descartado';
   });
   const descartados = todosSurtos.length - surtos.length;
-  const mdr = detectarMultirresistentes(culturas.culturas, culturas.sensibilidade, hoje, MDR_JANELA_PAINEL_DIAS);
+  const mdr = detectarMultirresistentes(culturas.culturas, culturas.sensibilidade, hoje,
+    MDR_JANELA_PAINEL_DIAS, config.rotina.mdrMonitorados);
   const areaAlertas = el('div', {});
   if (surtos.length) {
     areaAlertas.append(el('div', { class: 'aviso-erro' },
@@ -430,7 +431,7 @@ async function montarPainel(conteudo) {
   try {
     const isolamentos = await lerBanco('isolamentos');
     const pendIso = pendenciasIsolamento(culturas.culturas, culturas.sensibilidade,
-      isolamentos.precaucoes, isolamentos.decisoes, hoje);
+      isolamentos.precaucoes, isolamentos.decisoes, hoje, null, config.rotina.mdrMonitorados);
     cartoes.push(['Pendências de isolamento', pendIso.length, () => navegar('isolamentos')]);
   } catch (e) { /* banco ainda não criado */ }
   conteudo.append(el('div', { class: 'grade-cartoes' }, ...cartoes.map(([rotulo, n, acao]) =>
@@ -469,6 +470,63 @@ async function montarConfiguracoes(conteudo) {
         localStorage.setItem('ccih.usuario', app.usuario);
         document.querySelector('.menu-rodape').textContent = app.usuario;
       } }, 'Salvar'))));
+  /* ---- Rotina da instituição ----
+     Nem toda CCIH avalia todos os antibióticos nem isola todo mecanismo de resistência.
+     Cada lista tem um interruptor: desligado = comportamento completo (padrão de fábrica);
+     ligado = só o que estiver marcado entra na fila/nos alertas. */
+  const grupoRotina = (titulo, explicacao, opcoes, selecionados, aoSalvar) => {
+    const usarLista = el('input', { type: 'checkbox', checked: selecionados.length ? '' : null });
+    const caixas = new Map();
+    const grade = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:2px 14px;margin:8px 0;'
+      + (selecionados.length ? '' : 'opacity:.45;pointer-events:none') });
+    const marcados = new Set(selecionados.map(normalizarTexto));
+    for (const opcao of opcoes) {
+      const cb = el('input', { type: 'checkbox', checked: marcados.has(normalizarTexto(opcao)) ? '' : null });
+      caixas.set(opcao, cb);
+      grade.append(el('label', { style: 'font-size:13px' }, cb, ' ', opcao));
+    }
+    usarLista.addEventListener('change', () => {
+      grade.style.opacity = usarLista.checked ? '' : '.45';
+      grade.style.pointerEvents = usarLista.checked ? '' : 'none';
+    });
+    const msg = el('span', { class: 'texto-suave' });
+    return el('div', { class: 'secao-termos' },
+      el('h3', {}, titulo),
+      el('label', {}, usarLista, ' usar lista personalizada (desligado = tudo entra, como de fábrica)'),
+      el('p', { class: 'texto-suave' }, explicacao),
+      grade,
+      el('div', { class: 'linha-botoes' },
+        el('button', { class: 'botao-secundario', onclick: async () => {
+          try {
+            const lista = usarLista.checked
+              ? [...caixas.entries()].filter(([, cb]) => cb.checked).map(([o]) => o)
+              : [];
+            await aoSalvar(lista);
+            msg.textContent = usarLista.checked ? `Salvo: ${lista.length} selecionado(s).` : 'Salvo: tudo entra (padrão).';
+          } catch (e) { msg.textContent = e.message; }
+        } }, 'Salvar rotina'), msg));
+  };
+
+  let mecanismosConhecidos = ['MRSA', 'VRE', 'ERC', 'Resistente a carbapenêmicos', 'ESBL'];
+  try {
+    const bancoCul = await lerBanco('culturas');
+    const doBanco = [...new Set((bancoCul.culturas || []).map(c => String(c.MecanismoResistencia || '').trim()).filter(Boolean))];
+    mecanismosConhecidos = [...new Set(mecanismosConhecidos.concat(doBanco))].sort();
+  } catch (e) { /* banco ainda não existe */ }
+
+  conteudo.append(el('div', { class: 'cartao' },
+    el('h2', {}, 'Rotina da instituição'),
+    grupoRotina('Antibióticos avaliados rotineiramente',
+      'Só os marcados entram na fila de avaliação e na página remota dos médicos. Os demais seguem nos indicadores de uso normalmente.',
+      (config.vocabulario.antibioticos || []).slice().sort(),
+      config.rotina.atbAvaliados,
+      async lista => { config.rotina.atbAvaliados = lista; await config.salvar(); }),
+    grupoRotina('Multirresistentes isolados rotineiramente',
+      'Só os mecanismos marcados geram alerta de MDR no painel e pendência de isolamento. Vale para o painel, a aba Isolamentos e o resumo da visita à UTI.',
+      mecanismosConhecidos,
+      config.rotina.mdrMonitorados,
+      async lista => { config.rotina.mdrMonitorados = lista; await config.salvar(); })));
+
   const listaPerfis = config.perfis.length
     ? el('table', { class: 'tabela' },
         el('thead', {}, el('tr', {}, ['Nome', 'Tipo', 'Criado por', 'Em'].map(c => el('th', {}, c)))),

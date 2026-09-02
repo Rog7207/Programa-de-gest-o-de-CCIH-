@@ -9,6 +9,10 @@ const config = {
      `vocabulario` porque tem colunas próprias — `salvar` reescreve os vocabulários como
      lista de nomes e apagaria a classe. */
   antimicrobianos: [],
+  /* Rotina da instituição: quais antibióticos entram na avaliação rotineira e quais
+     mecanismos de multirresistência disparam alerta/isolamento. LISTA VAZIA = TUDO —
+     quem nunca configurou continua vendo o comportamento completo. */
+  rotina: { atbAvaliados: [], mdrMonitorados: [] },
 
   async carregar() {
     const dados = await lerBanco('config');
@@ -16,6 +20,10 @@ const config = {
     this.aliases = dados.aliases || [];
     this.procedimentosNHSN = dados.procedimentos_nhsn || [];
     this.antimicrobianos = dados.antimicrobianos || [];
+    this.rotina = {
+      atbAvaliados: (dados.atb_avaliados || []).map(l => l.Nome).filter(Boolean),
+      mdrMonitorados: (dados.mdr_monitorados || []).map(l => l.Nome).filter(Boolean)
+    };
     for (const v of Object.keys(this.vocabulario)) {
       this.vocabulario[v] = (dados[v] || []).map(l => l.Nome).filter(Boolean);
     }
@@ -50,7 +58,9 @@ const config = {
       meta.push({ Chave: 'versao_vocabulario', Valor: String(VOCAB_VERSAO) });
     }
     const abas = { perfis: this.perfis, aliases: this.aliases, procedimentos_nhsn: this.procedimentosNHSN,
-      antimicrobianos: this.antimicrobianos, meta };
+      antimicrobianos: this.antimicrobianos, meta,
+      atb_avaliados: this.rotina.atbAvaliados.map(n => ({ Nome: n })),
+      mdr_monitorados: this.rotina.mdrMonitorados.map(n => ({ Nome: n })) };
     for (const v of Object.keys(this.vocabulario)) {
       if (v === 'procedimentos_nhsn') continue;
       abas[v] = this.vocabulario[v].map(nome => ({ Nome: nome }));
@@ -97,6 +107,13 @@ const config = {
     if (!alvo) return '';
     const achado = this.antimicrobianos.find(a => normalizarTexto(a.Nome) === alvo);
     return achado ? (achado.Classe || '') : '';
+  },
+
+  /* Vazio = avalia tudo (instituição que não configurou nada). */
+  ehAtbAvaliado(antibiotico) {
+    const lista = (this.rotina || {}).atbAvaliados || [];
+    if (!lista.length) return true;
+    return lista.some(n => normalizarTexto(n) === normalizarTexto(antibiotico));
   },
 
   tempoCortePorProcedimento() {

@@ -12,15 +12,22 @@ const DIAS_REVALIDAR_AVALIACAO = 7;
 
 async function montarAntibioticosNovo(conteudo) {
   conteudo.append(el('h1', {}, 'Antibióticos'));
-  let banco, bancoPacientes, bancoCulturas;
+  let banco, bancoPacientes, bancoCulturas, bancoUti;
   try {
-    [banco, bancoPacientes, bancoCulturas] = await Promise.all([
-      lerBanco('antibioticos'), lerBanco('pacientes'), lerBanco('culturas')]);
+    [banco, bancoPacientes, bancoCulturas, bancoUti] = await Promise.all([
+      lerBanco('antibioticos'), lerBanco('pacientes'), lerBanco('culturas'),
+      lerBanco('uti').catch(() => ({ avaliacoes_atb: [] }))]);
   } catch (e) { conteudo.append(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message)); return; }
 
   const hoje = hojeISO();
   const prescricoes = banco.prescricoes || [];
-  const avaliacoes = banco.avaliacoes || [];
+  /* As avaliações feitas na visita da UTI valem aqui também: as novas já entram copiadas
+     pela importação; as antigas (de antes da integração) são somadas na leitura. */
+  const avaliacoes = (banco.avaliacoes || []).concat(
+    (bancoUti.avaliacoes_atb || []).map(a => ({
+      Prontuario: a.Prontuario, Antibiotico: a.Antibiotico, Avaliacao: a.Avaliacao,
+      Recomendacao: a.Recomendacao, DataDados: a.Data, CriadoEm: a.CriadoEm
+    })));
   if (!prescricoes.length) {
     conteudo.append(el('div', { class: 'cartao' }, el('p', { class: 'texto-suave' },
       'Nenhuma prescrição importada. Na aba Importar, use o extrato de antibióticos do hospital.')));
@@ -50,7 +57,10 @@ async function montarAntibioticosNovo(conteudo) {
     const dias = diasDesde(a.DataDados || a.CriadoEm, hoje);
     return dias !== null && dias <= DIAS_REVALIDAR_AVALIACAO;
   });
-  const pendentes = ativos.filter(c => !avaliacaoRecente(c));
+  /* Rotina da instituição: só entram na fila os antibióticos avaliados rotineiramente
+     (Configurações → Rotina). Lista vazia = todos. Os demais seguem nos indicadores. */
+  const foraDaRotina = ativos.filter(c => !config.ehAtbAvaliado(c.Antibiotico)).length;
+  const pendentes = ativos.filter(c => config.ehAtbAvaliado(c.Antibiotico) && !avaliacaoRecente(c));
   const pacientesEmATB = new Set(ativos.map(c => normalizarProntuario(c.Prontuario))).size;
 
   conteudo.append(el('div', { class: 'grade-cartoes' }, ...[
@@ -79,7 +89,8 @@ async function montarAntibioticosNovo(conteudo) {
     el('h2', {}, `Fila de avaliação — ${fmtInt(pendentes.length)} cursos ativos`),
     el('p', { class: 'texto-suave' },
       'Como na revisão de culturas: clique no curso, avalie embaixo da própria linha. '
-      + `A avaliação vale pelo curso — se ele continuar correndo, volta à fila em ${DIAS_REVALIDAR_AVALIACAO} dias.`),
+      + `A avaliação vale pelo curso — se ele continuar correndo, volta à fila em ${DIAS_REVALIDAR_AVALIACAO} dias.`
+      + (foraDaRotina ? ` ${fmtInt(foraDaRotina)} curso(s) de antibióticos fora da rotina de avaliação não aparecem aqui (Configurações → Rotina).` : '')),
     areaFila));
 
   function desenharFila() {

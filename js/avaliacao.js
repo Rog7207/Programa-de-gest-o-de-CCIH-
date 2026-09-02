@@ -34,8 +34,9 @@ function montarDadosAvaliacao(bancos, hoje) {
 
   /* O extrato do hospital traz DataFim em TODA linha (janela de validade renovada) —
      ativa é a que ainda não venceu, não a que não tem fim. */
+  const naRotina = p => typeof config === 'undefined' || config.ehAtbAvaliado(p.Antibiotico);
   const pendentes = (bancos.prescricoes || []).filter(p =>
-    p.Antibiotico && prescricaoAtiva(p, hoje) && !avaliadas.has(p.ID_Prescricao));
+    p.Antibiotico && prescricaoAtiva(p, hoje) && naRotina(p) && !avaliadas.has(p.ID_Prescricao));
   const culturasPendentesTodas = (bancos.culturas || []).filter(c =>
     c.StatusRevisao === 'pendente' && c.Microrganismo);
 

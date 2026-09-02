@@ -359,7 +359,7 @@ async function carregarEventos(idFonte) {
   const fonte = FONTES_EVENTOS[idFonte];
   const banco = await lerBanco(fonte.banco);
   if (fonte.especial === 'mdr') {
-    const mdr = detectarMultirresistentes(banco.culturas, banco.sensibilidade, null);
+    const mdr = detectarMultirresistentes(banco.culturas, banco.sensibilidade, null, null, config.rotina.mdrMonitorados);
     return mdr.map(m => ({ data: String(m.DataColeta).slice(0, 10), setor: m.Setor || '', valor: m.Mecanismo }));
   }
   return (banco[fonte.aba] || [])

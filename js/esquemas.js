@@ -101,6 +101,8 @@ const ESQUEMAS = {
       categorias_profissionais: ['Nome'],
       momentos_higiene: ['Nome'],
       motivos_precaucao: ['Nome'],
+      atb_avaliados: ['Nome'],
+      mdr_monitorados: ['Nome'],
       meta: ['Chave', 'Valor']
     }
   }

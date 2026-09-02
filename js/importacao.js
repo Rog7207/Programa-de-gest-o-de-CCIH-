@@ -1129,6 +1129,26 @@ function alertasDeAntibioticos(bancos, hojeISO) {
   return alertas.sort((a, b) => peso[a.tipo] - peso[b.tipo]);
 }
 
+/* Liga uma avaliação feita na visita (paciente+antibiótico+data) à prescrição do extrato:
+   preferindo a janela que cobre a data da visita; sem cobertura, a mais recente da mesma
+   droga (a visita de hoje avalia a prescrição que está correndo, mesmo que a janela vire
+   amanhã). Devolve o ID_Prescricao ou '' quando o paciente não tem a droga no extrato. */
+function vincularAvaliacaoAPrescricao(avaliacao, prescricoes) {
+  const alvoPaciente = normalizarProntuario(avaliacao.Prontuario);
+  const alvoAtb = normalizarTexto(avaliacao.Antibiotico);
+  const data = String(avaliacao.Data || avaliacao.DataDados || '').slice(0, 10);
+  let maisRecente = null;
+  for (const p of (prescricoes || [])) {
+    if (normalizarProntuario(p.Prontuario) !== alvoPaciente) continue;
+    if (normalizarTexto(p.Antibiotico) !== alvoAtb) continue;
+    const inicio = String(p.DataInicio || '').slice(0, 10);
+    const fim = String(p.DataFim || '9999-12-31').slice(0, 10);
+    if (data && inicio <= data && data <= fim) return p.ID_Prescricao;
+    if (!maisRecente || String(p.DataInicio) > String(maisRecente.DataInicio)) maisRecente = p;
+  }
+  return maisRecente ? maisRecente.ID_Prescricao : '';
+}
+
 /* Monta a linha que vai para o banco a partir de um registro já normalizado.
    Usado tanto pelo assistente passo a passo quanto pela importação em lote. */
 function montarLinhaImportada(registro, tipo, id, usuario, agora, tempoCorte) {
@@ -1784,7 +1804,7 @@ if (typeof module !== 'undefined' && module.exports) {
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,
     preClassificarCultura, culturaDoPainel, indiceSepse, culturaDeProtocoloSepse, JANELA_CULTURA_SEPSE,
-    prepararRelatorio, adesaoHigiene, tipoPrecaucao, encerrarIsolamentosAusentes, dataDoRelatorio,
+    prepararRelatorio, adesaoHigiene, tipoPrecaucao, encerrarIsolamentosAusentes, dataDoRelatorio, vincularAvaliacaoAPrescricao,
     momentoCanonico, categoriaProfissional, normalizarObservacaoHigiene, MOMENTOS_OMS,
     principioAtivo, aplicarObitos,
     classificarParaVigilancia, diasDesde, telefoneWhatsApp, mensagemVigilancia, linkWhatsApp, JANELA_VIGILANCIA,

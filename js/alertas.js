@@ -28,8 +28,17 @@ function inferirMecanismo(microrganismo, itensSensibilidade) {
 }
 
 /* Multirresistentes na janela recente: mecanismo declarado no laudo ou inferido do antibiograma. */
-function detectarMultirresistentes(culturas, sensibilidade, hoje, janelaDias) {
+function detectarMultirresistentes(culturas, sensibilidade, hoje, janelaDias, mecanismosMonitorados) {
   janelaDias = janelaDias || MDR_JANELA_DIAS;
+  /* Rotina da instituição: lista vazia/ausente = monitora tudo. A comparação é por
+     inclusão nos dois sentidos ("ERC" casa com "Enterobactéria resistente a carbapenêmicos"
+     não — mas "Resistente a carbapenêmicos" casa com "carbapenemicos" da lista). */
+  const monitorados = (mecanismosMonitorados || []).map(normalizarTexto).filter(Boolean);
+  const monitorado = mecanismo => {
+    if (!monitorados.length) return true;
+    const n = normalizarTexto(mecanismo);
+    return monitorados.some(m => n.includes(m) || m.includes(n));
+  };
   const porCultura = {};
   for (const s of sensibilidade || []) {
     (porCultura[s.ID_Cultura] = porCultura[s.ID_Cultura] || []).push(s);
@@ -44,7 +53,7 @@ function detectarMultirresistentes(culturas, sensibilidade, hoje, janelaDias) {
     const declarado = String(c.MecanismoResistencia || '').trim();
     const inferido = inferirMecanismo(c.Microrganismo, porCultura[c.ID_Cultura] || []);
     const mecanismo = declarado || inferido;
-    if (!mecanismo) continue;
+    if (!mecanismo || !monitorado(mecanismo)) continue;
     alertas.push({
       ID_Cultura: c.ID_Cultura, Prontuario: c.Prontuario, Setor: c.Setor,
       DataColeta: c.DataColeta, Microrganismo: c.Microrganismo,
@@ -182,8 +191,8 @@ function detectarSurtos(culturas, janelaDias, minimoPacientes) {
 }
 
 /* Pendências de isolamento: multirresistente recente sem precaução ativa e sem decisão registrada. */
-function pendenciasIsolamento(culturas, sensibilidade, precaucoes, decisoes, hoje, janelaDias) {
-  const mdr = detectarMultirresistentes(culturas, sensibilidade, hoje, janelaDias || 30);
+function pendenciasIsolamento(culturas, sensibilidade, precaucoes, decisoes, hoje, janelaDias, mecanismosMonitorados) {
+  const mdr = detectarMultirresistentes(culturas, sensibilidade, hoje, janelaDias || 30, mecanismosMonitorados);
   const isolados = new Set((precaucoes || [])
     .filter(p => !String(p.DataFim || '').trim())
     .map(p => normalizarProntuario(p.Prontuario)));
@@ -217,7 +226,7 @@ function iniciaisDe(nome) {
   return partes.map(p => p[0].toUpperCase() + '.').join('');
 }
 
-function resumoParaVisitaUTI(bancos, setor, hoje) {
+function resumoParaVisitaUTI(bancos, setor, hoje, mecanismosMonitorados) {
   const corte = new Date(Date.parse(hoje + 'T00:00:00Z') - 30 * 86400000).toISOString().slice(0, 10);
   const doSetor = s => setor ? String(s || '').trim() === setor : ehSetorDeUTI(s);
   const nomes = new Map(((bancos.pacientes || {}).pacientes || [])
@@ -234,7 +243,7 @@ function resumoParaVisitaUTI(bancos, setor, hoje) {
   const culturas = ((bancos.culturas || {}).culturas || []).filter(c => doSetor(c.Setor));
   const mdr = detectarMultirresistentes(
     culturas.filter(c => String(c.DataColeta) >= corte),
-    (bancos.culturas || {}).sensibilidade || [], hoje, 30);
+    (bancos.culturas || {}).sensibilidade || [], hoje, 30, mecanismosMonitorados);
   if (mdr.length) {
     blocos.push({ titulo: `🦠 Multirresistentes (${mdr.length} no mês)`, linhas: mdr.slice(0, 8).map(a =>
       `${a.Microrganismo} (${a.Mecanismo}) — ${rotuloPaciente(a.Prontuario)} — coleta ${String(a.DataColeta).slice(0, 10)}`) });

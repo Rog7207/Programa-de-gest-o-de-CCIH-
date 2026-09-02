@@ -1337,5 +1337,43 @@ console.log('\n== 43. Antibióticos: cursos, doses e alertas ==');
   verificar('resistência vem antes de duração', alertas[0].tipo === 'resistencia');
 }
 
+console.log('\n== 44. Rotina da instituição e integração visita→antibióticos ==');
+{
+  const alertas = require(path.join(__dirname, '..', 'js', 'alertas.js'));
+  const hoje = '2026-09-01';
+  const culturas = [
+    { ID_Cultura: 'C1', Prontuario: '1', Setor: 'UTI', DataColeta: '2026-08-25',
+      Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: 'Resistente a carbapenêmicos', StatusRevisao: 'avaliada' },
+    { ID_Cultura: 'C2', Prontuario: '2', Setor: 'UTI', DataColeta: '2026-08-25',
+      Microrganismo: 'Staphylococcus aureus', MecanismoResistencia: 'MRSA', StatusRevisao: 'avaliada' }
+  ];
+  verificar('sem lista, monitora tudo',
+    alertas.detectarMultirresistentes(culturas, [], hoje).length === 2);
+  verificar('lista vazia explícita também monitora tudo',
+    alertas.detectarMultirresistentes(culturas, [], hoje, 30, []).length === 2);
+  const soCarba = alertas.detectarMultirresistentes(culturas, [], hoje, 30, ['Resistente a carbapenêmicos']);
+  verificar('lista com carbapenêmicos filtra o MRSA',
+    soCarba.length === 1 && soCarba[0].Mecanismo.includes('carbapenêmicos'), soCarba.map(a => a.Mecanismo));
+  verificar('a comparação tolera grafia parcial ("carbapenemicos")',
+    alertas.detectarMultirresistentes(culturas, [], hoje, 30, ['carbapenemicos']).length === 1);
+  verificar('pendências de isolamento respeitam a mesma lista',
+    alertas.pendenciasIsolamento(culturas, [], [], [], hoje, 30, ['MRSA']).length === 1);
+
+  /* Elo visita→prescrição: janela que cobre a data ganha; sem cobertura, a mais recente. */
+  const prescricoes = [
+    { ID_Prescricao: 'P1', Prontuario: '100', Antibiotico: 'Meropenem', DataInicio: '2026-08-20', DataFim: '2026-08-22' },
+    { ID_Prescricao: 'P2', Prontuario: '100', Antibiotico: 'Meropenem', DataInicio: '2026-08-25', DataFim: '2026-08-27' },
+    { ID_Prescricao: 'P3', Prontuario: '100', Antibiotico: 'Vancomicina', DataInicio: '2026-08-25', DataFim: '2026-08-27' }
+  ];
+  verificar('avaliação liga à janela que cobre a data da visita',
+    imp.vincularAvaliacaoAPrescricao({ Prontuario: '100', Antibiotico: 'Meropenem', Data: '2026-08-26' }, prescricoes) === 'P2');
+  verificar('visita fora de qualquer janela liga à prescrição mais recente da droga',
+    imp.vincularAvaliacaoAPrescricao({ Prontuario: '100', Antibiotico: 'Meropenem', Data: '2026-08-30' }, prescricoes) === 'P2');
+  verificar('droga que o paciente não tem devolve vazio',
+    imp.vincularAvaliacaoAPrescricao({ Prontuario: '100', Antibiotico: 'Cefepima', Data: '2026-08-26' }, prescricoes) === '');
+  verificar('grafia com caixa diferente casa',
+    imp.vincularAvaliacaoAPrescricao({ Prontuario: '100', Antibiotico: 'VANCOMICINA', Data: '2026-08-26' }, prescricoes) === 'P3');
+}
+
 console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
 process.exit(falharam ? 1 : 0);

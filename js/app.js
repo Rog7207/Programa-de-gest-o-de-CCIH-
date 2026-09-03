@@ -296,7 +296,7 @@ function renderizarAba(abaId) {
   else if (abaId === 'isolamentos') aoTerminar(montarIsolamentos(conteudo));
   else if (abaId === 'higiene') aoTerminar(montarHigiene(conteudo));
   else if (abaId === 'iras') aoTerminar(montarInfeccoes(conteudo));
-  else if (abaId === 'relatorios') aoTerminar(montarRelatorioMicro(conteudo));
+  else if (abaId === 'relatorios') aoTerminar(montarAbaRelatorios(conteudo));
   else if (abaId === 'eventos') aoTerminar(montarEventos(conteudo));
   else if (abaId === 'sepse') aoTerminar(montarSepse(conteudo));
   else if (abaId === 'surtos') aoTerminar(montarSurtos(conteudo));
@@ -559,6 +559,78 @@ async function montarConfiguracoes(conteudo) {
   }
   desenharEquipe();
   conteudo.append(el('div', { class: 'cartao' }, el('h2', {}, 'Equipe e funções'), areaEquipe));
+
+  /* ---- Grupos de setores ----
+     Usados pelos relatórios padrão: em vez de escolher setor a setor, o relatório sai por
+     "UTIs", "Clínicas cirúrgicas"… Cada grupo é uma lista de setores do vocabulário. */
+  const areaGrupos = el('div', {});
+  function desenharGrupos(grupoEmEdicao) {
+    const grupos = config.gruposDeSetores();
+    const tabelaGrupos = grupos.size ? el('table', { class: 'tabela' },
+      el('thead', {}, el('tr', {}, ['Grupo', 'Setores'].map(c => el('th', {}, c)))),
+      el('tbody', {}, [...grupos.entries()].map(([g, setoresDoGrupo]) =>
+        el('tr', { class: 'linha-clicavel', title: 'Clique para editar', onclick: () => desenharGrupos(g) },
+          el('td', {}, el('strong', {}, g)),
+          el('td', { class: 'texto-suave' }, setoresDoGrupo.join(' · '))))))
+      : el('p', { class: 'texto-suave' }, 'Nenhum grupo ainda — os relatórios já funcionam por setor único ou hospital inteiro.');
+
+    const editando = grupoEmEdicao !== undefined;
+    const campoGrupo = el('input', { type: 'text', placeholder: 'nome do grupo (ex.: UTIs)',
+      value: editando ? grupoEmEdicao : '' });
+    const membros = new Set((editando ? grupos.get(grupoEmEdicao) || [] : []).map(normalizarTexto));
+    const caixasSetor = new Map();
+    const gradeSetores = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:2px 14px;margin:8px 0' },
+      (config.vocabulario.setores || []).slice().sort().map(s => {
+        const cb = el('input', { type: 'checkbox', checked: membros.has(normalizarTexto(s)) ? '' : null });
+        caixasSetor.set(s, cb);
+        return el('label', { style: 'font-size:13px;display:flex;align-items:center;gap:6px' }, cb, s);
+      }));
+    const msgGrupos = el('p', { class: 'aviso-erro-texto' });
+
+    const salvarGrupo = async () => {
+      try {
+        const nome = campoGrupo.value.trim();
+        if (!nome) { msgGrupos.textContent = 'Informe o nome do grupo.'; return; }
+        const escolhidos = [...caixasSetor.entries()].filter(([, cb]) => cb.checked).map(([s]) => s);
+        if (!escolhidos.length) { msgGrupos.textContent = 'Marque ao menos um setor.'; return; }
+        config.gruposSetores = config.gruposSetores.filter(l =>
+          normalizarTexto(l.Grupo) !== normalizarTexto(nome)
+          && (!editando || normalizarTexto(l.Grupo) !== normalizarTexto(grupoEmEdicao)))
+          .concat(escolhidos.map(s => ({ Grupo: nome, Setor: s })));
+        await config.salvar();
+        desenharGrupos();
+      } catch (e) { msgGrupos.textContent = e.message; }
+    };
+
+    const removerGrupo = async () => {
+      try {
+        if (!confirm(`Remover o grupo ${grupoEmEdicao}? Os setores continuam existindo.`)) return;
+        config.gruposSetores = config.gruposSetores.filter(l =>
+          normalizarTexto(l.Grupo) !== normalizarTexto(grupoEmEdicao));
+        await config.salvar();
+        desenharGrupos();
+      } catch (e) { msgGrupos.textContent = e.message; }
+    };
+
+    areaGrupos.replaceChildren(
+      tabelaGrupos,
+      el('div', { class: 'secao-termos' },
+        el('h3', {}, editando ? `Editando: ${grupoEmEdicao}` : 'Novo grupo'),
+        el('div', { class: 'linha-campos' }, campoGrupo),
+        gradeSetores,
+        el('div', { class: 'linha-botoes' },
+          el('button', { class: 'botao-primario', onclick: salvarGrupo },
+            editando ? 'Salvar alterações' : 'Adicionar grupo'),
+          editando ? el('button', { class: 'botao-secundario', onclick: removerGrupo }, 'Remover grupo') : null,
+          editando ? el('button', { class: 'botao-secundario', onclick: () => desenharGrupos() }, 'Cancelar') : null),
+        msgGrupos));
+  }
+  desenharGrupos();
+  conteudo.append(el('div', { class: 'cartao' }, el('h2', {}, 'Grupos de setores'),
+    el('p', { class: 'texto-suave' },
+      'Grupos como "UTIs" ou "Clínicas cirúrgicas" aparecem no seletor de escopo dos relatórios padrão '
+      + '(aba Relatórios), junto dos setores individuais e do hospital inteiro.'),
+    areaGrupos));
 
   /* ---- Rotina da instituição ----
      Nem toda CCIH avalia todos os antibióticos nem isola todo mecanismo de resistência.

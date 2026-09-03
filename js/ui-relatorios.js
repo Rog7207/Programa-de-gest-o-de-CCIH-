@@ -117,6 +117,140 @@ function legendaSeries(series) {
 
 /* ---- Aba Relatórios (microbiológico) ---- */
 
+/* A aba Relatórios: os padrão (pré-configurados) em cima, o microbiológico geral
+   (com todos os filtros) embaixo. */
+async function montarAbaRelatorios(conteudo) {
+  await montarRelatoriosPadrao(conteudo);
+  await montarRelatorioMicro(conteudo);
+}
+
+/* ---- Relatórios padrão: escolhe relatório + escopo + período, o núcleo puro
+   (js/relatorios.js) calcula e a mesma estrutura vira tela e impressão. ---- */
+async function montarRelatoriosPadrao(conteudo) {
+  conteudo.append(el('h1', {}, 'Relatórios'));
+  const selRelatorio = el('select', {}, RELATORIOS_PADRAO.map(([chave, rotulo]) =>
+    el('option', { value: chave }, rotulo)));
+  const grupos = config.gruposDeSetores();
+  const setores = (config.vocabulario.setores || []).slice().sort();
+  const selEscopo = el('select', {},
+    el('option', { value: '' }, 'hospital inteiro'),
+    [...grupos.keys()].map(g => el('option', { value: 'g:' + g }, `grupo: ${g}`)),
+    setores.map(s => el('option', { value: 's:' + s }, s)));
+  const [inicioPadrao, fimPadrao] = mesAnteriorIntervalo(hojeISO());
+  const campoDe = el('input', { type: 'date', value: inicioPadrao });
+  const campoAte = el('input', { type: 'date', value: fimPadrao });
+  const area = el('div', {});
+  const msg = el('p', { class: 'aviso-erro-texto' });
+  let ultimoGerado = null;
+
+  const gerar = async () => {
+    msg.textContent = '';
+    try {
+      const bancos = {};
+      await Promise.all(BANCOS_RELATORIOS.map(async n => {
+        try { bancos[n] = await lerBanco(n); } catch (e) { bancos[n] = {}; }
+      }));
+      const valor = selEscopo.value;
+      let setoresEscopo = null, escopoRotulo = 'Hospital inteiro';
+      if (valor.startsWith('g:')) {
+        const nome = valor.slice(2);
+        setoresEscopo = grupos.get(nome) || [];
+        escopoRotulo = `Grupo ${nome} (${setoresEscopo.join(', ')})`;
+      } else if (valor.startsWith('s:')) {
+        setoresEscopo = [valor.slice(2)];
+        escopoRotulo = `Setor ${valor.slice(2)}`;
+      }
+      const definicao = RELATORIOS_PADRAO.find(r => r[0] === selRelatorio.value);
+      const dados = definicao[2](bancos, setoresEscopo, campoDe.value, campoAte.value);
+      const dataBR = d => String(d).split('-').reverse().join('/');
+      ultimoGerado = { dados,
+        subtitulo: `${escopoRotulo} · ${dataBR(campoDe.value)} a ${dataBR(campoAte.value)}` };
+      area.replaceChildren(desenharRelatorioPadrao(dados, ultimoGerado.subtitulo));
+      botaoImprimir.disabled = false;
+    } catch (e) { msg.textContent = e.message; }
+  };
+
+  const botaoImprimir = el('button', { class: 'botao-secundario', disabled: '',
+    onclick: () => imprimirRelatorioPadrao(ultimoGerado, msg) }, '🖨 Imprimir');
+  conteudo.append(el('div', { class: 'cartao' },
+    el('h2', {}, 'Relatórios padrão'),
+    el('p', { class: 'texto-suave' },
+      'Pré-configurados: escolha o relatório, o escopo (setor, grupo de setores — cadastrados em '
+      + 'Configurações — ou o hospital inteiro) e o período. O padrão é o mês anterior fechado.'),
+    el('div', { class: 'linha-campos' },
+      selRelatorio, selEscopo,
+      el('label', {}, 'de ', campoDe), el('label', {}, 'até ', campoAte),
+      el('button', { class: 'botao-primario', onclick: gerar }, 'Gerar'),
+      botaoImprimir),
+    msg, area));
+}
+
+function desenharRelatorioPadrao(dados, subtitulo) {
+  const blocos = [el('h2', {}, dados.titulo), el('p', { class: 'texto-suave' }, subtitulo)];
+  for (const secao of dados.secoes) {
+    blocos.push(el('h3', {}, secao.titulo));
+    if (secao.tipo === 'numeros') {
+      blocos.push(el('table', { class: 'tabela' }, el('tbody', {},
+        secao.itens.map(([rotulo, valor]) => el('tr', {},
+          el('td', {}, rotulo), el('td', {}, el('strong', {}, String(valor))))))));
+    } else if (secao.tipo === 'tabela') {
+      blocos.push(secao.linhas.length ? el('table', { class: 'tabela' },
+        el('thead', {}, el('tr', {}, secao.colunas.map(c => el('th', {}, c)))),
+        el('tbody', {}, secao.linhas.map(linha => el('tr', {},
+          linha.map(v => el('td', {}, String(v)))))))
+        : el('p', { class: 'texto-suave' }, 'Sem dados no período.'));
+    } else {
+      blocos.push(el('p', { class: 'texto-suave' }, secao.corpo));
+    }
+  }
+  return el('div', { class: 'cartao' }, ...blocos);
+}
+
+function imprimirRelatorioPadrao(gerado, msg) {
+  if (!gerado) return;
+  const esc = t => String(t == null ? '' : t)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const secoesHTML = gerado.dados.secoes.map(secao => {
+    let corpo;
+    if (secao.tipo === 'numeros') {
+      corpo = '<table><tbody>' + secao.itens.map(([r, v]) =>
+        `<tr><td>${esc(r)}</td><td><b>${esc(v)}</b></td></tr>`).join('') + '</tbody></table>';
+    } else if (secao.tipo === 'tabela') {
+      corpo = secao.linhas.length
+        ? '<table><thead><tr>' + secao.colunas.map(c => `<th>${esc(c)}</th>`).join('') + '</tr></thead><tbody>'
+          + secao.linhas.map(l => '<tr>' + l.map(v => `<td>${esc(v)}</td>`).join('') + '</tr>').join('')
+          + '</tbody></table>'
+        : '<p class="suave">Sem dados no período.</p>';
+    } else {
+      corpo = `<p class="suave">${esc(secao.corpo)}</p>`;
+    }
+    return `<h2>${esc(secao.titulo)}</h2>` + corpo;
+  }).join('');
+  const html = '<!doctype html><html><head><meta charset="utf-8">'
+    + `<title>${esc(gerado.dados.titulo)}</title><style>`
+    + 'body{font-family:Arial,sans-serif;margin:24px;color:#000}'
+    + 'h1{font-size:15pt;margin:0 0 2px}'
+    + 'h2{font-size:11.5pt;margin:16px 0 6px;border-bottom:1px solid #999;padding-bottom:2px}'
+    + '.sub{color:#444;margin:0 0 8px;font-size:9.5pt}'
+    + '.suave{color:#444;font-size:9.5pt}'
+    + 'table{border-collapse:collapse;width:100%;font-size:9.5pt;margin:4px 0}'
+    + 'th,td{border:1px solid #999;padding:4px 7px;text-align:left}'
+    + 'th{background:#eee}'
+    + '</style></head><body>'
+    + `<h1>CCIH — ${esc(gerado.dados.titulo)}</h1>`
+    + `<p class="sub">${esc(gerado.subtitulo)} · gerado em ${agoraCurto()} por ${esc(app.usuario)}</p>`
+    + secoesHTML + '</body></html>';
+  const janela = window.open('', '_blank');
+  if (!janela) {
+    if (msg) msg.textContent = 'O navegador bloqueou a janela de impressão — libere pop-ups para este aplicativo.';
+    return;
+  }
+  janela.document.write(html);
+  janela.document.close();
+  janela.focus();
+  janela.print();
+}
+
 async function montarRelatorioMicro(conteudo) {
   conteudo.append(el('h1', {}, 'Relatório microbiológico'));
   let banco, bancoPacientes;

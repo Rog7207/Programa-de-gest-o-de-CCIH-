@@ -105,6 +105,7 @@ const ESQUEMAS = {
       mdr_monitorados: ['Nome'],
       vigilancia_categorias: ['Nome'],
       profissionais: ['Nome', 'Funcao', 'CadaDias'],
+      grupos_setores: ['Grupo', 'Setor'],
       meta: ['Chave', 'Valor']
     }
   }

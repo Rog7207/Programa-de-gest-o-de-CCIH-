@@ -42,32 +42,8 @@ function episodiosDeInfeccao(culturas, janelaDias) {
   return episodios;
 }
 
-/* Pacientes-dia no intervalo: para cada internação, quantos dias dela caem dentro do
-   período. Internação sem alta é contada até o fim do período. É o denominador da
-   densidade — sem ele só dá para contar infecções, não medir risco.
-
-   Só o total. Repartir por setor daria número errado: o censo traz em `SetorAtual` o setor
-   por onde o paciente ENTROU (62% das internações caem em "Emergência"), não onde ele ficou.
-   Dividir as infecções do CTI pelos poucos pacientes-dia que sobram no CTI produzia taxas
-   como 1.870 por mil — trezentas vezes o real. Enquanto o censo não trouxer as passagens de
-   setor, o painel mostra a contagem por setor e não finge uma taxa. */
-function pacientesDia(internacoes, de, ate) {
-  const inicio = Date.parse(de + 'T00:00:00Z');
-  const fim = Date.parse(ate + 'T00:00:00Z');
-  if (!isFinite(inicio) || !isFinite(fim) || fim < inicio) return 0;
-  let total = 0;
-  for (const i of (internacoes || [])) {
-    const entrada = Date.parse(String(i.DataInternacao || '').slice(0, 10) + 'T00:00:00Z');
-    if (!isFinite(entrada)) continue;
-    const altaBruta = String(i.DataAlta || '').slice(0, 10);
-    const saida = /^\d{4}-/.test(altaBruta) ? Date.parse(altaBruta + 'T00:00:00Z') : fim;
-    if (!isFinite(saida)) continue;
-    const a = Math.max(entrada, inicio), b = Math.min(saida, fim);
-    if (b < a) continue;
-    total += (b - a) / 86400000 + 1;
-  }
-  return total;
-}
+/* pacientesDia (denominador da densidade) vive em relatorios.js — os relatórios padrão
+   usam o mesmo cálculo, e denominador de indicador não pode ter duas versões. */
 
 function densidade(casos, diasPaciente) {
   if (!diasPaciente) return null;

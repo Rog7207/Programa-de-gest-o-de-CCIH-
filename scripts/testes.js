@@ -1450,5 +1450,137 @@ console.log('\n== 46. Lista de notificação de isolamentos: só os nascidos no 
   verificar('sem precauções não quebra', alertas.isolamentosParaNotificar(null, '2026-09-02').length === 0);
 }
 
+console.log('\n== 47. Relatórios padrão: escopo, período, denominadores honestos ==');
+{
+  global.culturaDoPainel = imp.culturaDoPainel;
+  global.cursosDeAntibiotico = imp.cursosDeAntibiotico;
+  global.inferirMecanismo = require(path.join(__dirname, '..', 'js', 'alertas.js')).inferirMecanismo;
+  const rel = require(path.join(__dirname, '..', 'js', 'relatorios.js'));
+  const bancos = {
+    pacientes: { internacoes: [
+      /* 31 dias inteiros dentro de agosto + uma internação que atravessa o início. */
+      { DataInternacao: '2026-08-01', DataAlta: '2026-08-31' },
+      { DataInternacao: '2026-07-20', DataAlta: '2026-08-05' }
+    ] },
+    iras: { casos: [
+      { DataInfeccao: '2026-08-10', Setor: 'CTI', Topografia: 'PAV', Microrganismo: 'Klebsiella pneumoniae',
+        DispositivoAssociado: 'VM', ConfirmadoPor: 'Maria', StatusInvestigacao: 'confirmado' },
+      { DataInfeccao: '2026-08-20', Setor: 'Unidade 05', Topografia: 'ITU', Microrganismo: '',
+        DispositivoAssociado: '', ConfirmadoPor: '', StatusInvestigacao: 'em investigação' },
+      { DataInfeccao: '2026-07-10', Setor: 'CTI', Topografia: 'PAV' }
+    ] },
+    culturas: { culturas: [
+      { ID_Cultura: 'C1', DataColeta: '2026-08-05', Setor: 'CTI', Material: 'Hemocultura',
+        Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: 'ERC', StatusRevisao: 'avaliada', AvaliacaoCCIH: 'IRAS' },
+      { ID_Cultura: 'C2', DataColeta: '2026-08-06', Setor: 'CTI', Material: 'Urocultura',
+        Microrganismo: '', Resultado: 'Negativa', StatusRevisao: 'triagem', AvaliacaoCCIH: 'Negativa' },
+      /* Sem mecanismo declarado — tem de ser inferido do antibiograma (meropenem R). */
+      { ID_Cultura: 'C3', DataColeta: '2026-08-07', Setor: 'CTI', Material: 'Urocultura',
+        Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: '', StatusRevisao: 'avaliada', AvaliacaoCCIH: 'IRAS' }
+    ], sensibilidade: [
+      { ID_Cultura: 'C3', Antibiotico: 'Meropenem', Resultado: 'R' }
+    ] },
+    higiene_maos: { observacoes: [
+      { Data: '2026-08-02', Setor: 'CTI', Categoria: 'Enfermagem', Momento: 'Antes do contato com paciente', Acao: 'Higienizou' },
+      { Data: '2026-08-02', Setor: 'CTI', Categoria: 'Médicos', Momento: 'Antes do contato com paciente', Acao: 'Não higienizou' },
+      { Data: '2026-08-03', Setor: 'Unidade 05', Categoria: 'Enfermagem', Momento: 'Após contato com paciente', Acao: 'Higienizou' }
+    ] },
+    antibioticos: {
+      prescricoes: [
+        /* Duas janelas emendadas = UM curso de 12 dias (prolongado), 11 deles em agosto. */
+        { ID_Prescricao: 'P1', Prontuario: '100', Antibiotico: 'Meropenem', Setor: 'CTI', DataInicio: '2026-07-31', DataFim: '2026-08-05' },
+        { ID_Prescricao: 'P2', Prontuario: '100', Antibiotico: 'Meropenem', Setor: 'CTI', DataInicio: '2026-08-06', DataFim: '2026-08-11' },
+        { ID_Prescricao: 'P3', Prontuario: '200', Antibiotico: 'Cefepima', Setor: 'Unidade 05', DataInicio: '2026-08-10', DataFim: '2026-08-12' }
+      ],
+      avaliacoes: [
+        { Prontuario: '100', Antibiotico: 'Meropenem', Avaliacao: 'Correto', Recomendacao: 'Manter', DataDados: '2026-08-11' },
+        { Prontuario: '200', Antibiotico: 'Cefepima', Avaliacao: 'Incorreto', Recomendacao: 'Descalonar', DataDados: '2026-08-12' }
+      ] },
+    isolamentos: {
+      precaucoes: [
+        { ID_Precaucao: 'PRC-000001', Setor: 'CTI', TipoPrecaucao: 'Contato', Motivo: 'ERC', DataInicio: '2026-08-08', DataFim: '' },
+        { ID_Precaucao: 'PRE-000001', Setor: 'CTI', TipoPrecaucao: 'Aerossóis', Motivo: 'TB', DataInicio: '2026-07-01', DataFim: '2026-08-02' }
+      ],
+      decisoes: [
+        { ID_Cultura: 'C1', Prontuario: '100', Decisao: 'isolado', CriadoEm: '2026-08-08 10:00' },
+        { ID_Cultura: 'C2', Prontuario: '200', Decisao: 'não indicado', CriadoEm: '2026-08-09 10:00' }
+      ] },
+    sepse: { casos: [
+      { DataProtocolo: '2026-08-15', Setor: 'CTI', SepseConfirmada: 'S', AntibioticoAte1h: 'S',
+        HemoculturaAntesATB: 'S', BundleCompleto: 'N', MinutosAntibiotico: '45', FocoInfeccioso: 'Pulmonar', Desfecho: 'Alta' },
+      { DataProtocolo: '2026-08-16', Setor: 'CTI', ExcluidoIndicadores: 'S' }
+    ] },
+    cirurgias: { cirurgias: [
+      { DataCirurgia: '2026-08-03', ProcedimentoNHSN: 'Cesariana', StatusVigilancia: 'sem infecção', ISC: '' },
+      { DataCirurgia: '2026-08-04', ProcedimentoNHSN: 'Prótese de quadril', StatusVigilancia: 'infecção confirmada', ISC: 'S', TipoISC: 'Superficial' },
+      { DataCirurgia: '2026-08-05', ProcedimentoNHSN: 'Cesariana', StatusVigilancia: 'mensagem enviada', ISC: '' }
+    ] }
+  };
+
+  const pd = rel.pacientesDia(bancos.pacientes.internacoes, '2026-08-01', '2026-08-31');
+  verificar('pacientes-dia soma só a sobreposição com o período', pd === 31 + 5, String(pd));
+
+  const iras = rel.relatorioIRAS(bancos, null, '2026-08-01', '2026-08-31');
+  const itens = Object.fromEntries(iras.secoes[0].itens);
+  verificar('IRAS: julho fica fora, agosto entra', itens['IRAS no período'] === 2);
+  verificar('IRAS: dupla assinatura separa confirmadas', itens['Confirmadas (dupla assinatura)'] === 1);
+  verificar('IRAS: densidade usa pacientes-dia', itens['Densidade por 1.000 pacientes-dia'] === (2 / 36 * 1000).toFixed(2));
+  const irasCTI = rel.relatorioIRAS(bancos, ['CTI'], '2026-08-01', '2026-08-31');
+  verificar('IRAS com escopo: filtra setor e NÃO mostra densidade',
+    Object.fromEntries(irasCTI.secoes[0].itens)['IRAS no período'] === 1
+    && Object.fromEntries(irasCTI.secoes[0].itens)['Densidade por 1.000 pacientes-dia'] === '—');
+  verificar('IRAS com escopo: nota explica a falta do denominador',
+    irasCTI.secoes.some(s => s.tipo === 'texto' && /setor de ENTRADA/.test(s.corpo)));
+
+  const micro = rel.relatorioMicrobiologico(bancos, null, '2026-08-01', '2026-08-31');
+  const mItens = Object.fromEntries(micro.secoes[0].itens);
+  verificar('Micro: negativa em triagem fica fora do painel', mItens['Com microrganismo (painel)'] === '2 (67%)', JSON.stringify(mItens));
+  verificar('Micro: mecanismo declarado E inferido do antibiograma contam como MDR',
+    String(mItens['Com mecanismo de resistência']).startsWith('2 '), JSON.stringify(mItens));
+  const tabelaMecanismos = micro.secoes.find(s => s.titulo === 'Multirresistentes por mecanismo');
+  verificar('Micro: tabela de mecanismos usa o inferido',
+    tabelaMecanismos.linhas.some(([mec]) => /carbapen/i.test(mec)), JSON.stringify(tabelaMecanismos.linhas));
+
+  const hig = rel.relatorioHigiene(bancos, null, '2026-08-01', '2026-08-31');
+  verificar('Higiene: adesão geral calculada', Object.fromEntries(hig.secoes[0].itens)['Adesão geral'] === '67%');
+  const higCTI = rel.relatorioHigiene(bancos, ['CTI'], '2026-08-01', '2026-08-31');
+  verificar('Higiene com escopo: só o CTI', Object.fromEntries(higCTI.secoes[0].itens)['Oportunidades observadas'] === 2);
+
+  const atb = rel.relatorioAntibioticos(bancos, null, '2026-08-01', '2026-08-31');
+  const aItens = Object.fromEntries(atb.secoes[0].itens);
+  verificar('ATB: janelas emendadas viram um curso e o DOT respeita o período',
+    aItens['Dias de terapia (DOT) no período'] === 11 + 3, JSON.stringify(aItens));
+  verificar('ATB: curso de 12 dias conta como prolongado', String(aItens['Cursos prolongados (10+ dias)']).startsWith('1 '));
+  verificar('ATB: avaliações do período com % de corretas', String(aItens['Avaliadas como "Correto"']).startsWith('1 (50%)'));
+
+  const iso = rel.relatorioIsolamentos(bancos, null, '2026-08-01', '2026-08-31');
+  const iItens = Object.fromEntries(iso.secoes[0].itens);
+  verificar('Isolamentos: iniciados no período', iItens['Precauções iniciadas no período'] === 1);
+  verificar('Isolamentos: ativos no fim ignoram os já encerrados', iItens['Ativas no fim do período'] === 1);
+  verificar('Isolamentos: tempo coleta→isolamento vem da decisão ligada à cultura',
+    String(iItens['Tempo coleta → isolamento (mediana)']).startsWith('3 dia'));
+
+  const sep = rel.relatorioSepse(bancos, null, '2026-08-01', '2026-08-31');
+  const sItens = Object.fromEntries(sep.secoes[0].itens);
+  verificar('Sepse: excluído aparece na contagem mas não nas taxas',
+    sItens['Protocolos abertos'] === 2 && sItens['Excluídos dos indicadores'] === 1
+    && String(sItens['Antibiótico em até 1h']).includes('(100%)'));
+
+  const pos = rel.relatorioPosAlta(bancos, null, '2026-08-01', '2026-08-31');
+  const pItens = Object.fromEntries(pos.secoes[0].itens);
+  verificar('Pós-alta: taxa de ISC só entre desfechos conhecidos',
+    pItens['Taxa de ISC (entre desfechos conhecidos)'] === '50%', JSON.stringify(pItens));
+
+  const exec = rel.relatorioResumoExecutivo(bancos, null, '2026-08-01', '2026-08-31');
+  verificar('Resumo executivo: uma seção por relatório', exec.secoes.length === 7);
+  verificar('Resumo executivo: herda os números-chave',
+    Object.fromEntries(exec.secoes[0].itens)['IRAS'] === 2);
+
+  verificar('mês anterior fechado (meio do ano)',
+    JSON.stringify(rel.mesAnteriorIntervalo('2026-09-03')) === '["2026-08-01","2026-08-31"]');
+  verificar('mês anterior fechado (virada de ano)',
+    JSON.stringify(rel.mesAnteriorIntervalo('2026-01-15')) === '["2025-12-01","2025-12-31"]');
+}
+
 console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
 process.exit(falharam ? 1 : 0);

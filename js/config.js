@@ -15,6 +15,9 @@ const config = {
   rotina: { atbAvaliados: [], mdrMonitorados: [], vigilanciaCategorias: [] },
   /* Equipe: [{Nome, Funcao (chave de FUNCOES_CCIH), CadaDias}] — uma linha por função. */
   profissionais: [],
+  /* Grupos de setores para os relatórios padrão: [{Grupo, Setor}] — uma linha por membro
+     (ex.: "UTIs" reúne o CTI e a UTI Neonatal). */
+  gruposSetores: [],
 
   async carregar() {
     const dados = await lerBanco('config');
@@ -23,6 +26,7 @@ const config = {
     this.procedimentosNHSN = dados.procedimentos_nhsn || [];
     this.antimicrobianos = dados.antimicrobianos || [];
     this.profissionais = dados.profissionais || [];
+    this.gruposSetores = dados.grupos_setores || [];
     this.rotina = {
       atbAvaliados: (dados.atb_avaliados || []).map(l => l.Nome).filter(Boolean),
       mdrMonitorados: (dados.mdr_monitorados || []).map(l => l.Nome).filter(Boolean),
@@ -66,10 +70,11 @@ const config = {
       atb_avaliados: this.rotina.atbAvaliados.map(n => ({ Nome: n })),
       mdr_monitorados: this.rotina.mdrMonitorados.map(n => ({ Nome: n })),
       vigilancia_categorias: this.rotina.vigilanciaCategorias.map(n => ({ Nome: n })),
-      /* Profissionais NÃO passam pela fusão com o disco: a tela de edição é uma só, e a
-         fusão impediria excluir alguém (o disco ressuscitaria a linha apagada). Vale a
-         regra de quem salvou por último. */
-      profissionais: this.profissionais };
+      /* Profissionais e grupos de setores NÃO passam pela fusão com o disco: a tela de
+         edição é uma só, e a fusão impediria excluir alguém (o disco ressuscitaria a
+         linha apagada). Vale a regra de quem salvou por último. */
+      profissionais: this.profissionais,
+      grupos_setores: this.gruposSetores };
     for (const v of Object.keys(this.vocabulario)) {
       if (v === 'procedimentos_nhsn') continue;
       abas[v] = this.vocabulario[v].map(nome => ({ Nome: nome }));
@@ -116,6 +121,18 @@ const config = {
     if (!alvo) return '';
     const achado = this.antimicrobianos.find(a => normalizarTexto(a.Nome) === alvo);
     return achado ? (achado.Classe || '') : '';
+  },
+
+  /* [nome do grupo] → [setores], na ordem em que os grupos foram criados. */
+  gruposDeSetores() {
+    const mapa = new Map();
+    for (const linha of this.gruposSetores) {
+      const grupo = String(linha.Grupo || '').trim(), setor = String(linha.Setor || '').trim();
+      if (!grupo || !setor) continue;
+      if (!mapa.has(grupo)) mapa.set(grupo, []);
+      if (!mapa.get(grupo).includes(setor)) mapa.get(grupo).push(setor);
+    }
+    return mapa;
   },
 
   nomesDaEquipe() {

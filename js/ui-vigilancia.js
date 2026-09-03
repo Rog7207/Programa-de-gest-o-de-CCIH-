@@ -54,6 +54,49 @@ async function montarVigilancia(conteudo) {
   } catch (e) { conteudo.append(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message)); return; }
 
   const hoje = hojeISO();
+
+  /* ---- Exclusão automática por óbito ----
+     Quem faleceu depois da cirurgia sai da fila sozinho: status "encerrada — óbito",
+     gravado UMA vez sob trava. Não há botão de reverter aqui de propósito — enquanto o
+     óbito existir no cadastro, a vigilância reencerraria no próximo carregamento; a
+     correção certa é no registro de óbito do paciente. */
+  const indiceObitos = indiceDeObitos(bancoPacientes);
+  const ATIVAS_PARA_OBITO = ['pendente', 'sob vigilância', 'mensagem enviada'];
+  const faleceu = c => faleceuAposCirurgia(c, indiceObitos);
+  const falecidasAbertas = banco.cirurgias.filter(c =>
+    ATIVAS_PARA_OBITO.includes(String(c.StatusVigilancia || 'pendente')) && faleceu(c));
+  /* O caminho de volta: óbito corrigido/apagado no cadastro → a vigilância reabre sozinha. */
+  const reabrirSemObito = banco.cirurgias.filter(c =>
+    String(c.StatusVigilancia) === 'encerrada — óbito' && !faleceu(c));
+  if (falecidasAbertas.length || reabrirSemObito.length) {
+    try {
+      await comTrava(['cirurgias'], async () => {
+        const atual = await lerBanco('cirurgias');
+        for (const c of falecidasAbertas) {
+          const alvo = atual.cirurgias.find(x => x.ID_Cirurgia === c.ID_Cirurgia);
+          if (!alvo || !ATIVAS_PARA_OBITO.includes(String(alvo.StatusVigilancia || 'pendente'))) continue;
+          alvo.StatusVigilancia = 'encerrada — óbito';
+          const dataObito = indiceObitos.get(normalizarProntuario(c.Prontuario));
+          alvo.ObservacoesVigilancia = (String(alvo.ObservacoesVigilancia || '') + ' '
+            + `Encerrada automaticamente: óbito${dataObito ? ' em ' + dataObito : ''}.`).trim();
+        }
+        for (const c of reabrirSemObito) {
+          const alvo = atual.cirurgias.find(x => x.ID_Cirurgia === c.ID_Cirurgia);
+          if (!alvo || String(alvo.StatusVigilancia) !== 'encerrada — óbito') continue;
+          alvo.StatusVigilancia = 'pendente';
+          alvo.ObservacoesVigilancia = (String(alvo.ObservacoesVigilancia || '') + ' '
+            + 'Reaberta: o registro de óbito foi corrigido.').trim();
+        }
+        await gravarBanco('cirurgias', atual);
+      });
+      banco = await lerBanco('cirurgias');
+      const partes = [];
+      if (falecidasAbertas.length) partes.push(`✝ ${fmtInt(falecidasAbertas.length)} vigilância(s) encerradas automaticamente por óbito registrado`);
+      if (reabrirSemObito.length) partes.push(`${fmtInt(reabrirSemObito.length)} reabertas após correção do óbito`);
+      conteudo.append(el('p', { class: 'texto-suave' }, partes.join(' · ') + '.'));
+    } catch (e) { /* trava de outro usuário: nesta sessão o filtro abaixo segura as filas */ }
+  }
+
   const pacientePor = new Map(bancoPacientes.pacientes.map(p => [normalizarProntuario(p.Prontuario), p]));
   const nomeDe = c => (pacientePor.get(normalizarProntuario(c.Prontuario)) || {}).Nome || '';
   const telefoneDe = c => (pacientePor.get(normalizarProntuario(c.Prontuario)) || {}).Telefone || '';
@@ -80,7 +123,9 @@ async function montarVigilancia(conteudo) {
     : null;
 
   /* ---- 1. Triagem: o que entra na vigilância ---- */
-  const triagem = porStatus('pendente').filter(naJanela)
+  /* O .filter(!faleceu) das três filas é o cinto de segurança para quando a trava de
+     outro usuário impediu a gravação do encerramento: falecido não aparece nem assim. */
+  const triagem = porStatus('pendente').filter(naJanela).filter(c => !faleceu(c))
     .sort((a, b) => String(a.DataCirurgia).localeCompare(String(b.DataCirurgia)));
 
   if (triagem.length) {
@@ -139,7 +184,7 @@ async function montarVigilancia(conteudo) {
   /* ---- 2. Modelo da mensagem ---- */
   const campoModelo = el('textarea', { rows: 4, style: 'width:100%' }, modelo);
   const msgModelo = el('span', { class: 'texto-suave' });
-  const sobVigilancia = porStatus('sob vigilância')
+  const sobVigilancia = porStatus('sob vigilância').filter(c => !faleceu(c))
     .sort((a, b) => String(a.DataCirurgia).localeCompare(String(b.DataCirurgia)));
 
   conteudo.append(el('div', { class: 'cartao' },
@@ -259,7 +304,7 @@ async function montarVigilancia(conteudo) {
   }
 
   /* ---- 4. Mensagem enviada: aguardando resposta ---- */
-  const enviadas = porStatus('mensagem enviada')
+  const enviadas = porStatus('mensagem enviada').filter(c => !faleceu(c))
     .sort((a, b) => String(a.MensagemEnviadaEm).localeCompare(String(b.MensagemEnviadaEm)));
 
   function cartaoInvestigacao(c, tr) {
@@ -382,11 +427,12 @@ async function montarVigilancia(conteudo) {
   const confirmadas = porStatus('infecção confirmada');
   const semContato = porStatus('encerrada sem contato');
   const dispensadas = porStatus('dispensada');
+  const porObito = porStatus('encerrada — óbito');
 
   conteudo.append(el('div', { class: 'grade-cartoes' },
     [[sobVigilancia.length, 'sob vigilância'], [enviadas.length, 'mensagens aguardando resposta'],
      [semInfeccao.length, 'sem infecção'], [confirmadas.length, 'infecções confirmadas'],
-     [semContato.length, 'encerradas sem contato']].map(([n, r]) =>
+     [semContato.length, 'encerradas sem contato'], [porObito.length, 'encerradas por óbito']].map(([n, r]) =>
       el('div', { class: 'cartao cartao-numero' },
         el('div', { class: 'numero-grande' }, fmtInt(n)), el('div', { class: 'texto-suave' }, r)))));
 
@@ -401,7 +447,20 @@ async function montarVigilancia(conteudo) {
         el('td', { class: 'texto-suave' }, c.ValidadoPor || c.InvestigadoPor || c.VigilanciaPor || ''),
         el('td', {}, botaoReverter(c, statusVolta)))))));
 
-  if (semInfeccao.length || confirmadas.length || semContato.length || dispensadas.length) {
+  const blocoObitos = () => el('details', {},
+    el('summary', {}, `Encerradas por óbito (${fmtInt(porObito.length)})`),
+    el('p', { class: 'texto-suave' },
+      'Encerramento automático: o paciente tem óbito registrado após a cirurgia. Não há botão de reverter — '
+      + 'se o óbito estiver errado, corrija o registro do paciente e a vigilância reabre pela triagem.'),
+    el('table', { class: 'tabela' },
+      el('thead', {}, el('tr', {}, ['Cirurgia', 'Paciente', 'Procedimento', 'Óbito em'].map(t => el('th', {}, t)))),
+      el('tbody', {}, porObito.slice(0, 200).map(c => el('tr', {},
+        el('td', {}, c.DataCirurgia),
+        el('td', { class: 'linha-clicavel', onclick: () => abrirPaciente(c.Prontuario) }, nomeDe(c) || c.Prontuario),
+        el('td', {}, String(c.Procedimento || '').slice(0, 50)),
+        el('td', {}, indiceObitos.get(normalizarProntuario(c.Prontuario)) || 'data não informada'))))));
+
+  if (semInfeccao.length || confirmadas.length || semContato.length || dispensadas.length || porObito.length) {
     conteudo.append(el('div', { class: 'cartao' },
       el('h2', {}, 'Encerradas'),
       blocoEncerradas('Vigilância realizada sem infecção', semInfeccao, 'mensagem enviada'),
@@ -416,7 +475,8 @@ async function montarVigilancia(conteudo) {
             el('td', {}, c.InvestigadoPor), el('td', {}, `${c.ValidadoPor} em ${c.ValidadoEm}`),
             el('td', {}, reverterComIras(c, 'em investigação', 'reabrirIras'))))))),
       blocoEncerradas('Sem contato (janela vencida)', semContato, 'sob vigilância'),
-      blocoEncerradas('Dispensadas na triagem', dispensadas, 'pendente')));
+      blocoEncerradas('Dispensadas na triagem', dispensadas, 'pendente'),
+      porObito.length ? blocoObitos() : null));
   }
 
   if (!triagem.length && !sobVigilancia.length && !enviadas.length && !investigacoes.length

@@ -1757,6 +1757,38 @@ function auditarVocabulario(termos, oficiais, frequencias) {
   return sugestoes;
 }
 
+/* Prontuário → data do óbito (a mais antiga registrada), unindo a aba de óbitos e as
+   internações cujo desfecho foi óbito. Óbito registrado sem data entra com data vazia.
+   É a base da exclusão automática na vigilância pós-alta. */
+function indiceDeObitos(bancoPacientes) {
+  const indice = new Map();
+  const anotar = (prontuario, data) => {
+    const chave = normalizarProntuario(prontuario);
+    if (!chave) return;
+    const dia = String(data || '').slice(0, 10);
+    const valida = /^\d{4}-/.test(dia) ? dia : '';
+    const atual = indice.get(chave);
+    if (atual === undefined) { indice.set(chave, valida); return; }
+    if (valida && (!atual || valida < atual)) indice.set(chave, valida);
+  };
+  for (const o of ((bancoPacientes || {}).obitos || [])) anotar(o.Prontuario, o.DataObito);
+  for (const i of ((bancoPacientes || {}).internacoes || [])) {
+    if (i.Obito === 'S' || normalizarTexto(i.Desfecho).includes('obito')) anotar(i.Prontuario, i.DataAlta);
+  }
+  return indice;
+}
+
+/* Morreu depois de operar → a vigilância pós-alta encerra sozinha (não há quem contatar).
+   Óbito com data ANTERIOR à cirurgia é inconsistência de dados, não desfecho — não
+   encerra nada. Óbito sem data conta: morto não recebe mensagem. */
+function faleceuAposCirurgia(cirurgia, indiceObitos) {
+  const chave = normalizarProntuario(cirurgia.Prontuario);
+  if (!indiceObitos.has(chave)) return false;
+  const dataObito = indiceObitos.get(chave);
+  if (!dataObito) return true;
+  return dataObito >= String(cirurgia.DataCirurgia || '').slice(0, 10);
+}
+
 /* Sugestão de equivalência no de-para de termos novos: dicionário de domínio
    (sangue → Hemocultura) + similaridade por palavras (KLEB PNEUMONIAE → Klebsiella pneumoniae). */
 const EQUIVALENCIAS_VOCAB = {
@@ -1862,6 +1894,7 @@ if (typeof module !== 'undefined' && module.exports) {
     normalizarData, normalizarProntuario, normalizarValorAntibiograma,
     sugerirMapeamento, normalizarLinhas, validar, deduplicar, chaveNaturalDe, proximoID,
     analisarPDFCulturas, ehPseudoProntuario, sugerirUnificacoes, sugerirUnificacoesVocabulario, auditarVocabulario, distanciaEdicao,
+    indiceDeObitos, faleceuAposCirurgia,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome,
     enriquecerCirurgia, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
     textoAntibiograma, classificacaoCanonica, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,

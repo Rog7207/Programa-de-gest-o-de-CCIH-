@@ -1665,5 +1665,34 @@ console.log('\n== 48. Perfil microbiológico das IRAS: colunas, Gram, %R com cor
     && ecoli[tabTodas.colunas.indexOf('Sulfa/TMP')].t === '0% (n=1)', JSON.stringify(ecoli));
 }
 
+console.log('\n== 49. Óbito encerra a vigilância pós-alta sozinho ==');
+{
+  const bancoPacientes = {
+    obitos: [
+      { Prontuario: '100', DataObito: '2026-08-20' },
+      { Prontuario: '100', DataObito: '2026-08-25' }, /* duplicado: vale a mais antiga */
+      { Prontuario: '400', DataObito: '' }             /* óbito sem data */
+    ],
+    internacoes: [
+      { Prontuario: '200', DataAlta: '2026-07-10', Desfecho: 'Óbito por causa clínica', Obito: '' },
+      { Prontuario: '300', DataAlta: '2026-07-15', Desfecho: 'Alta melhorada', Obito: '' }
+    ]
+  };
+  const indice = imp.indiceDeObitos(bancoPacientes);
+  verificar('óbito duplicado guarda a data mais antiga', indice.get('100') === '2026-08-20');
+  verificar('desfecho "Óbito" da internação também conta', indice.get('200') === '2026-07-10');
+  verificar('alta melhorada não vira óbito', !indice.has('300'));
+
+  const morreuDepois = { Prontuario: '100', DataCirurgia: '2026-08-01' };
+  const morreuAntes = { Prontuario: '100', DataCirurgia: '2026-08-22' };
+  const vivo = { Prontuario: '300', DataCirurgia: '2026-08-01' };
+  const semData = { Prontuario: '400', DataCirurgia: '2026-08-01' };
+  verificar('óbito depois da cirurgia encerra', imp.faleceuAposCirurgia(morreuDepois, indice) === true);
+  verificar('óbito ANTES da cirurgia é inconsistência, não encerra',
+    imp.faleceuAposCirurgia(morreuAntes, indice) === false);
+  verificar('paciente vivo segue na fila', imp.faleceuAposCirurgia(vivo, indice) === false);
+  verificar('óbito sem data encerra mesmo assim', imp.faleceuAposCirurgia(semData, indice) === true);
+}
+
 console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
 process.exit(falharam ? 1 : 0);

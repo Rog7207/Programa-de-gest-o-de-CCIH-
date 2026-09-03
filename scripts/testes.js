@@ -1200,6 +1200,21 @@ console.log('\n== 41. Vigilância pós-alta ==');
     cl({ Procedimento: 'Colectomia', PotencialContaminacao: 'Contaminada' }).marcar === false);
   verificar('não cirúrgico fica desmarcado com o motivo certo',
     cl({ Procedimento: 'Cateterismo Cardíaco' }).motivo === 'não cirúrgico');
+  /* O mapa NHSN chama CVC/analgesia de "implante de cateter" — não pode virar prótese. */
+  verificar('implante de cateter (NHSN) é não cirúrgico, não prótese',
+    cl({ Procedimento: 'Bloqueios Prolongados De Sistema Nervoso Periférico',
+      ProcedimentoNHSN: 'Implante de cateter para analgesia' }).motivo === 'não cirúrgico');
+  verificar('cateter venoso central por punção é não cirúrgico',
+    cl({ Procedimento: 'Implante De Cateter Venoso Central Por Punção, Para Npp' }).marcar === false
+    && cl({ Procedimento: 'Implante De Cateter Venoso Central Por Punção, Para Npp' }).motivo === 'não cirúrgico');
+  verificar('endoscopia solta é não cirúrgica',
+    cl({ Procedimento: 'Endoscopia Digestiva Alta' }).motivo === 'não cirúrgico');
+  verificar('"endoscópica" como adjetivo NÃO desclassifica a cirurgia',
+    imp.categoriaDeVigilancia({ Procedimento: 'Ureterolitotripsia Endoscópica' }) !== 'nao_cirurgico');
+  verificar('cirurgia POR VIDEOendoscopia continua cirurgia',
+    imp.categoriaDeVigilancia({ Procedimento: 'Septoplastia Por Videoendoscopia' }) !== 'nao_cirurgico');
+  verificar('"Implantação" de cateter também é não cirúrgico (grafia do CC)',
+    cl({ Procedimento: 'Implantação De Cateter De Longa Permanência Semi Ou Totalmente Implantavel' }).motivo === 'não cirúrgico');
   verificar('sem classificação fica desmarcada (decisão manual)',
     cl({ Procedimento: 'Colecistectomia' }).marcar === false);
 
@@ -1454,6 +1469,7 @@ console.log('\n== 47. Relatórios padrão: escopo, período, denominadores hones
 {
   global.culturaDoPainel = imp.culturaDoPainel;
   global.cursosDeAntibiotico = imp.cursosDeAntibiotico;
+  global.categoriaDeVigilancia = imp.categoriaDeVigilancia;
   global.inferirMecanismo = require(path.join(__dirname, '..', 'js', 'alertas.js')).inferirMecanismo;
   const rel = require(path.join(__dirname, '..', 'js', 'relatorios.js'));
   const bancos = {
@@ -1513,7 +1529,10 @@ console.log('\n== 47. Relatórios padrão: escopo, período, denominadores hones
     cirurgias: { cirurgias: [
       { DataCirurgia: '2026-08-03', ProcedimentoNHSN: 'Cesariana', StatusVigilancia: 'sem infecção', ISC: '' },
       { DataCirurgia: '2026-08-04', ProcedimentoNHSN: 'Prótese de quadril', StatusVigilancia: 'infecção confirmada', ISC: 'S', TipoISC: 'Superficial' },
-      { DataCirurgia: '2026-08-05', ProcedimentoNHSN: 'Cesariana', StatusVigilancia: 'mensagem enviada', ISC: '' }
+      { DataCirurgia: '2026-08-05', ProcedimentoNHSN: 'Cesariana', StatusVigilancia: 'mensagem enviada', ISC: '' },
+      /* Cateter mapeado por engano como Apendicectomia no NHSN: fora da conta inteira. */
+      { DataCirurgia: '2026-08-06', Procedimento: 'Implantação De Cateter De Longa Permanência',
+        ProcedimentoNHSN: 'Apendicectomia', StatusVigilancia: 'pendente', ISC: '' }
     ] }
   };
 
@@ -1570,6 +1589,20 @@ console.log('\n== 47. Relatórios padrão: escopo, período, denominadores hones
   const pItens = Object.fromEntries(pos.secoes[0].itens);
   verificar('Pós-alta: taxa de ISC só entre desfechos conhecidos',
     pItens['Taxa de ISC (entre desfechos conhecidos)'] === '50%', JSON.stringify(pItens));
+  const desempenho = Object.fromEntries(pos.secoes.find(s => s.titulo === 'Desempenho da vigilância').itens);
+  verificar('Pós-alta: sucesso do contato = respostas / buscas concluídas',
+    String(desempenho['Sucesso do contato']).startsWith('100% (2 de 2'), JSON.stringify(desempenho));
+  const porTipoCir = pos.secoes.find(s => s.titulo === 'Por tipo de cirurgia');
+  const cesariana = porTipoCir.linhas.find(l => l[0] === 'Cesariana');
+  const totalTipos = porTipoCir.linhas.find(l => l[0] === 'TOTAL');
+  verificar('Pós-alta por tipo: cesariana 2 cirurgias, 2 vigiadas, 1 resposta, 0 ISC, taxa 0%',
+    JSON.stringify(cesariana) === JSON.stringify(['Cesariana', 2, 2, 1, 1, 0, '0%']), JSON.stringify(cesariana));
+  verificar('Pós-alta por tipo: linha TOTAL fecha a conta e a taxa geral',
+    totalTipos[1] === 3 && totalTipos[6] === '50%', JSON.stringify(totalTipos));
+  verificar('Pós-alta: cateter mapeado como Apendicectomia fica fora da conta, declarado',
+    pItens['Cirurgias no período'] === 3
+    && pItens['Procedimentos não cirúrgicos (fora da conta)'] === 1
+    && !porTipoCir.linhas.some(l => l[0] === 'Apendicectomia'), JSON.stringify(pItens));
 
   const exec = rel.relatorioResumoExecutivo(bancos, null, '2026-08-01', '2026-08-31');
   verificar('Resumo executivo: uma seção por relatório', exec.secoes.length === 7);

@@ -12,11 +12,18 @@ const VAZIOS_ANTIBIOGRAMA = ['', '-', '--', 'nt', 'naotestado', 'na', 'nr'];
 const NAO_CIRURGIA = '__NAO_CIRURGIA__';
 const NAO_CULTURA = '__NAO_CULTURA__';
 const PALAVRAS_NAO_CIRURGIA = ['partonormal', 'partovaginal', 'cateterismo', 'colonoscopia',
-  'endoscopiadigestiva', 'gastroduodenoscopia', 'broncoscopia', 'retossigmoidoscopia', 'curativo'];
+  'gastroduodenoscopia', 'broncoscopia', 'retossigmoidoscopia', 'curativo',
+  /* Procedimentos de beira-leito/anestesia que o mapa NHSN chama de "implante de cateter"
+     e por isso caíam no regex de prótese — sem ferida operatória, sem busca fonada. */
+  'implantedecateter', 'implantacaodecateter', 'catetervenoso', 'cateterdelonga',
+  'cateterparahemodialise', 'cateterparaanalgesia', 'bloqueiosprolongados', 'bloqueioprolongado'];
 
 function pareceNaoCirurgia(procedimento) {
   const n = normalizarTexto(procedimento);
-  return PALAVRAS_NAO_CIRURGIA.some(palavra => n.includes(palavra));
+  if (PALAVRAS_NAO_CIRURGIA.some(palavra => n.includes(palavra))) return true;
+  /* "Endoscopia" solta é exame; "Septoplastia Por VIDEOendoscopia" é cirurgia de verdade.
+     O adjetivo ("...endoscópica") não contém a palavra e passa direto. */
+  return /(?<!video)endoscopia/.test(n);
 }
 
 function normalizarData(valor) {

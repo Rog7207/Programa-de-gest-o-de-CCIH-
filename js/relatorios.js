@@ -291,25 +291,76 @@ function relatorioSepse(bancos, setoresEscopo, inicio, fim) {
 
 /* ---- 7. ISC e vigilância pós-alta ---- */
 function relatorioPosAlta(bancos, setoresEscopo, inicio, fim) {
-  const cirurgias = ((bancos.cirurgias || {}).cirurgias || [])
+  const doPeriodo = ((bancos.cirurgias || {}).cirurgias || [])
     .filter(c => relPeriodo(c.DataCirurgia, inicio, fim));
+  /* Cateter, bloqueio anestésico, endoscopia diagnóstica: passam pelo centro cirúrgico,
+     mas não são cirurgia — fora da conta e da taxa (o total exclui-os declaradamente). */
+  const naoCirurgicos = doPeriodo.filter(c => categoriaDeVigilancia(c) === 'nao_cirurgico');
+  const cirurgias = doPeriodo.filter(c => categoriaDeVigilancia(c) !== 'nao_cirurgico');
+  const st = c => String(c.StatusVigilancia || 'pendente');
+  /* Resposta = alguém do outro lado atendeu e houve desfecho clínico. */
+  const RESPOSTAS_VIGILANCIA = ['sem infecção', 'em investigação', 'infecção confirmada'];
+  const ENTROU_NA_VIGILANCIA = RESPOSTAS_VIGILANCIA
+    .concat(['sob vigilância', 'mensagem enviada', 'encerrada sem contato', 'encerrada — óbito']);
   const isc = cirurgias.filter(c => c.ISC === 'S');
   const semInfeccao = cirurgias.filter(c => normalizarTexto(c.StatusVigilancia) === 'seminfeccao');
   const comDesfecho = semInfeccao.length + isc.length;
 
+  /* Contagem por tipo de cirurgia — o que a enfermeira contava à mão. */
+  const porTipo = new Map();
+  for (const c of cirurgias) {
+    const tipo = String(c.ProcedimentoNHSN || c.Procedimento || '').trim() || '(sem tipo)';
+    if (!porTipo.has(tipo)) porTipo.set(tipo, []);
+    porTipo.get(tipo).push(c);
+  }
+  const linhaTipo = (rotulo, lista) => {
+    const vigiadas = lista.filter(c => ENTROU_NA_VIGILANCIA.includes(st(c)));
+    const respostas = lista.filter(c => RESPOSTAS_VIGILANCIA.includes(st(c)));
+    const semInf = lista.filter(c => normalizarTexto(c.StatusVigilancia) === 'seminfeccao').length;
+    const comIsc = lista.filter(c => c.ISC === 'S').length;
+    return [rotulo, lista.length, vigiadas.length, respostas.length, semInf, comIsc,
+      relPct(comIsc, semInf + comIsc)];
+  };
+  let linhasTipo = [...porTipo.entries()].sort((a, b) => b[1].length - a[1].length)
+    .map(([tipo, lista]) => linhaTipo(tipo, lista));
+  if (linhasTipo.length > 30) {
+    const resto = [...porTipo.entries()].sort((a, b) => b[1].length - a[1].length).slice(30)
+      .flatMap(([, lista]) => lista);
+    linhasTipo = linhasTipo.slice(0, 30).concat([linhaTipo(`Outros (${linhasTipo.length - 30} tipos)`, resto)]);
+  }
+  if (porTipo.size > 1) linhasTipo.push(linhaTipo('TOTAL', cirurgias));
+
+  /* Desempenho da operação de vigilância: quantas buscas deram certo. */
+  const respostas = cirurgias.filter(c => RESPOSTAS_VIGILANCIA.includes(st(c)));
+  const semContato = cirurgias.filter(c => st(c) === 'encerrada sem contato');
+  const contatosTentados = respostas.length + semContato.length;
+
   const secoes = [
     { titulo: 'Panorama', tipo: 'numeros', itens: [
       ['Cirurgias no período', cirurgias.length],
+      ['Procedimentos não cirúrgicos (fora da conta)', naoCirurgicos.length],
       ['Com desfecho conhecido', comDesfecho],
       ['ISC identificadas', isc.length],
       ['Taxa de ISC (entre desfechos conhecidos)', relPct(isc.length, comDesfecho)]
     ] },
+    { titulo: 'Desempenho da vigilância', tipo: 'numeros', itens: [
+      ['Entraram na vigilância', cirurgias.filter(c => ENTROU_NA_VIGILANCIA.includes(st(c))).length],
+      ['Aguardando contato (sob vigilância)', cirurgias.filter(c => st(c) === 'sob vigilância').length],
+      ['Mensagens aguardando resposta', cirurgias.filter(c => st(c) === 'mensagem enviada').length],
+      ['Respostas obtidas', respostas.length],
+      ['Sucesso do contato', `${relPct(respostas.length, contatosTentados)} (${respostas.length} de ${contatosTentados} buscas concluídas)`],
+      ['Encerradas sem contato', semContato.length],
+      ['Encerradas por óbito', cirurgias.filter(c => st(c) === 'encerrada — óbito').length],
+      ['Dispensadas na triagem', cirurgias.filter(c => st(c) === 'dispensada').length],
+      ['Ainda pendentes de triagem', cirurgias.filter(c => st(c) === 'pendente').length]
+    ] },
+    { titulo: 'Por tipo de cirurgia', tipo: 'tabela',
+      colunas: ['Tipo de cirurgia', 'Cirurgias', 'Vigiadas', 'Respostas', 'Sem infecção', 'ISC', 'Taxa ISC'],
+      linhas: linhasTipo },
     { titulo: 'Situação da vigilância', tipo: 'tabela', colunas: ['Situação', 'Cirurgias'],
       linhas: relContar(cirurgias, c => c.StatusVigilancia || 'pendente') },
     { titulo: 'ISC por tipo', tipo: 'tabela', colunas: ['Tipo de ISC', 'Casos'],
-      linhas: relContar(isc, c => c.TipoISC) },
-    { titulo: 'ISC por procedimento', tipo: 'tabela', colunas: ['Procedimento', 'ISC'],
-      linhas: relContar(isc, c => c.ProcedimentoNHSN || c.Procedimento).slice(0, 10) }
+      linhas: relContar(isc, c => c.TipoISC) }
   ];
   if (setoresEscopo && setoresEscopo.length) {
     secoes.push({ titulo: 'Nota', tipo: 'texto',
@@ -317,6 +368,7 @@ function relatorioPosAlta(bancos, setoresEscopo, inicio, fim) {
   }
   return { titulo: 'ISC e vigilância pós-alta', secoes,
     resumo: [['Cirurgias', cirurgias.length], ['ISC', isc.length],
+      ['Sucesso do contato pós-alta', relPct(respostas.length, contatosTentados)],
       ['Taxa de ISC', relPct(isc.length, comDesfecho)]] };
 }
 

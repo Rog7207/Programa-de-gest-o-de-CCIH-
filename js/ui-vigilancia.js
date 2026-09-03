@@ -111,7 +111,25 @@ async function montarVigilancia(conteudo) {
     return dias !== null && dias > JANELA_VIGILANCIA.fimDias;
   };
 
-  const porStatus = status => banco.cirurgias.filter(c => c.StatusVigilancia === status);
+  /* ---- Filtro de período: mês da cirurgia ----
+     Vale para todas as listas da tela. A escolha vive na sessão (app.filtroMesVigilancia)
+     para sobreviver aos recarregamentos que cada ação da tela dispara. */
+  const mesesDisponiveis = [...new Set(banco.cirurgias
+    .map(c => String(c.DataCirurgia).slice(0, 7)).filter(m => /^\d{4}-\d{2}$/.test(m)))]
+    .sort().reverse();
+  const mesFiltro = mesesDisponiveis.includes(app.filtroMesVigilancia) ? app.filtroMesVigilancia : '';
+  const doMes = c => !mesFiltro || String(c.DataCirurgia).slice(0, 7) === mesFiltro;
+  const mesBR = m => m.split('-').reverse().join('/');
+  const selMes = el('select', { onchange: ev => { app.filtroMesVigilancia = ev.target.value; recarregar(); } },
+    el('option', { value: '' }, 'todos os meses'),
+    mesesDisponiveis.map(m => el('option', { value: m, selected: m === mesFiltro ? '' : null }, mesBR(m))));
+  conteudo.append(el('div', { class: 'cartao' },
+    el('div', { class: 'linha-campos' },
+      el('label', {}, 'Mês da cirurgia: ', selMes),
+      el('span', { class: 'texto-suave' },
+        mesFiltro ? `mostrando só cirurgias de ${mesBR(mesFiltro)} em todas as listas` : 'todas as listas, sem filtro'))));
+
+  const porStatus = status => banco.cirurgias.filter(c => c.StatusVigilancia === status && doMes(c));
   const recarregar = () => navegar('vigilancia', { historico: 'substituir' });
 
   const categoriasVigiadas = config.rotina.vigilanciaCategorias;

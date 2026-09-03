@@ -205,9 +205,17 @@ function pendenciasIsolamento(culturas, sensibilidade, precaucoes, decisoes, hoj
     }));
 }
 
+/* Isolamentos de um dia que precisam ser digitados no sistema do hospital. Só os
+   registrados NO APP (ID PRC-, nascidos na revisão de culturas): os importados da lista
+   do hospital (PRE-) vieram DE lá — já estão notificados por definição. */
+function isolamentosParaNotificar(precaucoes, dia) {
+  return (precaucoes || []).filter(p => String(p.ID_Precaucao || '').startsWith('PRC-')
+    && String(p.DataInicio).slice(0, 10) === dia);
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { detectarSurtos, detectarMultirresistentes, inferirMecanismo, pendenciasIsolamento,
-    mesmaSuspeita, correlacionarSurto, resumoParaVisitaUTI, ehSetorDeUTI, iniciaisDe };
+    mesmaSuspeita, correlacionarSurto, resumoParaVisitaUTI, ehSetorDeUTI, iniciaisDe, isolamentosParaNotificar };
 }
 
 /* ---- Resumo para a visita técnica da UTI ----

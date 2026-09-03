@@ -1435,5 +1435,20 @@ console.log('\n== 45. Auditoria de vocabulário: pares quase iguais, sem falsos 
     new Set(s5.map(p => p.de)).size === s5.length, JSON.stringify(s5));
 }
 
+console.log('\n== 46. Lista de notificação de isolamentos: só os nascidos no app, só os do dia ==');
+{
+  const alertas = require(path.join(__dirname, '..', 'js', 'alertas.js'));
+  const precaucoes = [
+    { ID_Precaucao: 'PRC-000001', Prontuario: '100', DataInicio: '2026-09-02', TipoPrecaucao: 'Contato' },
+    { ID_Precaucao: 'PRC-000002', Prontuario: '200', DataInicio: '2026-09-01', TipoPrecaucao: 'Contato' },
+    /* Importada da lista do hospital no mesmo dia: já está no sistema de lá. */
+    { ID_Precaucao: 'PRE-000034', Prontuario: '300', DataInicio: '2026-09-02', TipoPrecaucao: 'Aerossóis' }
+  ];
+  const lista = alertas.isolamentosParaNotificar(precaucoes, '2026-09-02');
+  verificar('só o registro do app feito no dia entra',
+    lista.length === 1 && lista[0].ID_Precaucao === 'PRC-000001', JSON.stringify(lista));
+  verificar('sem precauções não quebra', alertas.isolamentosParaNotificar(null, '2026-09-02').length === 0);
+}
+
 console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
 process.exit(falharam ? 1 : 0);

@@ -462,6 +462,72 @@ async function montarIsolamentos(conteudo) {
           el('td', {}, el('button', { class: 'botao-secundario', onclick: () => encerrar(p) }, 'Encerrar'))))))
         : el('p', { class: 'texto-suave' }, 'Nenhuma precaução ativa registrada.')));
 
+  /* ---- Lista imprimível para notificação no sistema do hospital ----
+     O app não conversa com o sistema do hospital: depois da revisão das culturas, a
+     enfermeira leva esta lista em papel e digita os isolamentos lá, marcando a caixa
+     de cada paciente conforme notifica. Nome completo é proposital — a lista circula
+     dentro do hospital, e é pelo nome que se acha o paciente no sistema. */
+  const campoDiaLista = el('input', { type: 'date', value: hojeISO() });
+  const msgLista = el('span', { class: 'texto-suave' });
+  const imprimirListaNotificacao = () => {
+    const dia = campoDiaLista.value;
+    const doDia = isolamentosParaNotificar(banco.precaucoes, dia);
+    if (!doDia.length) {
+      msgLista.textContent = 'Nenhum isolamento registrado no aplicativo nesse dia — os importados da lista do hospital já estão no sistema e ficam de fora.';
+      return;
+    }
+    msgLista.textContent = '';
+    const esc = t => String(t == null ? '' : t)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const dataBR = dia.split('-').reverse().join('/');
+    const linhas = doDia.map(p => '<tr><td class="caixa"><span></span></td>'
+      + `<td>${esc(nomeDe(p.Prontuario) || '(nome não importado)')}</td>`
+      + `<td>${esc(p.Prontuario)}</td>`
+      + `<td>${esc(p.Setor)}${String(p.Leito || '').trim() ? ' · leito ' + esc(p.Leito) : ''}</td>`
+      + `<td>${esc(p.TipoPrecaucao)}</td><td>${esc(p.Motivo)}</td></tr>`).join('');
+    const html = '<!doctype html><html><head><meta charset="utf-8">'
+      + `<title>Notificação de isolamentos — ${dataBR}</title><style>`
+      + 'body{font-family:Arial,sans-serif;margin:24px;color:#000}'
+      + 'h1{font-size:15pt;margin:0 0 2px}'
+      + '.sub{color:#444;margin:0 0 14px;font-size:9.5pt}'
+      + 'table{border-collapse:collapse;width:100%;font-size:10pt}'
+      + 'th,td{border:1px solid #666;padding:6px 8px;text-align:left;vertical-align:middle}'
+      + 'th{background:#eee}'
+      + 'td.caixa{width:34px;text-align:center}'
+      + 'td.caixa span{display:inline-block;width:15px;height:15px;border:2px solid #000}'
+      + '.rodape{margin-top:20px;font-size:10pt}'
+      + '.assinatura{margin-top:40px}'
+      + '.assinatura span{display:inline-block;border-top:1px solid #000;padding-top:4px;min-width:320px}'
+      + '</style></head><body>'
+      + '<h1>CCIH — Isolamentos para notificar no sistema</h1>'
+      + `<p class="sub">Identificados em ${dataBR} · lista gerada em ${agoraCurto()} por ${esc(app.usuario)} · `
+      + 'marque a caixa de cada paciente após digitar a notificação no sistema do hospital</p>'
+      + '<table><thead><tr><th>Notif.</th><th>Paciente</th><th>Registro</th><th>Setor</th><th>Precaução</th><th>Motivo</th></tr></thead>'
+      + `<tbody>${linhas}</tbody></table>`
+      + `<p class="rodape">Total: ${doDia.length} paciente(s).</p>`
+      + '<div class="assinatura"><span>Assinatura de quem notificou</span></div>'
+      + '</body></html>';
+    const janela = window.open('', '_blank');
+    if (!janela) {
+      msgLista.textContent = 'O navegador bloqueou a janela de impressão — libere pop-ups para este aplicativo.';
+      return;
+    }
+    janela.document.write(html);
+    janela.document.close();
+    janela.focus();
+    janela.print();
+  };
+  conteudo.append(el('div', { class: 'cartao' },
+    el('h2', {}, 'Lista para notificação no sistema do hospital'),
+    el('p', { class: 'texto-suave' },
+      'Imprime os isolamentos registrados aqui no dia escolhido — nome, registro e setor, com uma caixa '
+      + 'para marcar no papel conforme cada notificação for digitada no sistema. Os isolamentos importados '
+      + 'da lista do hospital ficam de fora: eles já estão lá.'),
+    el('div', { class: 'linha-campos' },
+      el('label', {}, 'Dia: ', campoDiaLista),
+      el('button', { class: 'botao-primario', onclick: imprimirListaNotificacao }, '🖨 Gerar lista para impressão'),
+      msgLista)));
+
   function mostrarPendencia(m, tr) {
     const selTipo = el('select', {}, ['Contato', 'Gotícula', 'Aerossol', 'Contato + Gotícula'].map(t =>
       el('option', { value: t, selected: t === m.Sugestao ? '' : null }, t)));

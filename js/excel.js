@@ -37,6 +37,15 @@ const pasta = {
 
   suportada() { return typeof window !== 'undefined' && 'showDirectoryPicker' in window; },
 
+  /* A pasta memorizada é POR CÓPIA do aplicativo (caminho do index.html): o navegador
+     compartilha o armazenamento entre TODOS os arquivos locais, então uma segunda cópia
+     na mesma máquina (ex.: pendrive de teste com outro hospital) reconectava sozinha no
+     banco oficial. As "recentes" continuam compartilhadas de propósito — mostram o nome
+     de cada pasta antes de conectar. */
+  chaveDaPasta() {
+    return 'pastaDados:' + (typeof location !== 'undefined' ? location.pathname : '');
+  },
+
   async escolher() {
     this.handle = await window.showDirectoryPicker({ mode: 'readwrite' });
     await this.memorizar(this.handle);
@@ -48,7 +57,7 @@ const pasta = {
      Já aconteceu de conectar sem querer numa pasta de teste vazia e parecer que o banco
      tinha sumido. */
   async memorizar(handle) {
-    await bancoLocal.gravar('pastaDados', handle);
+    await bancoLocal.gravar(this.chaveDaPasta(), handle);
     const recentes = (await bancoLocal.ler('pastasRecentes')) || [];
     const semDuplicata = [];
     for (const h of recentes) {
@@ -62,7 +71,7 @@ const pasta = {
   },
 
   async restaurar() {
-    const salvo = await bancoLocal.ler('pastaDados');
+    const salvo = await bancoLocal.ler(this.chaveDaPasta());
     if (!salvo) return null;
     const permissao = await salvo.queryPermission({ mode: 'readwrite' });
     if (permissao === 'granted') { this.handle = salvo; return salvo; }
@@ -132,8 +141,10 @@ const pasta = {
 /* Pasta de publicação da página de avaliação (ex.: pasta local sincronizada com o Google Drive). */
 const publicacao = {
   handle: null,
+  /* Mesma regra da pasta de dados: memorizada por cópia do aplicativo. */
+  chave() { return 'pastaPublicacao:' + (typeof location !== 'undefined' ? location.pathname : ''); },
   async restaurar() {
-    const salvo = await bancoLocal.ler('pastaPublicacao');
+    const salvo = await bancoLocal.ler(this.chave());
     if (!salvo) return null;
     if (await salvo.queryPermission({ mode: 'readwrite' }) === 'granted') { this.handle = salvo; return this.handle; }
     if (await salvo.requestPermission({ mode: 'readwrite' }) === 'granted') { this.handle = salvo; return this.handle; }
@@ -141,7 +152,7 @@ const publicacao = {
   },
   async escolher() {
     this.handle = await window.showDirectoryPicker({ mode: 'readwrite' });
-    await bancoLocal.gravar('pastaPublicacao', this.handle);
+    await bancoLocal.gravar(this.chave(), this.handle);
     return this.handle;
   },
   async gravar(nome, texto) {

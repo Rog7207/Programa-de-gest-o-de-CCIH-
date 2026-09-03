@@ -215,7 +215,8 @@ function isolamentosParaNotificar(precaucoes, dia) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { detectarSurtos, detectarMultirresistentes, inferirMecanismo, pendenciasIsolamento,
-    mesmaSuspeita, correlacionarSurto, resumoParaVisitaUTI, ehSetorDeUTI, iniciaisDe, isolamentosParaNotificar };
+    mesmaSuspeita, correlacionarSurto, resumoParaVisitaUTI, ehSetorDeUTI, iniciaisDe, isolamentosParaNotificar,
+    GENEROS_GRAM_NEGATIVOS };
 }
 
 /* ---- Resumo para a visita técnica da UTI ----

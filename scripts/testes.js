@@ -1582,5 +1582,88 @@ console.log('\n== 47. Relatórios padrão: escopo, período, denominadores hones
     JSON.stringify(rel.mesAnteriorIntervalo('2026-01-15')) === '["2025-12-01","2025-12-31"]');
 }
 
+console.log('\n== 48. Perfil microbiológico das IRAS: colunas, Gram, %R com cores ==');
+{
+  const alertas = require(path.join(__dirname, '..', 'js', 'alertas.js'));
+  global.GENEROS_GRAM_NEGATIVOS = alertas.GENEROS_GRAM_NEGATIVOS;
+  global.inferirMecanismo = alertas.inferirMecanismo;
+  const rel = require(path.join(__dirname, '..', 'js', 'relatorios.js'));
+
+  verificar('colunas semestrais de 2 anos', rel.colunasDoPerfil(2024, 2025, true).length === 4
+    && rel.colunasDoPerfil(2024, 2025, true)[1].rotulo === '2024 2ºsem');
+  verificar('colunas anuais', rel.colunasDoPerfil(2024, 2025, false).map(c => c.rotulo).join(',') === '2024,2025');
+
+  verificar('Gram: Klebsiella é negativo, S. aureus positivo, Candida é fungo',
+    rel.classificarGram('Klebsiella pneumoniae') === 'Gram-negativos'
+    && rel.classificarGram('Staphylococcus aureus') === 'Gram-positivos'
+    && rel.classificarGram('Candida albicans') === 'fungos');
+
+  verificar('espécie: Klebsiella pneumoniae própria; K. oxytoca própria; gênero solto vira spp',
+    rel.especieEnterobacteria('Klebsiella pneumoniae') === 'Klebsiella pneumoniae'
+    && rel.especieEnterobacteria('Klebsiella oxytoca') === 'Klebsiella oxytoca'
+    && rel.especieEnterobacteria('Klebsiella sp.') === 'Klebsiella spp');
+  verificar('"Enterobactéria (não identificada)" NÃO vira Enterobacter spp',
+    rel.especieEnterobacteria('Enterobactéria resistente aos carbapenêmicos') === 'Enterobactéria (não identificada)');
+  verificar('Pseudomonas não é enterobactéria', rel.especieEnterobacteria('Pseudomonas aeruginosa') === null);
+
+  verificar('cores: 19% verde, 20% laranja, 50% vermelho',
+    rel.corDeResistencia(19) === 'verde' && rel.corDeResistencia(20) === 'laranja' && rel.corDeResistencia(50) === 'vermelho');
+
+  const bancos = {
+    pacientes: { internacoes: [
+      { DataInternacao: '2025-03-01', DataAlta: '2025-03-10' },
+      { DataInternacao: '2025-08-01', DataAlta: '2025-08-05' }
+    ] },
+    iras: { casos: [
+      { DataInfeccao: '2025-02-01', Setor: 'CTI', Topografia: 'PAV', Microrganismo: 'Klebsiella pneumoniae' },
+      { DataInfeccao: '2025-09-01', Setor: 'CC', Topografia: 'ISC', Microrganismo: '' }
+    ] },
+    culturas: { culturas: [
+      { ID_Cultura: 'C1', DataColeta: '2025-02-01', Setor: 'CTI', Microrganismo: 'Klebsiella pneumoniae',
+        MecanismoResistencia: '', AvaliacaoCCIH: 'IRAS' },
+      { ID_Cultura: 'C2', DataColeta: '2025-09-05', Setor: 'CC', Microrganismo: 'Staphylococcus aureus',
+        MecanismoResistencia: '', AvaliacaoCCIH: 'IRAS — ISC' },
+      /* Colonização: fora das IRAS, mas dentro de "todos os isolados". */
+      { ID_Cultura: 'C3', DataColeta: '2025-03-10', Setor: 'CTI', Microrganismo: 'Escherichia coli',
+        MecanismoResistencia: '', AvaliacaoCCIH: 'Colonização' }
+    ], sensibilidade: [
+      { ID_Cultura: 'C1', Antibiotico: 'Meropenem', Resultado: 'R' },
+      { ID_Cultura: 'C1', Antibiotico: 'Ceftriaxona', Resultado: 'R' },
+      { ID_Cultura: 'C2', Antibiotico: 'Oxacilina', Resultado: 'R' },
+      { ID_Cultura: 'C3', Antibiotico: 'Sulfametoxazol + Trimetoprima', Resultado: 'S' },
+      { ID_Cultura: 'C3', Antibiotico: 'Meropenem', Resultado: 'S' }
+    ] }
+  };
+  const p = rel.perfilMicrobiologico(bancos, 2025, 2025, true);
+  verificar('título traz o período', p.titulo.includes('2025'));
+  const panorama = p.secoes.find(s => s.titulo.startsWith('2.'));
+  const linhaTotal = panorama.linhas.find(l => l[0] === 'TOTAL');
+  verificar('panorama: 1 IRAS por semestre', linhaTotal[1] === 1 && linhaTotal[2] === 1 && linhaTotal[3] === 2,
+    JSON.stringify(panorama.linhas));
+  verificar('panorama: IRAS por 100 internações calculada',
+    panorama.linhas.some(l => l[0] === 'IRAS por 100 internações' && l[3] === '100.00'), JSON.stringify(panorama.linhas));
+  const positividade = p.secoes.find(s => s.titulo === 'Positividade microbiológica');
+  verificar('positividade: 1 de 2 com agente', positividade.corpo.includes('1 de 2') && positividade.corpo.includes('50%'));
+  const gram = p.secoes.find(s => s.titulo === 'Distribuição por Gram');
+  verificar('Gram calculado só nas culturas de IRAS',
+    gram.corpo.includes('1 Gram-negativos') && gram.corpo.includes('1 Gram-positivos'), gram.corpo);
+  const mdr = p.secoes.find(s => s.titulo.startsWith('5.'));
+  verificar('MDR: mecanismo inferido do antibiograma, critério do sufixo da classificação',
+    mdr.linhas.length === 2 && mdr.linhas[0][4] === 'Resistente a carbapenêmicos'
+    && mdr.linhas.some(l => l[2] === 'ISC') && mdr.linhas.some(l => l[2] === 'IRAS'), JSON.stringify(mdr.linhas));
+  const tabIRAS = p.secoes.find(s => s.titulo.startsWith('6.'));
+  const kp = tabIRAS.linhas.find(l => l[0] === 'Klebsiella pneumoniae');
+  const colMero = tabIRAS.colunas.indexOf('Meropenem');
+  verificar('%R nas IRAS: K. pneumoniae 100% meropenem, vermelho',
+    kp[colMero].t === '100% (n=1)' && kp[colMero].cor === 'vermelho', JSON.stringify(kp));
+  verificar('%R nas IRAS: E. coli (colonização) fica FORA da tabela de IRAS',
+    !tabIRAS.linhas.some(l => l[0] === 'Escherichia coli'));
+  const tabTodas = p.secoes.find(s => s.titulo.startsWith('7.'));
+  const ecoli = tabTodas.linhas.find(l => l[0] === 'Escherichia coli');
+  verificar('%R em todos os isolados: E. coli entra, 0% meropenem, verde, grafia com + casa',
+    ecoli && ecoli[colMero].t === '0% (n=1)' && ecoli[colMero].cor === 'verde'
+    && ecoli[tabTodas.colunas.indexOf('Sulfa/TMP')].t === '0% (n=1)', JSON.stringify(ecoli));
+}
+
 console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
 process.exit(falharam ? 1 : 0);

@@ -185,8 +185,14 @@ async function montarRelatoriosPadrao(conteudo) {
     msg, area));
 }
 
+/* Célula pode ser valor simples ou { t, cor } (tabelas de %R do perfil microbiológico). */
+const CORES_RELATORIO = { verde: '#e3f2e3', laranja: '#ffe9cc', vermelho: '#ffd9d9' };
+
 function desenharRelatorioPadrao(dados, subtitulo) {
   const blocos = [el('h2', {}, dados.titulo), el('p', { class: 'texto-suave' }, subtitulo)];
+  const celula = v => (v && typeof v === 'object')
+    ? el('td', { style: 'background:' + (CORES_RELATORIO[v.cor] || 'transparent') }, String(v.t))
+    : el('td', {}, String(v));
   for (const secao of dados.secoes) {
     blocos.push(el('h3', {}, secao.titulo));
     if (secao.tipo === 'numeros') {
@@ -196,8 +202,7 @@ function desenharRelatorioPadrao(dados, subtitulo) {
     } else if (secao.tipo === 'tabela') {
       blocos.push(secao.linhas.length ? el('table', { class: 'tabela' },
         el('thead', {}, el('tr', {}, secao.colunas.map(c => el('th', {}, c)))),
-        el('tbody', {}, secao.linhas.map(linha => el('tr', {},
-          linha.map(v => el('td', {}, String(v)))))))
+        el('tbody', {}, secao.linhas.map(linha => el('tr', {}, linha.map(celula)))))
         : el('p', { class: 'texto-suave' }, 'Sem dados no período.'));
     } else {
       blocos.push(el('p', { class: 'texto-suave' }, secao.corpo));
@@ -216,9 +221,12 @@ function imprimirRelatorioPadrao(gerado, msg) {
       corpo = '<table><tbody>' + secao.itens.map(([r, v]) =>
         `<tr><td>${esc(r)}</td><td><b>${esc(v)}</b></td></tr>`).join('') + '</tbody></table>';
     } else if (secao.tipo === 'tabela') {
+      const td = v => (v && typeof v === 'object')
+        ? `<td style="background:${CORES_RELATORIO[v.cor] || 'transparent'}">${esc(v.t)}</td>`
+        : `<td>${esc(v)}</td>`;
       corpo = secao.linhas.length
         ? '<table><thead><tr>' + secao.colunas.map(c => `<th>${esc(c)}</th>`).join('') + '</tr></thead><tbody>'
-          + secao.linhas.map(l => '<tr>' + l.map(v => `<td>${esc(v)}</td>`).join('') + '</tr>').join('')
+          + secao.linhas.map(l => '<tr>' + l.map(td).join('') + '</tr>').join('')
           + '</tbody></table>'
         : '<p class="suave">Sem dados no período.</p>';
     } else {
@@ -228,7 +236,7 @@ function imprimirRelatorioPadrao(gerado, msg) {
   }).join('');
   const html = '<!doctype html><html><head><meta charset="utf-8">'
     + `<title>${esc(gerado.dados.titulo)}</title><style>`
-    + 'body{font-family:Arial,sans-serif;margin:24px;color:#000}'
+    + 'body{font-family:Arial,sans-serif;margin:24px;color:#000;print-color-adjust:exact;-webkit-print-color-adjust:exact}'
     + 'h1{font-size:15pt;margin:0 0 2px}'
     + 'h2{font-size:11.5pt;margin:16px 0 6px;border-bottom:1px solid #999;padding-bottom:2px}'
     + '.sub{color:#444;margin:0 0 8px;font-size:9.5pt}'
@@ -249,6 +257,81 @@ function imprimirRelatorioPadrao(gerado, msg) {
   janela.document.close();
   janela.focus();
   janela.print();
+}
+
+/* ---- Aba "Perfil micro": o relatório microbiológico detalhado das IRAS, anual ou
+   semestral, no molde do consolidado entregue à direção. As conclusões são escritas
+   pela CCIH (caixa de texto, guardada por período) e entram na impressão. ---- */
+async function montarPerfilMicro(conteudo) {
+  conteudo.append(el('h1', {}, 'Perfil microbiológico das IRAS'));
+  let bancos;
+  try {
+    const [bCulturas, bIras, bPacientes] = await Promise.all([
+      lerBanco('culturas'), lerBanco('iras'), lerBanco('pacientes')]);
+    bancos = { culturas: bCulturas, iras: bIras, pacientes: bPacientes };
+  } catch (e) { conteudo.append(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message)); return; }
+
+  const anosComDado = [...new Set((bancos.culturas.culturas || [])
+    .map(c => String(c.DataColeta).slice(0, 4)).filter(a => /^\d{4}$/.test(a)))].sort();
+  const anoAtual = Number(hojeISO().slice(0, 4));
+  const opcoesAno = anosComDado.length ? anosComDado : [String(anoAtual)];
+  const selAno = valorPadrao => el('select', {}, opcoesAno.map(a =>
+    el('option', { value: a, selected: a === String(valorPadrao) ? '' : null }, a)));
+  const selInicial = selAno(Math.max(Number(opcoesAno[0]), anoAtual - 1));
+  const selFinal = selAno(anoAtual);
+  const selGranularidade = el('select', {},
+    el('option', { value: 'semestre' }, 'colunas por semestre'),
+    el('option', { value: 'ano' }, 'colunas por ano'));
+  const area = el('div', {});
+  const msg = el('p', { class: 'aviso-erro-texto' });
+  const campoConclusoes = el('textarea', { rows: 5, style: 'width:100%',
+    placeholder: 'Conclusões da CCIH — escreva aqui; o texto entra na impressão e fica guardado por período.' });
+  let ultimoGerado = null;
+
+  const chaveConclusoes = () => `ccih.perfil.conclusoes.${selInicial.value}-${selFinal.value}`;
+  campoConclusoes.addEventListener('input', () => localStorage.setItem(chaveConclusoes(), campoConclusoes.value));
+
+  const gerar = () => {
+    msg.textContent = '';
+    try {
+      const anoA = Number(selInicial.value), anoB = Number(selFinal.value);
+      if (anoB < anoA) { msg.textContent = 'O ano final vem antes do inicial.'; return; }
+      const porSemestre = selGranularidade.value === 'semestre';
+      if (porSemestre && anoB - anoA + 1 > 4) {
+        msg.textContent = 'Por semestre, o máximo é 4 anos (8 colunas) — use colunas por ano.';
+        return;
+      }
+      const dados = perfilMicrobiologico(bancos, anoA, anoB, porSemestre);
+      ultimoGerado = { dados, subtitulo: `Hospital inteiro · gerado do banco da CCIH` };
+      campoConclusoes.value = localStorage.getItem(chaveConclusoes()) || '';
+      area.replaceChildren(desenharRelatorioPadrao(dados, ultimoGerado.subtitulo));
+      botaoImprimir.disabled = false;
+    } catch (e) { msg.textContent = e.message; }
+  };
+
+  const botaoImprimir = el('button', { class: 'botao-secundario', disabled: '', onclick: () => {
+    if (!ultimoGerado) return;
+    const secoes = ultimoGerado.dados.secoes.slice();
+    if (campoConclusoes.value.trim()) {
+      secoes.push({ titulo: 'Conclusões', tipo: 'texto', corpo: campoConclusoes.value.trim() });
+    }
+    imprimirRelatorioPadrao({ dados: { ...ultimoGerado.dados, secoes }, subtitulo: ultimoGerado.subtitulo }, msg);
+  } }, '🖨 Imprimir');
+
+  conteudo.append(el('div', { class: 'cartao' },
+    el('h2', {}, 'Gerar o consolidado'),
+    el('p', { class: 'texto-suave' },
+      'Panorama das IRAS por setor, agentes isolados, agentes por sítio, cepas multirresistentes e o perfil '
+      + 'de resistência das enterobactérias (%R por espécie × antibiótico, nas IRAS e em todos os isolados). '
+      + 'Anual ou semestral — escolha o intervalo de anos e a granularidade das colunas.'),
+    el('div', { class: 'linha-campos' },
+      el('label', {}, 'de ', selInicial), el('label', {}, 'até ', selFinal), selGranularidade,
+      el('button', { class: 'botao-primario', onclick: gerar }, 'Gerar'),
+      botaoImprimir),
+    msg,
+    el('h3', {}, 'Conclusões da CCIH'),
+    campoConclusoes,
+    area));
 }
 
 async function montarRelatorioMicro(conteudo) {

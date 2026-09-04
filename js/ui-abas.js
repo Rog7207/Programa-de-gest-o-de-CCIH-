@@ -658,6 +658,40 @@ async function montarCirurgias(conteudo) {
   conteudo.append(el('div', { class: 'grade-cartoes' }, ...resumo.map(([r, n]) =>
     el('div', { class: 'cartao cartao-numero' }, el('div', { class: 'numero-grande' }, fmtInt(n)), el('div', { class: 'texto-suave' }, r)))));
 
+  /* ---- Busca de paciente em TODAS as cirurgias (as listas abaixo só trazem recortes) ---- */
+  const campoBusca = el('input', { type: 'search', placeholder: 'nome ou prontuário do paciente…', style: 'min-width:280px' });
+  const areaBusca = el('div', {});
+  const buscar = () => {
+    const bruto = campoBusca.value.trim();
+    const termo = normalizarTexto(bruto);
+    if (termo.length < 3) {
+      areaBusca.replaceChildren(bruto ? el('p', { class: 'texto-suave' }, 'Digite ao menos 3 caracteres.') : el('span', {}));
+      return;
+    }
+    const achadas = banco.cirurgias.filter(c => {
+      const p = pacientes.get(normalizarProntuario(c.Prontuario)) || {};
+      return normalizarTexto(p.Nome).includes(termo) || String(c.Prontuario).trim().includes(bruto);
+    }).sort((a, b) => String(b.DataCirurgia).localeCompare(String(a.DataCirurgia)));
+    areaBusca.replaceChildren(achadas.length
+      ? el('table', { class: 'tabela' },
+          el('thead', {}, el('tr', {}, ['Cirurgia', 'Prontuário', 'Paciente', 'Procedimento', 'Situação', 'ISC'].map(t => el('th', {}, t)))),
+          el('tbody', {}, achadas.slice(0, 50).map(c => {
+            const p = pacientes.get(normalizarProntuario(c.Prontuario)) || {};
+            return el('tr', { class: 'linha-clicavel', title: 'Abrir a ficha do paciente', onclick: () => abrirPaciente(c.Prontuario) },
+              [c.DataCirurgia, c.Prontuario, p.Nome || '', String(c.ProcedimentoNHSN || c.Procedimento || '').slice(0, 45),
+               c.StatusVigilancia || 'pendente', c.ISC === 'S' ? 'sim' : '']
+                .map(v => el('td', {}, String(v || ''))));
+          })))
+      : el('p', { class: 'texto-suave' }, 'Nenhuma cirurgia encontrada para esse paciente.'));
+    if (achadas.length > 50) areaBusca.append(el('p', { class: 'texto-suave' }, `Mostrando 50 de ${fmtInt(achadas.length)} — refine a busca.`));
+  };
+  campoBusca.addEventListener('input', aoPararDeDigitar(buscar));
+  conteudo.append(el('div', { class: 'cartao' },
+    el('h2', {}, 'Buscar paciente'),
+    el('div', { class: 'linha-campos' }, campoBusca,
+      el('span', { class: 'texto-suave' }, 'procura em todas as cirurgias, qualquer situação — clique para abrir a ficha')),
+    areaBusca));
+
   conteudo.append(el('div', { class: 'cartao' },
     el('h2', {}, 'Pendentes de contato'),
     pendentes.length ? el('table', { class: 'tabela' },
@@ -693,7 +727,11 @@ async function montarCirurgias(conteudo) {
             await comTrava(['cirurgias'], async () => {
               const bancoAtual = await lerBanco('cirurgias');
               const alvo = bancoAtual.cirurgias.find(x => x.ID_Cirurgia === c.ID_Cirurgia);
-              if (alvo) { alvo.StatusVigilancia = 'descartada'; alvo.ObservacoesVigilancia = 'Não é cirurgia — descartada da vigilância'; }
+              if (alvo) {
+                alvo.StatusVigilancia = 'descartada';
+                alvo.ObservacoesVigilancia = acrescentarObservacao(alvo.ObservacoesVigilancia,
+                  '', 'Não é cirurgia — descartada da vigilância', app.usuario, agoraCurto());
+              }
               await gravarBanco('cirurgias', bancoAtual);
             });
             navegar('cirurgias');
@@ -709,8 +747,10 @@ async function montarCirurgias(conteudo) {
           const alvo = bancoAtual.cirurgias.find(x => x.ID_Cirurgia === c.ID_Cirurgia);
           if (!alvo) throw new Error('Cirurgia não encontrada no banco.');
           alvo.UltimoContato = campoData.value;
-          const nota = `${campoData.value}: ${selResultado.value}${campoObs.value ? ' — ' + campoObs.value : ''}`;
-          alvo.ObservacoesVigilancia = alvo.ObservacoesVigilancia ? alvo.ObservacoesVigilancia + ' | ' + nota : nota;
+          alvo.ObservacoesVigilancia = acrescentarObservacao(alvo.ObservacoesVigilancia,
+            `Contato de ${campoData.value}`,
+            `${selResultado.value}${campoObs.value ? ' — ' + campoObs.value : ''}`,
+            app.usuario, agoraCurto());
           if (isISC) {
             alvo.ISC = 'S'; alvo.TipoISC = selTipo.value; alvo.StatusVigilancia = 'encerrada (ISC)';
           } else if (encerrar) {

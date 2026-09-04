@@ -1725,6 +1725,20 @@ console.log('\n== 49. Óbito encerra a vigilância pós-alta sozinho ==');
     imp.faleceuAposCirurgia(morreuAntes, indice) === false);
   verificar('paciente vivo segue na fila', imp.faleceuAposCirurgia(vivo, indice) === false);
   verificar('óbito sem data encerra mesmo assim', imp.faleceuAposCirurgia(semData, indice) === true);
+
+  /* Diário de observações: registros se acumulam, nada se sobrescreve. */
+  let diario = imp.acrescentarObservacao('', 'Relato do paciente', 'Ferida seca, sem febre.', 'Enf. Maria', '2026-09-04 10:00');
+  diario = imp.acrescentarObservacao(diario, 'Avaliação', 'Sem sinais de ISC.', 'Enf. Maria', '2026-09-04 10:01');
+  diario = imp.acrescentarObservacao(diario, '', 'Paciente ligou de volta relatando hiperemia.', 'Rogério', '2026-09-06 08:30');
+  verificar('cada registro entra datado e assinado, em linha própria',
+    diario.split('\n').length === 3
+    && diario.includes('[2026-09-04 10:00 — Enf. Maria] Relato do paciente: Ferida seca, sem febre.')
+    && diario.endsWith('[2026-09-06 08:30 — Rogério] Paciente ligou de volta relatando hiperemia.'), diario);
+  verificar('texto vazio não suja o diário',
+    imp.acrescentarObservacao(diario, 'Avaliação', '   ', 'X', '2026-09-07') === diario);
+  verificar('diário preserva texto antigo de campo livre',
+    imp.acrescentarObservacao('nota antiga solta', '', 'nova', 'A', '2026-09-07 09:00')
+      === 'nota antiga solta\n[2026-09-07 09:00 — A] nova');
 }
 
 console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);

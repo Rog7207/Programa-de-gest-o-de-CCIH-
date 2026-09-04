@@ -1764,6 +1764,17 @@ function auditarVocabulario(termos, oficiais, frequencias) {
   return sugestoes;
 }
 
+/* Diário de observações da vigilância: cada registro entra numa linha nova, datado e
+   assinado — nada se sobrescreve. Quem valida a infecção depois precisa ler a conversa
+   inteira: o relato do paciente, a avaliação de quem ligou e o que vier depois. */
+function acrescentarObservacao(atual, rotulo, texto, autor, quando) {
+  const limpo = String(texto == null ? '' : texto).trim();
+  const base = String(atual == null ? '' : atual).trim();
+  if (!limpo) return base;
+  const entrada = `[${quando} — ${autor}] ${rotulo ? rotulo + ': ' : ''}${limpo}`;
+  return base ? base + '\n' + entrada : entrada;
+}
+
 /* Prontuário → data do óbito (a mais antiga registrada), unindo a aba de óbitos e as
    internações cujo desfecho foi óbito. Óbito registrado sem data entra com data vazia.
    É a base da exclusão automática na vigilância pós-alta. */
@@ -1901,7 +1912,7 @@ if (typeof module !== 'undefined' && module.exports) {
     normalizarData, normalizarProntuario, normalizarValorAntibiograma,
     sugerirMapeamento, normalizarLinhas, validar, deduplicar, chaveNaturalDe, proximoID,
     analisarPDFCulturas, ehPseudoProntuario, sugerirUnificacoes, sugerirUnificacoesVocabulario, auditarVocabulario, distanciaEdicao,
-    indiceDeObitos, faleceuAposCirurgia,
+    indiceDeObitos, faleceuAposCirurgia, acrescentarObservacao,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome,
     enriquecerCirurgia, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
     textoAntibiograma, classificacaoCanonica, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,

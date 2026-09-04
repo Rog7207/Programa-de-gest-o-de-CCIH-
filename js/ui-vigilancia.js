@@ -325,49 +325,97 @@ async function montarVigilancia(conteudo) {
   const enviadas = porStatus('mensagem enviada').filter(c => !faleceu(c))
     .sort((a, b) => String(a.MensagemEnviadaEm).localeCompare(String(b.MensagemEnviadaEm)));
 
-  function cartaoInvestigacao(c, tr) {
+  /* Acrescenta uma entrada ao diário de observações da cirurgia (datada e assinada). */
+  const anotar = (alvo, rotulo, texto) => {
+    alvo.ObservacoesVigilancia = acrescentarObservacao(alvo.ObservacoesVigilancia, rotulo, texto, app.usuario, agoraCurto());
+  };
+
+  /* ---- Registro da resposta da vigilância ----
+     O que a enfermeira ouviu (a conversa) e o que ela acha (a avaliação) são registros
+     separados no diário — quem valida depois lê os dois. O mesmo card resolve os dois
+     desfechos: sem infecção ou abrir investigação de ISC. */
+  function cartaoResposta(c, tr) {
+    const campoConversa = el('textarea', { rows: 3, style: 'width:100%',
+      placeholder: 'o que o paciente/família relatou na conversa (ferida, febre, secreção, retorno…)' });
+    const campoAvaliacao = el('textarea', { rows: 2, style: 'width:100%',
+      placeholder: 'avaliação de quem fez a busca: sua impressão sobre o caso' });
     const selTipo = el('select', {}, Object.entries(TIPOS_ISC).map(([v, r]) => el('option', { value: v }, r)));
     const campoData = el('input', { type: 'date', value: hoje });
-    const campoObs = el('textarea', { rows: 3, style: 'width:100%', placeholder: 'sinais relatados, conduta, retorno agendado…' });
     const msg = el('p', { class: 'aviso-erro-texto' });
-    const cartao = el('div', { class: 'cartao cartao-detalhe' },
-      el('h2', {}, 'Investigação — ' + (nomeDe(c) || c.Prontuario)),
+
+    const registrarDiario = alvo => {
+      anotar(alvo, 'Relato do paciente', campoConversa.value);
+      anotar(alvo, 'Avaliação', campoAvaliacao.value);
+    };
+
+    const semInfeccao = async () => {
+      try {
+        await mudarStatusCirurgia(c.ID_Cirurgia, alvo => {
+          registrarDiario(alvo);
+          alvo.StatusVigilancia = 'sem infecção';
+          alvo.UltimoContato = hoje;
+        });
+        recarregar();
+      } catch (e) { msg.textContent = e.message; }
+    };
+
+    const abrirInvestigacao = async () => {
+      try {
+        await comTrava(['cirurgias', 'iras'], async () => {
+          const atualCir = await lerBanco('cirurgias');
+          const atualIras = await lerBanco('iras');
+          const alvo = atualCir.cirurgias.find(x => x.ID_Cirurgia === c.ID_Cirurgia);
+          if (!alvo) throw new Error('Cirurgia não encontrada.');
+          const idIras = proximoIDLista(atualIras.casos, 'ID_IRAS', 'IRA');
+          /* A IRAS nasce "em investigação": o caso só vira oficial quando um segundo
+             profissional valida — é a dupla assinatura que o processo pede. */
+          atualIras.casos.push({
+            ID_IRAS: idIras, Prontuario: alvo.Prontuario, DataInfeccao: campoData.value,
+            Topografia: TIPOS_ISC[selTipo.value], CriterioDiagnostico: 'Vigilância pós-alta (contato telefônico)',
+            Setor: '', DispositivoAssociado: '', Microrganismo: '',
+            Desfecho: '', StatusInvestigacao: 'em investigação', NotificadoANVISA: '',
+            CriadoPor: app.usuario, CriadoEm: agoraCurto()
+          });
+          alvo.StatusVigilancia = 'em investigação';
+          alvo.ISC = 'S';
+          alvo.TipoISC = selTipo.value;
+          alvo.ID_IRAS = idIras;
+          alvo.InvestigadoPor = app.usuario;
+          registrarDiario(alvo);
+          await gravarBanco('iras', atualIras);
+          await gravarBanco('cirurgias', atualCir);
+        });
+        recarregar();
+      } catch (e) { msg.textContent = e.message; }
+    };
+
+    detalharNaLinha(tr, el('div', { class: 'cartao cartao-detalhe' },
+      el('h2', {}, 'Resposta da vigilância — ' + (nomeDe(c) || c.Prontuario)),
+      el('label', {}, 'Relato do paciente (a conversa): ', campoConversa),
+      el('label', {}, 'Avaliação da enfermagem: ', campoAvaliacao),
       el('div', { class: 'linha-campos' },
         el('label', {}, 'Tipo de ISC: ', selTipo),
-        el('label', {}, 'Data da infecção: ', campoData)),
-      el('label', {}, 'Observações: ', campoObs),
+        el('label', {}, 'Data da infecção: ', campoData),
+        el('span', { class: 'texto-suave' }, '(só usados ao abrir investigação)')),
       el('div', { class: 'linha-botoes' },
-        el('button', { class: 'botao-primario', onclick: async () => {
-          try {
-            await comTrava(['cirurgias', 'iras'], async () => {
-              const atualCir = await lerBanco('cirurgias');
-              const atualIras = await lerBanco('iras');
-              const alvo = atualCir.cirurgias.find(x => x.ID_Cirurgia === c.ID_Cirurgia);
-              if (!alvo) throw new Error('Cirurgia não encontrada.');
-              const idIras = proximoIDLista(atualIras.casos, 'ID_IRAS', 'IRA');
-              /* A IRAS nasce "em investigação": o caso só vira oficial quando um segundo
-                 profissional valida — é a dupla assinatura que o processo pede. */
-              atualIras.casos.push({
-                ID_IRAS: idIras, Prontuario: alvo.Prontuario, DataInfeccao: campoData.value,
-                Topografia: TIPOS_ISC[selTipo.value], CriterioDiagnostico: 'Vigilância pós-alta (contato telefônico)',
-                Setor: '', DispositivoAssociado: '', Microrganismo: '',
-                Desfecho: '', StatusInvestigacao: 'em investigação', NotificadoANVISA: '',
-                CriadoPor: app.usuario, CriadoEm: agoraCurto()
-              });
-              alvo.StatusVigilancia = 'em investigação';
-              alvo.ISC = 'S';
-              alvo.TipoISC = selTipo.value;
-              alvo.ID_IRAS = idIras;
-              alvo.InvestigadoPor = app.usuario;
-              alvo.ObservacoesVigilancia = campoObs.value;
-              await gravarBanco('iras', atualIras);
-              await gravarBanco('cirurgias', atualCir);
-            });
-            recarregar();
-          } catch (e) { msg.textContent = e.message; }
-        } }, 'Abrir investigação')), msg);
-    detalharNaLinha(tr, cartao);
+        el('button', { class: 'botao-secundario', onclick: semInfeccao }, '✓ Sem infecção'),
+        el('button', { class: 'botao-primario', onclick: abrirInvestigacao }, '⚠ Abrir investigação')),
+      el('p', { class: 'texto-suave' },
+        'Os dois textos entram no diário da cirurgia, datados e assinados — a validação lê tudo.'),
+      msg));
   }
+
+  /* Botão "＋": observação avulsa a qualquer momento, sem mudar o status. */
+  const botaoMaisObservacao = c => el('button', {
+    class: 'botao-secundario', title: 'Adicionar observação ao diário (não muda o status)',
+    onclick: async () => {
+      const texto = prompt('Nova observação para ' + (nomeDe(c) || c.Prontuario) + ':');
+      if (texto === null || !texto.trim()) return;
+      try {
+        await mudarStatusCirurgia(c.ID_Cirurgia, alvo => anotar(alvo, '', texto));
+        recarregar();
+      } catch (e) { alert(e.message); }
+    } }, '＋');
 
   if (enviadas.length) {
     conteudo.append(el('div', { class: 'cartao' },
@@ -381,13 +429,9 @@ async function montarVigilancia(conteudo) {
           el('td', {}, String(c.Procedimento || '').slice(0, 44), seloImplante(c)),
           el('td', {}, linhaContato(c, true)),
           el('td', {}, el('div', { class: 'linha-botoes' },
-            el('button', { class: 'botao-secundario', onclick: async () => {
-              try {
-                await mudarStatusCirurgia(c.ID_Cirurgia, alvo => { alvo.StatusVigilancia = 'sem infecção'; alvo.UltimoContato = hoje; });
-                recarregar();
-              } catch (e) { alert(e.message); }
-            } }, '✓ Sem infecção'),
-            el('button', { class: 'botao-primario', onclick: e => cartaoInvestigacao(c, e.currentTarget.closest('tr')) }, '⚠ Investigação'))),
+            el('button', { class: 'botao-primario', title: 'Registrar a conversa e o desfecho (sem infecção ou investigação)',
+              onclick: e => cartaoResposta(c, e.currentTarget.closest('tr')) }, '📞 Registrar resposta'),
+            botaoMaisObservacao(c))),
           el('td', {}, janelaVencida(c)
             ? el('button', { class: 'botao-secundario', onclick: async () => {
                 try {
@@ -434,9 +478,11 @@ async function montarVigilancia(conteudo) {
             el('td', {}, String(c.Procedimento || '').slice(0, 40)),
             el('td', {}, TIPOS_ISC[c.TipoISC] || c.TipoISC),
             el('td', {}, c.InvestigadoPor),
-            el('td', { class: 'texto-suave' }, String(c.ObservacoesVigilancia || '').slice(0, 60)),
+            el('td', { class: 'texto-suave', style: 'white-space:pre-line;max-width:420px' },
+              String(c.ObservacoesVigilancia || '')),
             el('td', {}, el('label', {}, caixaValida, ' validada')),
-            el('td', {}, reverterComIras(c, 'mensagem enviada', 'apagarIras')));
+            el('td', {}, el('div', { class: 'linha-botoes' },
+              botaoMaisObservacao(c), reverterComIras(c, 'mensagem enviada', 'apagarIras'))));
         })))));
   }
 

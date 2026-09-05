@@ -301,7 +301,8 @@ function relatorioPosAlta(bancos, setoresEscopo, inicio, fim) {
   /* Resposta = alguém do outro lado atendeu e houve desfecho clínico. */
   const RESPOSTAS_VIGILANCIA = ['sem infecção', 'em investigação', 'infecção confirmada'];
   const ENTROU_NA_VIGILANCIA = RESPOSTAS_VIGILANCIA
-    .concat(['sob vigilância', 'mensagem enviada', 'encerrada sem contato', 'encerrada — óbito']);
+    .concat(['sob vigilância', 'mensagem enviada', 'encerrada sem contato', 'encerrada — óbito',
+      'encerrada — número incorreto']);
   const isc = cirurgias.filter(c => c.ISC === 'S');
   const semInfeccao = cirurgias.filter(c => normalizarTexto(c.StatusVigilancia) === 'seminfeccao');
   const comDesfecho = semInfeccao.length + isc.length;
@@ -350,6 +351,8 @@ function relatorioPosAlta(bancos, setoresEscopo, inicio, fim) {
       ['Respostas obtidas', respostas.length],
       ['Sucesso do contato', `${relPct(respostas.length, contatosTentados)} (${respostas.length} de ${contatosTentados} buscas concluídas)`],
       ['Encerradas sem contato', semContato.length],
+      /* Erro de cadastro, não falha da busca: fora do denominador do sucesso do contato. */
+      ['Descartadas por número incorreto/inexistente', cirurgias.filter(c => st(c) === 'encerrada — número incorreto').length],
       ['Encerradas por óbito', cirurgias.filter(c => st(c) === 'encerrada — óbito').length],
       ['Dispensadas na triagem', cirurgias.filter(c => st(c) === 'dispensada').length],
       ['Ainda pendentes de triagem', cirurgias.filter(c => st(c) === 'pendente').length]

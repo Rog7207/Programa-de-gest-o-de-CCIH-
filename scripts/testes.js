@@ -1530,6 +1530,8 @@ console.log('\n== 47. Relatórios padrão: escopo, período, denominadores hones
       { DataCirurgia: '2026-08-03', ProcedimentoNHSN: 'Cesariana', StatusVigilancia: 'sem infecção', ISC: '' },
       { DataCirurgia: '2026-08-04', ProcedimentoNHSN: 'Prótese de quadril', StatusVigilancia: 'infecção confirmada', ISC: 'S', TipoISC: 'Superficial' },
       { DataCirurgia: '2026-08-05', ProcedimentoNHSN: 'Cesariana', StatusVigilancia: 'mensagem enviada', ISC: '' },
+      /* Telefone errado no cadastro: baixa em categoria própria, fora do sucesso do contato. */
+      { DataCirurgia: '2026-08-06', ProcedimentoNHSN: 'Cesariana', StatusVigilancia: 'encerrada — número incorreto', ISC: '' },
       /* Cateter mapeado por engano como Apendicectomia no NHSN: fora da conta inteira. */
       { DataCirurgia: '2026-08-06', Procedimento: 'Implantação De Cateter De Longa Permanência',
         ProcedimentoNHSN: 'Apendicectomia', StatusVigilancia: 'pendente', ISC: '' }
@@ -1590,17 +1592,20 @@ console.log('\n== 47. Relatórios padrão: escopo, período, denominadores hones
   verificar('Pós-alta: taxa de ISC só entre desfechos conhecidos',
     pItens['Taxa de ISC (entre desfechos conhecidos)'] === '50%', JSON.stringify(pItens));
   const desempenho = Object.fromEntries(pos.secoes.find(s => s.titulo === 'Desempenho da vigilância').itens);
-  verificar('Pós-alta: sucesso do contato = respostas / buscas concluídas',
+  verificar('Pós-alta: sucesso do contato = respostas / buscas concluídas (número errado fora do denominador)',
     String(desempenho['Sucesso do contato']).startsWith('100% (2 de 2'), JSON.stringify(desempenho));
+  verificar('Pós-alta: número incorreto é categoria própria e conta como vigiada',
+    desempenho['Descartadas por número incorreto/inexistente'] === 1
+    && desempenho['Entraram na vigilância'] === 4, JSON.stringify(desempenho));
   const porTipoCir = pos.secoes.find(s => s.titulo === 'Por tipo de cirurgia');
   const cesariana = porTipoCir.linhas.find(l => l[0] === 'Cesariana');
   const totalTipos = porTipoCir.linhas.find(l => l[0] === 'TOTAL');
-  verificar('Pós-alta por tipo: cesariana 2 cirurgias, 2 vigiadas, 1 resposta, 0 ISC, taxa 0%',
-    JSON.stringify(cesariana) === JSON.stringify(['Cesariana', 2, 2, 1, 1, 0, '0%']), JSON.stringify(cesariana));
+  verificar('Pós-alta por tipo: cesariana 3 cirurgias, 3 vigiadas, 1 resposta, 0 ISC, taxa 0%',
+    JSON.stringify(cesariana) === JSON.stringify(['Cesariana', 3, 3, 1, 1, 0, '0%']), JSON.stringify(cesariana));
   verificar('Pós-alta por tipo: linha TOTAL fecha a conta e a taxa geral',
-    totalTipos[1] === 3 && totalTipos[6] === '50%', JSON.stringify(totalTipos));
+    totalTipos[1] === 4 && totalTipos[6] === '50%', JSON.stringify(totalTipos));
   verificar('Pós-alta: cateter mapeado como Apendicectomia fica fora da conta, declarado',
-    pItens['Cirurgias no período'] === 3
+    pItens['Cirurgias no período'] === 4
     && pItens['Procedimentos não cirúrgicos (fora da conta)'] === 1
     && !porTipoCir.linhas.some(l => l[0] === 'Apendicectomia'), JSON.stringify(pItens));
 

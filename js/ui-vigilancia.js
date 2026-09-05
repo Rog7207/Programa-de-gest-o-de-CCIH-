@@ -311,14 +311,16 @@ async function montarVigilancia(conteudo) {
           el('td', { class: 'linha-clicavel', onclick: () => abrirPaciente(c.Prontuario) }, nomeDe(c) || c.Prontuario),
           el('td', {}, String(c.Procedimento || '').slice(0, 50), seloImplante(c)),
           el('td', {}, linhaContato(c, false)),
-          el('td', {}, janelaVencida(c)
-            ? el('button', { class: 'botao-secundario', onclick: async () => {
-                try {
-                  await mudarStatusCirurgia(c.ID_Cirurgia, alvo => { alvo.StatusVigilancia = 'encerrada sem contato'; });
-                  recarregar();
-                } catch (e) { alert(e.message); }
-              } }, 'Encerrar sem contato')
-            : botaoReverter(c, 'pendente', alvo => { alvo.VigilanciaPor = ''; }))))))));
+          el('td', {}, el('div', { class: 'linha-botoes' },
+            janelaVencida(c)
+              ? el('button', { class: 'botao-secundario', onclick: async () => {
+                  try {
+                    await mudarStatusCirurgia(c.ID_Cirurgia, alvo => { alvo.StatusVigilancia = 'encerrada sem contato'; });
+                    recarregar();
+                  } catch (e) { alert(e.message); }
+                } }, 'Encerrar sem contato')
+              : botaoReverter(c, 'pendente', alvo => { alvo.VigilanciaPor = ''; }),
+            botaoNumeroIncorreto(c)))))))));
   }
 
   /* ---- 4. Mensagem enviada: aguardando resposta ---- */
@@ -354,6 +356,19 @@ async function montarVigilancia(conteudo) {
           registrarDiario(alvo);
           alvo.StatusVigilancia = 'sem infecção';
           alvo.UltimoContato = hoje;
+        });
+        recarregar();
+      } catch (e) { msg.textContent = e.message; }
+    };
+
+    /* Paciente não responde às mensagens: encerra como "sem contato" — conta como busca
+       tentada e não concluída no relatório de desempenho. */
+    const semResposta = async () => {
+      try {
+        await mudarStatusCirurgia(c.ID_Cirurgia, alvo => {
+          registrarDiario(alvo);
+          anotar(alvo, '', 'Sem resposta às tentativas de contato.');
+          alvo.StatusVigilancia = 'encerrada sem contato';
         });
         recarregar();
       } catch (e) { msg.textContent = e.message; }
@@ -399,11 +414,28 @@ async function montarVigilancia(conteudo) {
         el('span', { class: 'texto-suave' }, '(só usados ao abrir investigação)')),
       el('div', { class: 'linha-botoes' },
         el('button', { class: 'botao-secundario', onclick: semInfeccao }, '✓ Sem infecção'),
-        el('button', { class: 'botao-primario', onclick: abrirInvestigacao }, '⚠ Abrir investigação')),
+        el('button', { class: 'botao-primario', onclick: abrirInvestigacao }, '⚠ Abrir investigação'),
+        el('button', { class: 'botao-secundario', title: 'O paciente não respondeu às mensagens',
+          onclick: semResposta }, '✗ Sem resposta'),
+        botaoNumeroIncorreto(c)),
       el('p', { class: 'texto-suave' },
-        'Os dois textos entram no diário da cirurgia, datados e assinados — a validação lê tudo.'),
+        'Os textos entram no diário da cirurgia, datados e assinados — a validação lê tudo.'),
       msg));
   }
+
+  /* Erro de cadastro: número incorreto ou inexistente. Dá baixa, mas numa categoria
+     própria — no relatório é descarte por cadastro, não falha da busca. */
+  const botaoNumeroIncorreto = c => el('button', {
+    class: 'botao-secundario', title: 'Telefone incorreto ou inexistente no cadastro — dá baixa em categoria própria',
+    onclick: async () => {
+      try {
+        await mudarStatusCirurgia(c.ID_Cirurgia, alvo => {
+          anotar(alvo, '', 'Número de telefone incorreto ou inexistente no cadastro.');
+          alvo.StatusVigilancia = 'encerrada — número incorreto';
+        });
+        recarregar();
+      } catch (e) { alert(e.message); }
+    } }, '☎ Número incorreto');
 
   /* Botão "＋": observação avulsa a qualquer momento, sem mudar o status. */
   const botaoMaisObservacao = c => el('button', {
@@ -492,11 +524,13 @@ async function montarVigilancia(conteudo) {
   const semContato = porStatus('encerrada sem contato');
   const dispensadas = porStatus('dispensada');
   const porObito = porStatus('encerrada — óbito');
+  const numeroErrado = porStatus('encerrada — número incorreto');
 
   conteudo.append(el('div', { class: 'grade-cartoes' },
     [[sobVigilancia.length, 'sob vigilância'], [enviadas.length, 'mensagens aguardando resposta'],
      [semInfeccao.length, 'sem infecção'], [confirmadas.length, 'infecções confirmadas'],
-     [semContato.length, 'encerradas sem contato'], [porObito.length, 'encerradas por óbito']].map(([n, r]) =>
+     [semContato.length, 'encerradas sem contato'], [porObito.length, 'encerradas por óbito'],
+     [numeroErrado.length, 'número incorreto/inexistente']].map(([n, r]) =>
       el('div', { class: 'cartao cartao-numero' },
         el('div', { class: 'numero-grande' }, fmtInt(n)), el('div', { class: 'texto-suave' }, r)))));
 
@@ -524,7 +558,8 @@ async function montarVigilancia(conteudo) {
         el('td', {}, String(c.Procedimento || '').slice(0, 50)),
         el('td', {}, indiceObitos.get(normalizarProntuario(c.Prontuario)) || 'data não informada'))))));
 
-  if (semInfeccao.length || confirmadas.length || semContato.length || dispensadas.length || porObito.length) {
+  if (semInfeccao.length || confirmadas.length || semContato.length || dispensadas.length
+      || porObito.length || numeroErrado.length) {
     conteudo.append(el('div', { class: 'cartao' },
       el('h2', {}, 'Encerradas'),
       blocoEncerradas('Vigilância realizada sem infecção', semInfeccao, 'mensagem enviada'),
@@ -539,6 +574,7 @@ async function montarVigilancia(conteudo) {
             el('td', {}, c.InvestigadoPor), el('td', {}, `${c.ValidadoPor} em ${c.ValidadoEm}`),
             el('td', {}, reverterComIras(c, 'em investigação', 'reabrirIras'))))))),
       blocoEncerradas('Sem contato (janela vencida)', semContato, 'sob vigilância'),
+      blocoEncerradas('Número incorreto ou inexistente', numeroErrado, 'sob vigilância'),
       blocoEncerradas('Dispensadas na triagem', dispensadas, 'pendente'),
       porObito.length ? blocoObitos() : null));
   }

@@ -1786,5 +1786,93 @@ console.log('\n== 50. "Não é paciente internado": descarte reversível do regi
     && bcir.cirurgias[0].StatusVigilancia === 'pendente');
 }
 
+console.log('\n== 51. Decisão ATB: protocolo empírico + dados locais ==');
+{
+  const alertas = require(path.join(__dirname, '..', 'js', 'alertas.js'));
+  const rel = require(path.join(__dirname, '..', 'js', 'relatorios.js'));
+  global.inferirMecanismo = alertas.inferirMecanismo;
+  global.GENEROS_GRAM_NEGATIVOS = alertas.GENEROS_GRAM_NEGATIVOS;
+  global.indiceSensibilidade = rel.indiceSensibilidade;
+  global.mecanismoDaCultura = rel.mecanismoDaCultura;
+  global.cursosDeAntibiotico = imp.cursosDeAntibiotico;
+  const prot = require(path.join(__dirname, '..', 'js', 'protocolo-atb.js'));
+  const sindrome = id => prot.PROTOCOLO_ATB.sindromes.find(s => s.id === id);
+
+  /* Ramos do protocolo — fidelidade ao documento validado. */
+  const cistiteTfgBaixa = sindrome('urinario').decidir({ apresentacao: 'cistite', tfgBaixa: true });
+  verificar('cistite com TFG<30: sem nitrofurantoína, fosfomicina em 1ª',
+    !cistiteTfgBaixa.esquemas.some(e => e.drogas.includes('nitrofurantoina'))
+    && cistiteTfgBaixa.esquemas[0].drogas.includes('fosfomicina'), JSON.stringify(cistiteTfgBaixa.esquemas));
+  const pieloEsbl = sindrome('urinario').decidir({ apresentacao: 'pielonefrite', riscoEsbl: true });
+  verificar('pielonefrite com risco ESBL vai de amicacina',
+    pieloEsbl.esquemas.length === 1 && pieloEsbl.esquemas[0].drogas.includes('amicacina'));
+  verificar('pielonefrite pede urocultura antes da primeira dose',
+    pieloEsbl.exames.some(x => /urocultura/i.test(x)));
+  const pacUtiMrsa = sindrome('respiratorio').decidir({ gravidade: 'internacao', riscoMRSA: true });
+  verificar('PAC internada com risco MRSA: ceftriaxona+azitro E vancomicina associada',
+    pacUtiMrsa.esquemas.some(e => e.drogas.includes('ceftriaxona') && e.drogas.includes('azitromicina'))
+    && pacUtiMrsa.esquemas.some(e => e.drogas.includes('vancomicina')), JSON.stringify(pacUtiMrsa.esquemas));
+  const meningeIdoso = sindrome('snc').decidir({ listeria: true });
+  verificar('meningite >50 anos associa ampicilina (Listeria) e mantém dexametasona',
+    meningeIdoso.esquemas.some(e => e.drogas.includes('ampicilina'))
+    && meningeIdoso.esquemas.some(e => /dexametasona/i.test(e.posologia)));
+  const sepseMdr = sindrome('sepse_fi').decidir({ riscoMDR: true });
+  verificar('sepse FI com risco MDR: pip-tazo+vanco ou cefepima+vanco',
+    sepseMdr.esquemas.length === 2 && sepseMdr.esquemas.every(e => e.drogas.includes('vancomicina')));
+  verificar('todas as síndromes decidem sem resposta nenhuma (defaults seguros)',
+    prot.PROTOCOLO_ATB.sindromes.every(s => {
+      const d = s.decidir({});
+      return d.esquemas.length >= 1 && d.exames.length >= 1;
+    }));
+
+  verificar('sinônimos de grafia: ceftriaxone→ceftriaxona, cefepime→cefepima',
+    prot.drogaCanonicaATB('Ceftriaxone') === 'ceftriaxona' && prot.drogaCanonicaATB('CEFEPIME') === 'cefepima');
+
+  /* Contexto local do paciente. */
+  const bancos = {
+    culturas: { culturas: [
+      { ID_Cultura: 'C1', Prontuario: '100', DataColeta: '2026-06-01', Material: 'Urocultura',
+        Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: 'ERC', AvaliacaoCCIH: 'Colonização' },
+      { ID_Cultura: 'C2', Prontuario: '100', DataColeta: '2024-01-01', Material: 'Hemocultura',
+        Microrganismo: 'Escherichia coli', MecanismoResistencia: 'ESBL', AvaliacaoCCIH: 'IRAS' }
+    ], sensibilidade: [] },
+    antibioticos: { prescricoes: [
+      { ID_Prescricao: 'P1', Prontuario: '100', Antibiotico: 'Meropenem', DataInicio: '2026-08-20', DataFim: '2026-08-25' }
+    ] },
+    pacientes: { internacoes: [
+      { Prontuario: '100', DataInternacao: '2026-08-18', DataAlta: '2026-08-26' }
+    ] }
+  };
+  const ctx = prot.contextoLocalDoPaciente(bancos, '100', '2026-09-05');
+  verificar('contexto: MDR de 12 meses entra, o de 2024 fica fora',
+    ctx.mdr.length === 1 && ctx.mdr[0].mecanismo === 'ERC', JSON.stringify(ctx.mdr));
+  verificar('contexto: ATB e internação nos últimos 90 dias detectados',
+    ctx.atb90.includes('Meropenem') && ctx.internacao90 === true && ctx.riscoPresumido === true);
+  verificar('contexto: alerta cita o germe, o mecanismo e a data',
+    ctx.alertas.some(a => a.includes('Klebsiella pneumoniae') && a.includes('ERC') && a.includes('2026-06-01')));
+  verificar('sem prontuário devolve null', prot.contextoLocalDoPaciente(bancos, '', '2026-09-05') === null);
+
+  /* Antibiograma local + aviso cruzado. */
+  const culturasEcoli = [];
+  const sensEcoli = [];
+  for (let i = 0; i < 25; i++) {
+    culturasEcoli.push({ ID_Cultura: 'E' + i, Prontuario: String(i), DataColeta: '2026-05-01',
+      Microrganismo: 'Escherichia coli', AvaliacaoCCIH: 'IRAS' });
+    sensEcoli.push({ ID_Cultura: 'E' + i, Antibiotico: i % 2 ? 'Ciprofloxacino' : 'Ciprofloxacina', Resultado: i < 10 ? 'R' : 'S' });
+    sensEcoli.push({ ID_Cultura: 'E' + i, Antibiotico: 'Ceftriaxone', Resultado: 'S' });
+  }
+  const bancosAB = { culturas: { culturas: culturasEcoli, sensibilidade: sensEcoli } };
+  const ab = prot.antibiogramaLocalPorGermes(bancosAB, ['Escherichia coli'], '2026-09-05', 24);
+  const cipro = ab[0].linhas.find(l => l.droga === 'ciprofloxacino');
+  verificar('antibiograma local: grafias Ciprofloxacino/Ciprofloxacina somam na mesma linha',
+    ab[0].culturas === 25 && cipro.testados === 25 && cipro.pctR === 40, JSON.stringify(ab[0].linhas));
+  const avisosAB = prot.avisosDeResistenciaLocal(
+    [{ rotulo: 'x', posologia: 'x', drogas: ['ciprofloxacino'] }], ab);
+  verificar('40% de resistência local com n=25 vira aviso com números',
+    avisosAB.length === 1 && avisosAB[0].includes('40%') && avisosAB[0].includes('n=25'), JSON.stringify(avisosAB));
+  verificar('droga sem resistência relevante não gera aviso',
+    prot.avisosDeResistenciaLocal([{ drogas: ['ceftriaxona'] }], ab).length === 0);
+}
+
 console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
 process.exit(falharam ? 1 : 0);

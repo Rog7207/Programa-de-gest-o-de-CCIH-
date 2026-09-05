@@ -674,5 +674,5 @@ if (typeof module !== 'undefined' && module.exports) {
     relatorioResumoExecutivo, RELATORIOS_PADRAO, BANCOS_RELATORIOS, pacientesDia,
     relMediana, relDiasEntre, mesAnteriorIntervalo,
     perfilMicrobiologico, colunasDoPerfil, classificarGram, especieEnterobacteria,
-    tabelaResistenciaEnterobacterias, corDeResistencia };
+    tabelaResistenciaEnterobacterias, corDeResistencia, indiceSensibilidade, mecanismoDaCultura };
 }

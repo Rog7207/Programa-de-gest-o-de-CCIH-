@@ -5,6 +5,7 @@ const ABAS = [
   { id: 'pacientes', rotulo: 'Pacientes', ativa: true },
   { id: 'culturas', rotulo: 'Culturas', ativa: true },
   { id: 'antibioticos', rotulo: 'Antibióticos', ativa: true },
+  { id: 'decisao', rotulo: 'Decisão ATB', ativa: true },
   { id: 'evolucoes', rotulo: 'Evoluções', ativa: false },
   { id: 'uti', rotulo: 'UTI', ativa: true },
   { id: 'higiene', rotulo: 'Higiene de mãos', ativa: true },
@@ -299,6 +300,7 @@ function renderizarAba(abaId) {
   else if (abaId === 'iras') aoTerminar(montarInfeccoes(conteudo));
   else if (abaId === 'relatorios') aoTerminar(montarAbaRelatorios(conteudo));
   else if (abaId === 'perfil') aoTerminar(montarPerfilMicro(conteudo));
+  else if (abaId === 'decisao') aoTerminar(montarDecisaoATB(conteudo));
   else if (abaId === 'eventos') aoTerminar(montarEventos(conteudo));
   else if (abaId === 'sepse') aoTerminar(montarSepse(conteudo));
   else if (abaId === 'surtos') aoTerminar(montarSurtos(conteudo));

@@ -190,7 +190,9 @@ async function montarPaciente(conteudo) {
       s.MinutosAntibiotico !== '' && s.MinutosAntibiotico != null ? 'ATB em ' + s.MinutosAntibiotico + ' min' : ''
     ].filter(Boolean).join(' · ')));
   casosIras.forEach(i => juntar(i.DataInfeccao, 'iras', 'IRAS: ' + (i.Topografia || ''),
-    [i.Setor, i.Microrganismo, i.DispositivoAssociado, i.CriterioDiagnostico].filter(Boolean).join(' · ')));
+    [i.Setor, i.Microrganismo, i.DispositivoAssociado, i.CriterioDiagnostico,
+     i.StatusInvestigacao && i.StatusInvestigacao !== 'confirmado' ? i.StatusInvestigacao : '']
+      .filter(Boolean).join(' · ')));
   precaucoes.forEach(p => {
     juntar(p.DataInicio, 'isolamento', 'Precaução de ' + (p.TipoPrecaucao || 'contato'), p.Motivo || '');
     if (p.DataFim) juntar(p.DataFim, 'isolamento', 'Precaução encerrada', p.TipoPrecaucao || '');
@@ -211,6 +213,61 @@ async function montarPaciente(conteudo) {
           el('div', {}, el('strong', {}, e.titulo),
             e.detalhe ? el('div', { class: 'texto-suave' }, e.detalhe) : null))))
       : el('p', { class: 'texto-suave' }, 'Nenhum evento deste tipo.'));
+  }
+
+  /* ---- Notificar suspeita de IRAS daqui mesmo ----
+     A ficha é onde o caso aparece por inteiro (culturas + antibióticos + dispositivos),
+     então é aqui que a suspeita costuma nascer. Nasce "em investigação": a notificação
+     oficial continua dependendo da segunda assinatura, na aba Infecções. */
+  {
+    const topografias = (config.vocabulario.topografias || []);
+    const setoresVocab = (config.vocabulario.setores || []).slice().sort();
+    const internacaoAberta = internacoes.slice().reverse()
+      .find(i => !String(i.DataAlta || '').trim()) || internacoes[internacoes.length - 1] || {};
+    const selTopoNova = el('select', {}, topografias.map(t => el('option', { value: t }, t)));
+    const selSetorNova = el('select', {}, el('option', { value: '' }, '—'),
+      setoresVocab.map(s => el('option', { value: s, selected: s === internacaoAberta.SetorAtual ? '' : null }, s)));
+    const campoDataNova = el('input', { type: 'date', value: hojeISO() });
+    const selDispNova = el('select', {}, ['', 'CVC', 'VM', 'SVD', 'Nenhum'].map(d => el('option', { value: d }, d || '—')));
+    const campoMicroNova = el('input', { type: 'text', placeholder: 'microrganismo (opcional)' });
+    const campoObsNova = el('textarea', { rows: 2, style: 'width:100%',
+      placeholder: 'observações: critério clínico, achados, contexto… (entram no diário do caso)' });
+    const msgNova = el('p', { class: 'aviso-erro-texto' });
+    const notificarIras = async () => {
+      try {
+        if (!selTopoNova.value) { msgNova.textContent = 'Escolha a topografia.'; return; }
+        await comTrava(['iras'], async () => {
+          const atual = await lerBanco('iras');
+          atual.casos.push({
+            ID_IRAS: proximoIDLista(atual.casos, 'ID_IRAS', 'IRA'),
+            Prontuario: cadastro.Prontuario, DataInfeccao: campoDataNova.value,
+            Topografia: selTopoNova.value, CriterioDiagnostico: 'Notificação manual (ficha do paciente)',
+            Setor: selSetorNova.value, DispositivoAssociado: selDispNova.value,
+            Microrganismo: campoMicroNova.value.trim(), Desfecho: '',
+            StatusInvestigacao: 'em investigação', NotificadoANVISA: '',
+            Observacoes: acrescentarObservacao('', '', campoObsNova.value, app.usuario, agoraCurto()),
+            CriadoPor: app.usuario, CriadoEm: agoraCurto()
+          });
+          await gravarBanco('iras', atual);
+        });
+        abrirPaciente(cadastro.Prontuario);
+      } catch (e) { msgNova.textContent = e.message; }
+    };
+    conteudo.append(el('div', { class: 'cartao' }, el('details', {},
+      el('summary', {}, '➕ Notificar suspeita de IRAS'),
+      el('p', { class: 'texto-suave' },
+        'A suspeita entra na fila de confirmação da aba Infecções — a notificação oficial só existe '
+        + 'depois da segunda assinatura.'),
+      el('div', { class: 'linha-campos' },
+        el('label', {}, 'Data da infecção: ', campoDataNova),
+        el('label', {}, 'Topografia: ', selTopoNova),
+        el('label', {}, 'Setor: ', selSetorNova),
+        el('label', {}, 'Dispositivo: ', selDispNova)),
+      el('div', { class: 'linha-campos' }, campoMicroNova),
+      campoObsNova,
+      el('div', { class: 'linha-botoes' },
+        el('button', { class: 'botao-primario', onclick: notificarIras }, 'Notificar suspeita')),
+      msgNova)));
   }
 
   conteudo.append(el('div', { class: 'cartao' },

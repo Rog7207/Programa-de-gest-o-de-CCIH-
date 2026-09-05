@@ -141,6 +141,8 @@ async function montarInfeccoes(conteudo) {
       el('option', { value: d, selected: d === (caso.DispositivoAssociado || '') ? '' : null }, d || '—')));
     const campoMicro = el('input', { type: 'text', value: caso.Microrganismo || '', placeholder: 'microrganismo (opcional)' });
     const campoCriterio = el('input', { type: 'text', value: caso.CriterioDiagnostico || '', style: 'width:320px' });
+    const campoNovaObs = el('textarea', { rows: 2, style: 'width:100%',
+      placeholder: 'observação da segunda análise (opcional) — entra no diário do caso' });
     const msg = el('p', { class: 'aviso-erro-texto' });
     const mesmaPessoa = normalizarTexto(caso.CriadoPor) === normalizarTexto(app.usuario);
 
@@ -154,6 +156,8 @@ async function montarInfeccoes(conteudo) {
           alvo.DispositivoAssociado = selDisp.value;
           alvo.Microrganismo = campoMicro.value;
           alvo.CriterioDiagnostico = campoCriterio.value;
+          alvo.Observacoes = acrescentarObservacao(alvo.Observacoes,
+            'Segunda análise', campoNovaObs.value, app.usuario, agoraCurto());
           alvo.StatusInvestigacao = statusNovo;
           alvo.ConfirmadoPor = app.usuario;
           alvo.ConfirmadoEm = hojeISO();
@@ -189,6 +193,11 @@ async function montarInfeccoes(conteudo) {
       el('div', { class: 'linha-campos' },
         el('label', {}, 'Microrganismo: ', campoMicro),
         el('label', {}, 'Critério: ', campoCriterio)),
+      String(caso.Observacoes || '').trim()
+        ? el('p', { class: 'texto-suave', style: 'white-space:pre-line;border-left:3px solid #ccc;padding-left:8px' },
+            caso.Observacoes)
+        : null,
+      campoNovaObs,
       el('div', { class: 'linha-botoes' },
         el('button', { class: 'botao-secundario', onclick: e => { e.stopPropagation(); abrirPaciente(caso.Prontuario); } },
           'Ver ficha do paciente'),

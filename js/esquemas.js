@@ -69,7 +69,7 @@ const ESQUEMAS = {
   iras: {
     arquivo: 'iras.xlsx',
     abas: {
-      casos: ['ID_IRAS', 'Prontuario', 'DataInfeccao', 'Topografia', 'CriterioDiagnostico', 'Setor', 'DispositivoAssociado', 'Microrganismo', 'Desfecho', 'StatusInvestigacao', 'NotificadoANVISA', 'ConfirmadoPor', 'ConfirmadoEm', 'CriadoPor', 'CriadoEm']
+      casos: ['ID_IRAS', 'Prontuario', 'DataInfeccao', 'Topografia', 'CriterioDiagnostico', 'Setor', 'DispositivoAssociado', 'Microrganismo', 'Desfecho', 'StatusInvestigacao', 'NotificadoANVISA', 'Observacoes', 'ConfirmadoPor', 'ConfirmadoEm', 'CriadoPor', 'CriadoEm']
     }
   },
   dispositivos: {

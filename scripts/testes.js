@@ -1812,6 +1812,14 @@ console.log('\n== 51. Decisão ATB: protocolo empírico + dados locais ==');
   verificar('PAC internada com risco MRSA: ceftriaxona+azitro E vancomicina associada',
     pacUtiMrsa.esquemas.some(e => e.drogas.includes('ceftriaxona') && e.drogas.includes('azitromicina'))
     && pacUtiMrsa.esquemas.some(e => e.drogas.includes('vancomicina')), JSON.stringify(pacUtiMrsa.esquemas));
+  const aspSem = sindrome('respiratorio').decidir({ gravidade: 'internacao', aspirativa: true });
+  const aspCom = sindrome('respiratorio').decidir({ gravidade: 'internacao', aspirativa: true, abscesso: true });
+  verificar('aspirativa sem abscesso: ceftriaxona sozinha (adendo CCIH 05/09/2026)',
+    aspSem.esquemas.length === 1 && aspSem.esquemas[0].drogas.join() === 'ceftriaxona', JSON.stringify(aspSem.esquemas));
+  verificar('aspirativa com abscesso: ampicilina-sulbactam',
+    aspCom.esquemas.length === 1 && aspCom.esquemas[0].drogas.join() === 'ampicilinasulbactam');
+  verificar('todo adendo tem data e texto',
+    prot.PROTOCOLO_ATB.adendos.every(a => /^\d{4}-\d{2}-\d{2}$/.test(a.data) && a.texto.length > 20));
   const meningeIdoso = sindrome('snc').decidir({ listeria: true });
   verificar('meningite >50 anos associa ampicilina (Listeria) e mantém dexametasona',
     meningeIdoso.esquemas.some(e => e.drogas.includes('ampicilina'))

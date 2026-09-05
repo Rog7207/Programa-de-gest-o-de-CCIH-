@@ -17,6 +17,12 @@ const VANCO = 'Vancomicina 15–20 mg/kg IV de 8/8h ou 12/12h';
 
 const PROTOCOLO_ATB = {
   fonte: 'Protocolo de Tratamento Empírico de Infecções na Emergência — HNSC/SCIH',
+  /* Alterações de conduta validadas pela CCIH depois do documento original. Cada uma é
+     uma decisão registrada aqui até ser incorporada ao texto do protocolo. */
+  adendos: [
+    { data: '2026-09-05', texto: 'Pneumonia aspirativa: ceftriaxona quando não há abscesso pulmonar; ampicilina-sulbactam '
+      + 'reservada à aspirativa com abscesso (4 doses/dia — praticidade pesa na adesão).' }
+  ],
   publico: 'Adultos e adolescentes (>14 anos) com infecção presente na admissão (<48h de internação). '
     + 'Sepse com foco conhecido segue o protocolo institucional de sepse.',
   sindromes: [
@@ -72,6 +78,7 @@ const PROTOCOLO_ATB = {
         { id: 'comorbAtb90', rotulo: 'Comorbidades ou antibiótico nos últimos 90 dias', tipo: 'sim_nao' },
         { id: 'alergiaBLM', rotulo: 'Alergia a beta-lactâmicos/macrolídeos', tipo: 'sim_nao' },
         { id: 'aspirativa', rotulo: 'Pneumonia aspirativa', tipo: 'sim_nao' },
+        { id: 'abscesso', rotulo: 'Abscesso pulmonar (na aspirativa)', tipo: 'sim_nao' },
         { id: 'riscoPseudomonas', rotulo: 'Risco para Pseudomonas (bronquiectasias, fibrose cística)', tipo: 'sim_nao' },
         { id: 'riscoMRSA', rotulo: 'Risco para MRSA hospitalar', tipo: 'sim_nao' }
       ],
@@ -87,8 +94,11 @@ const PROTOCOLO_ATB = {
           esquemas.push({ rotulo: 'Alternativa', posologia: 'Moxifloxacino 400 mg IV/VO 1x/dia por 5–7 dias', drogas: ['moxifloxacino'] });
         } else if (r.riscoPseudomonas) {
           esquemas.push({ rotulo: 'Risco de Pseudomonas', posologia: 'Piperacilina + Tazobactam 4,5 g IV 6/6h + Azitromicina 500 mg IV 1x/dia', drogas: ['piperacilinatazobactam', 'azitromicina'] });
+        } else if (r.aspirativa && r.abscesso) {
+          /* Adendo CCIH 05/09/2026: cobertura anaeróbia só quando há abscesso. */
+          esquemas.push({ rotulo: 'Aspirativa com abscesso pulmonar', posologia: 'Ampicilina + Sulbactam 1,5–3 g IV 6/6h', drogas: ['ampicilinasulbactam'] });
         } else if (r.aspirativa) {
-          esquemas.push({ rotulo: 'Pneumonia aspirativa comunitária', posologia: 'Ampicilina + Sulbactam 1,5–3 g IV 6/6h', drogas: ['ampicilinasulbactam'] });
+          esquemas.push({ rotulo: 'Pneumonia aspirativa sem abscesso', posologia: 'Ceftriaxona 2 g IV 1x/dia', drogas: ['ceftriaxona'] });
         } else if (r.gravidade === 'internacao') {
           esquemas.push({ rotulo: 'PAC internada (enfermaria/UTI)', posologia: 'Ceftriaxona 2 g IV 1x/dia + Azitromicina 500 mg IV/VO 1x/dia por 7 dias', drogas: ['ceftriaxona', 'azitromicina'] });
         } else if (r.comorbAtb90) {

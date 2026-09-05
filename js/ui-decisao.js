@@ -112,7 +112,9 @@ async function montarDecisaoATB(conteudo) {
       el('p', { class: 'texto-suave' }, REVISAO_PROTOCOLO_ATB),
       el('p', { class: 'texto-suave' },
         'Fonte: ' + PROTOCOLO_ATB.fonte + '. Ferramenta de APOIO à decisão — não substitui o julgamento '
-        + 'clínico nem a avaliação da CCIH para antimicrobianos auditados.')));
+        + 'clínico nem a avaliação da CCIH para antimicrobianos auditados.'),
+      PROTOCOLO_ATB.adendos.length ? el('p', { class: 'texto-suave' }, 'Adendos validados pela CCIH: '
+        + PROTOCOLO_ATB.adendos.map(a => `${a.data.split('-').reverse().join('/')} — ${a.texto}`).join(' · ')) : null));
   }
 
   conteudo.append(el('div', { class: 'cartao' },

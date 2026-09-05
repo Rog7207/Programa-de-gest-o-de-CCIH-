@@ -40,7 +40,7 @@ td.alta { color: #b03a2e; font-weight: 700; }
 </style>
 </head>
 <body>
-<header>Decisão de ATB empírica <span class="versao">v05.09</span></header>
+<header>Decisão de ATB empírica <span class="versao">v05.09b</span></header>
 <main>
   <div class="cartao aviso" id="avisoAbertura">
     <strong>Este arquivo precisa ser aberto no navegador.</strong>
@@ -207,7 +207,9 @@ $('analisar').onclick = () => {
     el('label', {}, 'Conduta adotada'), conduta,
     el('button', { class: 'principal', onclick: registrar }, 'Registrar decisão'),
     el('p', { class: 'suave', style: 'margin:10px 0 0' }, REVISAO_PROTOCOLO_ATB),
-    el('p', { class: 'suave' }, 'Fonte: ' + PROTOCOLO_ATB.fonte + '. Ferramenta de APOIO à decisão — não substitui o julgamento clínico nem a avaliação da CCIH para antimicrobianos auditados.'));
+    el('p', { class: 'suave' }, 'Fonte: ' + PROTOCOLO_ATB.fonte + '. Ferramenta de APOIO à decisão — não substitui o julgamento clínico nem a avaliação da CCIH para antimicrobianos auditados.'),
+    (PROTOCOLO_ATB.adendos || []).length ? el('p', { class: 'suave' }, 'Adendos validados pela CCIH: '
+      + PROTOCOLO_ATB.adendos.map(a => a.data.split('-').reverse().join('/') + ' — ' + a.texto).join(' · ')) : null);
   $('resultado').classList.remove('oculto');
   $('resultado').scrollIntoView({ behavior: 'smooth', block: 'start' });
 };

@@ -1741,5 +1741,45 @@ console.log('\n== 49. Óbito encerra a vigilância pós-alta sozinho ==');
       === 'nota antiga solta\n[2026-09-07 09:00 — A] nova');
 }
 
+console.log('\n== 50. "Não é paciente internado": descarte reversível do registro provisório ==');
+{
+  const fazerBancos = () => ({
+    bp: { pacientes: [
+      { Prontuario: '19900101-ABC', Nome: 'Ana Bela Costa', Descartado: '' },
+      { Prontuario: '100', Nome: 'Outra Pessoa' }
+    ] },
+    bc: { culturas: [
+      { ID_Cultura: 'C1', Prontuario: '19900101-ABC', StatusRevisao: 'pendente' },
+      { ID_Cultura: 'C2', Prontuario: '19900101-ABC', StatusRevisao: 'descartada' },
+      { ID_Cultura: 'C3', Prontuario: '100', StatusRevisao: 'pendente' }
+    ] },
+    bcir: { cirurgias: [
+      { ID_Cirurgia: 'CIR-1', Prontuario: '19900101-ABC', StatusVigilancia: 'pendente', ObservacoesVigilancia: '' }
+    ] }
+  });
+
+  const { bp, bc, bcir } = fazerBancos();
+  const r = imp.descartarRegistroProvisorio(bp, bc, bcir, '19900101-ABC', 'Rogério', '2026-09-05 09:00');
+  verificar('descarte marca o cadastro, assinado',
+    bp.pacientes[0].Descartado === 'S' && bp.pacientes[0].DescartadoPor === 'Rogério');
+  verificar('culturas do registro saem dos dados válidos (a já descartada não conta de novo)',
+    r.culturas === 1 && bc.culturas[0].StatusRevisao === 'descartada');
+  verificar('cultura de outro paciente não é tocada', bc.culturas[2].StatusRevisao === 'pendente');
+  verificar('cirurgia do registro é descartada com nota no diário',
+    r.cirurgias === 1 && bcir.cirurgias[0].StatusVigilancia === 'descartada'
+    && bcir.cirurgias[0].ObservacoesVigilancia.includes('não é paciente internado'));
+  verificar('descartado some das sugestões de unificação',
+    imp.sugerirUnificacoes(bp.pacientes.concat([{ Prontuario: '200', Nome: 'Ana Bela Costa' }])).length === 0);
+  verificar('prontuário verdadeiro não pode ser descartado',
+    (() => { try { imp.descartarRegistroProvisorio(bp, bc, bcir, '100', 'X', 'Y'); return false; }
+      catch (e) { return /provis/.test(e.message); } })());
+
+  const volta = imp.reverterDescarteProvisorio(bp, bc, bcir, '19900101-ABC', 'Maria', '2026-09-05 10:00');
+  verificar('reversão limpa a marca e devolve tudo como pendente',
+    bp.pacientes[0].Descartado === '' && volta.culturas === 2
+    && bc.culturas.every(c => c.Prontuario !== '19900101-ABC' || c.StatusRevisao === 'pendente')
+    && bcir.cirurgias[0].StatusVigilancia === 'pendente');
+}
+
 console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
 process.exit(falharam ? 1 : 0);

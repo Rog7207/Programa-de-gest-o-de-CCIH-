@@ -4,7 +4,7 @@ const ESQUEMAS = {
   pacientes: {
     arquivo: 'pacientes.xlsx',
     abas: {
-      pacientes: ['Prontuario', 'Nome', 'DataNascimento', 'Sexo', 'Telefone', 'CriadoPor', 'CriadoEm'],
+      pacientes: ['Prontuario', 'Nome', 'DataNascimento', 'Sexo', 'Telefone', 'Descartado', 'DescartadoPor', 'DescartadoEm', 'CriadoPor', 'CriadoEm'],
       internacoes: ['ID_Internacao', 'Prontuario', 'Atendimento', 'DataInternacao', 'DataAlta', 'SetorAtual', 'Leito', 'Clinica', 'Desfecho', 'Obito', 'CriadoPor', 'CriadoEm'],
       obitos: ['ID_Obito', 'Prontuario', 'Atendimento', 'Nome', 'DataEntrada', 'DataObito', 'Idade', 'Sexo', 'Medico', 'Setor', 'CriadoPor', 'CriadoEm']
     }

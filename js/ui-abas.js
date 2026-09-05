@@ -312,9 +312,41 @@ async function montarPacientes(conteudo) {
   let banco;
   try { banco = await lerBanco('pacientes'); }
   catch (e) { conteudo.append(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message)); return; }
-  const pseudos = banco.pacientes.filter(p => ehPseudoProntuario(p.Prontuario));
+  const pseudos = banco.pacientes.filter(p => ehPseudoProntuario(p.Prontuario) && p.Descartado !== 'S');
+  const descartados = banco.pacientes.filter(p => ehPseudoProntuario(p.Prontuario) && p.Descartado === 'S');
   const sugestoes = sugerirUnificacoes(banco.pacientes);
   const msg = el('p', { class: 'aviso-erro-texto' });
+
+  /* "Não é paciente internado": descarte reversível do registro provisório — o cadastro
+     ganha a marca (assinada) e culturas/cirurgias dele saem dos dados válidos. */
+  const descartarPseudo = async prontuario => {
+    if (!confirm(`Descartar o registro provisório ${prontuario}?\n\nAs culturas e cirurgias dele saem dos dados válidos, mas nada é apagado — dá para reverter depois.`)) return;
+    try {
+      await comTrava(['pacientes', 'culturas', 'cirurgias'], async () => {
+        const [bp, bc, bcir] = await Promise.all([lerBanco('pacientes'), lerBanco('culturas'), lerBanco('cirurgias')]);
+        const r = descartarRegistroProvisorio(bp, bc, bcir, prontuario, app.usuario, agoraCurto());
+        await gravarBanco('pacientes', bp);
+        if (r.culturas) await gravarBanco('culturas', bc);
+        if (r.cirurgias) await gravarBanco('cirurgias', bcir);
+        app.avisoPacientes = `Registro ${prontuario} descartado — ${fmtInt(r.culturas)} cultura(s) e ${fmtInt(r.cirurgias)} cirurgia(s) fora dos dados válidos.`;
+      });
+      navegar('pacientes');
+    } catch (e) { msg.textContent = e.message; }
+  };
+
+  const reverterPseudo = async prontuario => {
+    try {
+      await comTrava(['pacientes', 'culturas', 'cirurgias'], async () => {
+        const [bp, bc, bcir] = await Promise.all([lerBanco('pacientes'), lerBanco('culturas'), lerBanco('cirurgias')]);
+        const r = reverterDescarteProvisorio(bp, bc, bcir, prontuario, app.usuario, agoraCurto());
+        await gravarBanco('pacientes', bp);
+        if (r.culturas) await gravarBanco('culturas', bc);
+        if (r.cirurgias) await gravarBanco('cirurgias', bcir);
+        app.avisoPacientes = `Descarte revertido — ${fmtInt(r.culturas)} cultura(s) e ${fmtInt(r.cirurgias)} cirurgia(s) voltam como pendentes.`;
+      });
+      navegar('pacientes');
+    } catch (e) { msg.textContent = e.message; }
+  };
   if (app.avisoPacientes) {
     conteudo.append(el('div', { class: 'cartao aviso-sucesso' }, app.avisoPacientes));
     app.avisoPacientes = null;
@@ -380,11 +412,13 @@ async function montarPacientes(conteudo) {
       el('table', { class: 'tabela' },
         el('thead', {}, el('tr', {},
           el('th', {}, marcarTodas),
-          ['Paciente', 'Pseudo-registro', 'Prontuário verdadeiro'].map(c => el('th', {}, c)))),
+          ['Paciente', 'Pseudo-registro', 'Prontuário verdadeiro', ''].map(c => el('th', {}, c)))),
         el('tbody', {}, sugestoes.map((s, i) => el('tr', {},
           el('td', {}, caixas[i]),
           el('td', { class: 'linha-clicavel', onclick: () => { caixas[i].checked = !caixas[i].checked; atualizarBotao(); } }, s.nome),
-          el('td', {}, s.de), el('td', {}, s.para))))),
+          el('td', {}, s.de), el('td', {}, s.para),
+          el('td', {}, el('button', { class: 'botao-secundario', title: 'Descarta o registro provisório (reversível)',
+            onclick: () => descartarPseudo(s.de) }, 'não é internado')))))),
       el('div', { class: 'linha-botoes' }, botao)));
   }
 
@@ -400,9 +434,25 @@ async function montarPacientes(conteudo) {
         const para = normalizarProntuario(campoReal.value);
         if (!para) { msg.textContent = 'Informe o prontuário verdadeiro.'; return; }
         executar(selPseudo.value, para);
-      } }, 'Unificar'))
+      } }, 'Unificar'),
+      el('button', { class: 'botao-secundario', title: 'Descarta o registro provisório (reversível)',
+        onclick: () => descartarPseudo(selPseudo.value) }, 'Não é paciente internado'))
       : el('p', { class: 'texto-suave' }, 'Nenhum pseudo-registro no banco.'),
     msg));
+
+  if (descartados.length) {
+    conteudo.append(el('div', { class: 'cartao' }, el('details', {},
+      el('summary', {}, `Registros provisórios descartados (${fmtInt(descartados.length)})`),
+      el('p', { class: 'texto-suave' },
+        'Marcados como "não é paciente internado": as culturas e cirurgias deles estão fora dos dados '
+        + 'válidos, mas nada foi apagado — reverter devolve tudo como pendente.'),
+      el('table', { class: 'tabela' },
+        el('thead', {}, el('tr', {}, ['Registro', 'Nome', 'Descartado por', 'Em', ''].map(c => el('th', {}, c)))),
+        el('tbody', {}, descartados.map(p => el('tr', {},
+          el('td', {}, p.Prontuario), el('td', {}, p.Nome || ''),
+          el('td', {}, p.DescartadoPor || ''), el('td', {}, p.DescartadoEm || ''),
+          el('td', {}, el('button', { class: 'botao-secundario', onclick: () => reverterPseudo(p.Prontuario) }, '↩ Reverter')))))))));
+  }
 
   const campoBusca = el('input', { type: 'text', placeholder: 'nome ou prontuário' });
   const areaLista = el('div', {});

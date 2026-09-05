@@ -1624,7 +1624,8 @@ function ehPseudoProntuario(prontuario) {
 }
 
 function sugerirUnificacoes(pacientes) {
-  const pseudos = pacientes.filter(p => ehPseudoProntuario(p.Prontuario) && String(p.Nome || '').trim());
+  const pseudos = pacientes.filter(p => ehPseudoProntuario(p.Prontuario) && String(p.Nome || '').trim()
+    && p.Descartado !== 'S');
   const reais = pacientes.filter(p => !ehPseudoProntuario(p.Prontuario) && String(p.Nome || '').trim());
   const porNome = new Map();
   for (const r of reais) {
@@ -1640,6 +1641,63 @@ function sugerirUnificacoes(pacientes) {
     }
   }
   return sugestoes;
+}
+
+/* "Não é paciente internado": o registro provisório (pseudo-prontuário do laboratório ou
+   do centro cirúrgico) é marcado como descartado e o que ele carregava sai dos dados
+   válidos — culturas e cirurgias viram 'descartada'. NADA é apagado: o descarte fica
+   assinado no cadastro e a reversão devolve tudo como 'pendente', para revisão humana
+   (uma cultura que já era descartada antes volta como pendente na reversão — melhor
+   reaparecer na fila do que sumir dado válido). */
+function descartarRegistroProvisorio(bancoPacientes, bancoCulturas, bancoCirurgias, prontuario, autor, quando) {
+  const chave = normalizarProntuario(prontuario);
+  const cadastro = ((bancoPacientes || {}).pacientes || [])
+    .find(p => normalizarProntuario(p.Prontuario) === chave);
+  if (!cadastro) throw new Error('Registro não encontrado no cadastro.');
+  if (!ehPseudoProntuario(cadastro.Prontuario)) {
+    throw new Error('Só registros provisórios (laboratório/centro cirúrgico) podem ser descartados.');
+  }
+  cadastro.Descartado = 'S';
+  cadastro.DescartadoPor = autor;
+  cadastro.DescartadoEm = quando;
+  let culturas = 0, cirurgias = 0;
+  for (const c of ((bancoCulturas || {}).culturas || [])) {
+    if (normalizarProntuario(c.Prontuario) !== chave || c.StatusRevisao === 'descartada') continue;
+    c.StatusRevisao = 'descartada';
+    culturas++;
+  }
+  for (const c of ((bancoCirurgias || {}).cirurgias || [])) {
+    if (normalizarProntuario(c.Prontuario) !== chave || c.StatusVigilancia === 'descartada') continue;
+    c.StatusVigilancia = 'descartada';
+    c.ObservacoesVigilancia = acrescentarObservacao(c.ObservacoesVigilancia, '',
+      'Registro provisório descartado: não é paciente internado.', autor, quando);
+    cirurgias++;
+  }
+  return { culturas, cirurgias };
+}
+
+function reverterDescarteProvisorio(bancoPacientes, bancoCulturas, bancoCirurgias, prontuario, autor, quando) {
+  const chave = normalizarProntuario(prontuario);
+  const cadastro = ((bancoPacientes || {}).pacientes || [])
+    .find(p => normalizarProntuario(p.Prontuario) === chave);
+  if (!cadastro) throw new Error('Registro não encontrado no cadastro.');
+  cadastro.Descartado = '';
+  cadastro.DescartadoPor = '';
+  cadastro.DescartadoEm = '';
+  let culturas = 0, cirurgias = 0;
+  for (const c of ((bancoCulturas || {}).culturas || [])) {
+    if (normalizarProntuario(c.Prontuario) !== chave || c.StatusRevisao !== 'descartada') continue;
+    c.StatusRevisao = 'pendente';
+    culturas++;
+  }
+  for (const c of ((bancoCirurgias || {}).cirurgias || [])) {
+    if (normalizarProntuario(c.Prontuario) !== chave || c.StatusVigilancia !== 'descartada') continue;
+    c.StatusVigilancia = 'pendente';
+    c.ObservacoesVigilancia = acrescentarObservacao(c.ObservacoesVigilancia, '',
+      'Descarte revertido: registro volta aos dados válidos como pendente.', autor, quando);
+    cirurgias++;
+  }
+  return { culturas, cirurgias };
 }
 
 /* Distância de edição limitada (para pegar erros de digitação). */
@@ -1913,6 +1971,7 @@ if (typeof module !== 'undefined' && module.exports) {
     sugerirMapeamento, normalizarLinhas, validar, deduplicar, chaveNaturalDe, proximoID,
     analisarPDFCulturas, ehPseudoProntuario, sugerirUnificacoes, sugerirUnificacoesVocabulario, auditarVocabulario, distanciaEdicao,
     indiceDeObitos, faleceuAposCirurgia, acrescentarObservacao,
+    descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome,
     enriquecerCirurgia, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
     textoAntibiograma, classificacaoCanonica, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,

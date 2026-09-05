@@ -35,8 +35,10 @@ Autor: Rogério Sobroza de Mello (médico infectologista). Licença GPL-3.0.
 - `miniapps/fonte/`: miniapps de celular; montados por `scripts/montar-miniapps.js` com
   segredos vindos de `config-local.json` (gitignorado — usar placeholders no código).
   `decisao-atb.html` recebe do montador o próprio `js/protocolo-atb.js` (placeholder
-  `<!--PROTOCOLO-ATB-->`) e o antibiograma agregado de `antibiograma-consolidado.json`
-  (gitignorado; gerado por `scripts/consolidar-antibiograma.js`).
+  `<!--PROTOCOLO-ATB-->`); o antibiograma agregado de `antibiograma-consolidado.json`
+  (gitignorado; `scripts/consolidar-antibiograma.js`) só entra com `--com-antibiograma` —
+  a versão inicial é protocolo puro, por decisão da CCIH (painel S/I/R só existe desde
+  jun/2026 no banco).
 - Manual do usuário em `MANUAL-DO-USUARIO.md` (+ .html gerado).
 
 ## Limitação das sessões na nuvem

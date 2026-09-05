@@ -32,13 +32,16 @@ if (configLocal.PASTA_DADOS) {
 const paraArray = itens => itens.map(i => JSON.stringify(i)).join(', ');
 
 /* O miniapp de decisão de ATB leva o motor do protocolo (o MESMO js/protocolo-atb.js do
-   aplicativo, sem cópia divergente) e o antibiograma consolidado do hospital, gerado por
-   scripts/consolidar-antibiograma.js. Sem o JSON o miniapp monta, mas avisa que está sem
-   dados locais. */
+   aplicativo, sem cópia divergente). O antibiograma consolidado do hospital (gerado por
+   scripts/consolidar-antibiograma.js) só entra com --com-antibiograma: a versão inicial
+   é o protocolo puro, por decisão da CCIH — o banco ainda não tem painel S/I/R suficiente
+   para o recorte longo. */
 const protocoloATB = fs.readFileSync(path.join(raiz, 'js', 'protocolo-atb.js'), 'utf-8');
 let antibiogramaJSON = null;
-try { antibiogramaJSON = fs.readFileSync(path.join(pastaFonte, 'antibiograma-consolidado.json'), 'utf-8'); }
-catch (e) { console.log('(sem antibiograma-consolidado.json — rode node scripts/consolidar-antibiograma.js; decisao-atb sai sem dados locais)'); }
+if (process.argv.includes('--com-antibiograma')) {
+  try { antibiogramaJSON = fs.readFileSync(path.join(pastaFonte, 'antibiograma-consolidado.json'), 'utf-8'); }
+  catch (e) { console.log('(sem antibiograma-consolidado.json — rode node scripts/consolidar-antibiograma.js antes)'); }
+} else console.log('decisao-atb: protocolo puro (use --com-antibiograma para embutir o antibiograma local)');
 
 for (const nome of fs.readdirSync(pastaFonte).filter(n => n.endsWith('.html'))) {
   let fonte = fs.readFileSync(path.join(pastaFonte, nome), 'utf-8');

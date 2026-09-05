@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CCIH — Decisão ATB empírica</title>
+<style>
+* { box-sizing: border-box; } body { font-family: system-ui, sans-serif; margin: 0; background: #f2f4f7; color: #1f2933; }
+header { background: #14532d; color: #fff; padding: 14px 16px; font-size: 18px; font-weight: 700; }
+main { padding: 12px; max-width: 560px; margin: 0 auto; }
+.cartao { background: #fff; border: 1px solid #dde3ea; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+label { display: block; font-size: 13px; color: #61707f; margin-top: 8px; }
+input[type=text], select { width: 100%; font-size: 16px; padding: 9px; border: 1px solid #c3ccd6; border-radius: 8px; background: #fff; }
+.linha { display: flex; gap: 8px; } .linha > div { flex: 1; }
+button { font-size: 15px; font-weight: 600; border-radius: 8px; padding: 11px; border: none; cursor: pointer; width: 100%; margin-top: 8px; }
+.principal { background: #14532d; color: #fff; } .secundario { background: #fff; color: #14532d; border: 1px solid #14532d; }
+.excluir { background: none; border: none; color: #b03a2e; font-size: 13px; width: auto; padding: 2px 6px; margin: 0; }
+.suave { color: #61707f; font-size: 13px; }
+.oculto { display: none; }
+.aviso { border-left: 5px solid #e5b95c; background: #fdf3dd; color: #633806; }
+.aviso p, .aviso li { margin: 6px 0 0; font-size: 14px; }
+.aviso ul { margin: 4px 0 0; padding-left: 18px; }
+.versao { font-size: 12px; font-weight: 400; opacity: .7; }
+h2 { font-size: 17px; margin: 0 0 6px; } h3 { font-size: 13px; color: #61707f; text-transform: uppercase; letter-spacing: .04em; margin: 14px 0 4px; }
+.esq { padding: 8px 0; border-top: 1px solid #eef1f5; }
+.esq:first-child { border-top: none; padding-top: 0; }
+.esq .rot { font-size: 12px; color: #14532d; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.esq .pos { font-size: 15px; }
+ul.exames { margin: 0; padding-left: 18px; font-size: 14px; color: #61707f; }
+details { border-top: 1px solid #eef1f5; } details:last-of-type { border-bottom: 1px solid #eef1f5; }
+summary { padding: 9px 0; font-size: 14px; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+summary i { color: #61707f; font-style: normal; font-size: 12px; white-space: nowrap; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-bottom: 10px; }
+td, th { padding: 4px 4px; text-align: left; border-bottom: 1px solid #f1f4f7; } th { font-size: 11px; color: #61707f; text-transform: uppercase; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+td.alta { color: #b03a2e; font-weight: 700; }
+.item { border-bottom: 1px solid #eef1f5; padding: 10px 0; font-size: 14px; }
+.selos span { background: #e8f3ec; color: #14532d; border-radius: 10px; padding: 2px 8px; font-size: 12px; margin-right: 4px; }
+.selos .enviado { background: #fdf3dd; color: #633806; }
+</style>
+</head>
+<body>
+<header>Decisão de ATB empírica <span class="versao">v05.09</span></header>
+<main>
+  <div class="cartao aviso" id="avisoAbertura">
+    <strong>Este arquivo precisa ser aberto no navegador.</strong>
+    <p>Você está vendo apenas a pré-visualização do arquivo, que não executa o aplicativo.
+       Toque nos três pontinhos (⋮) no canto da tela e escolha <strong>Abrir com → Chrome</strong>,
+       ou baixe o arquivo e abra-o pela pasta Downloads.</p>
+  </div>
+  <div class="cartao aviso" id="avisoArmazenamento" style="display:none">
+    <strong>Os registros não estão sendo salvos neste aparelho.</strong>
+    <p>Se fechar a página, perde o que registrou. Baixe o arquivo e abra-o pelo navegador.</p>
+  </div>
+  <div class="cartao aviso" id="avisoAntibiograma" style="display:none">
+    <strong>Este arquivo foi montado sem o antibiograma do hospital.</strong>
+    <p>As sugestões seguem o protocolo, mas sem os avisos de resistência local. Peça à CCIH a versão atualizada.</p>
+  </div>
+
+  <div class="cartao">
+    <p class="suave" id="publico" style="margin:0 0 4px"></p>
+    <div class="linha">
+      <div><label>Prontuário (opcional)</label><input type="text" id="prontuario" inputmode="numeric"></div>
+      <div><label>Quem decide</label><input type="text" id="medico" placeholder="seu nome"></div>
+    </div>
+    <label>Síndrome</label><select id="sindrome"><option value="">escolha a síndrome…</option></select>
+    <p class="suave" id="germes" style="margin:6px 0 0"></p>
+    <div id="perguntas"></div>
+    <button class="principal oculto" id="analisar">Analisar caso</button>
+  </div>
+
+  <div class="cartao oculto" id="resultado"></div>
+
+  <div class="cartao">
+    <div id="lista"></div>
+    <p class="suave" id="resumo"></p>
+    <button class="secundario" id="enviar">Enviar decisões registradas à CCIH</button>
+    <p class="suave">Funciona sem internet: registre agora e envie quando houver rede. Sai só o prontuário — nunca o nome do paciente.</p>
+    <button class="excluir" id="limpar" style="width:100%">Apagar todos os registros do aparelho</button>
+  </div>
+  <p class="suave" id="rodape"></p>
+</main>
+<!--PROTOCOLO-ATB-->
+<!--ANTIBIOGRAMA-->
+<script>
+const CHAVE = 'ccih.decisao.atb.v1';
+const CHAVE_MEDICO = 'ccih.decisao.atb.medico';
+const EMAIL_DESTINO = 'defina-o-email-da-ccih@exemplo.br';
+const ENVIO_URL = '';
+const ENVIO_SEGREDO = 'troque-este-segredo';
+const $ = id => document.getElementById(id);
+
+/* O aviso de abertura fica visível por padrão e some assim que o script roda: se a página
+   for aberta num visualizador que não executa JavaScript (a pré-visualização do Google
+   Drive, por exemplo), o usuário lê o que fazer em vez de encontrar um formulário morto. */
+$('avisoAbertura').style.display = 'none';
+
+/* Esses mesmos visualizadores rodam a página numa caixa sem armazenamento, e aí tocar em
+   localStorage lança exceção. Sem esta proteção o miniapp morria na primeira linha. */
+let armazenamentoOk = true;
+const guardadoNaMemoria = {};
+function lerLocal(chave) {
+  try { return localStorage.getItem(chave); }
+  catch (e) { armazenamentoOk = false; return chave in guardadoNaMemoria ? guardadoNaMemoria[chave] : null; }
+}
+function gravarLocal(chave, valor) {
+  try { localStorage.setItem(chave, valor); }
+  catch (e) { armazenamentoOk = false; guardadoNaMemoria[chave] = valor; }
+}
+function conferirArmazenamento() { $('avisoArmazenamento').style.display = armazenamentoOk ? 'none' : ''; }
+
+/* Motor do protocolo (js/protocolo-atb.js) e antibiograma consolidado entram pelo
+   montador. Sem o antibiograma o miniapp segue funcionando — só avisa. */
+const AB = typeof ANTIBIOGRAMA_CONSOLIDADO !== 'undefined' ? ANTIBIOGRAMA_CONSOLIDADO : null;
+if (!AB) $('avisoAntibiograma').style.display = '';
+if (typeof PROTOCOLO_ATB === 'undefined') {
+  document.querySelector('main').prepend(Object.assign(document.createElement('div'), { className: 'cartao aviso',
+    textContent: 'Arquivo-fonte sem o protocolo embutido: monte com node scripts/montar-miniapps.js.' }));
+  throw new Error('PROTOCOLO_ATB ausente');
+}
+const antibiogramaDe = germes => germes.map(g => (AB && AB.germes.find(b => b.germe === g)) || { germe: g, culturas: 0, linhas: [] });
+
+function el(tag, attrs, ...filhos) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === null || v === undefined) continue;
+    if (k.startsWith('on')) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v);
+  }
+  const por = f => { if (f === null || f === undefined || f === false) return;
+    if (Array.isArray(f)) f.forEach(por); else n.append(f.nodeType ? f : document.createTextNode(f)); };
+  filhos.forEach(por);
+  return n;
+}
+
+/* ---- caso ---- */
+$('publico').textContent = PROTOCOLO_ATB.publico;
+$('medico').value = lerLocal(CHAVE_MEDICO) || '';
+$('medico').oninput = () => gravarLocal(CHAVE_MEDICO, $('medico').value.trim());
+for (const s of PROTOCOLO_ATB.sindromes) $('sindrome').append(el('option', { value: s.id }, s.rotulo));
+
+const controles = new Map();
+let ultimaAnalise = null;
+function sindromeAtual() { return PROTOCOLO_ATB.sindromes.find(s => s.id === $('sindrome').value); }
+
+function desenharPerguntas() {
+  controles.clear();
+  $('resultado').classList.add('oculto');
+  ultimaAnalise = null;
+  const s = sindromeAtual();
+  if (!s) { $('perguntas').replaceChildren(); $('germes').textContent = ''; $('analisar').classList.add('oculto'); return; }
+  $('germes').textContent = 'Germes prováveis (protocolo): ' + s.germes.join(', ') + '.';
+  $('perguntas').replaceChildren(...s.perguntas.map(p => {
+    const controle = p.tipo === 'escolha'
+      ? el('select', {}, p.opcoes.map(([v, r]) => el('option', { value: v }, r)))
+      : el('select', {}, el('option', { value: '' }, 'não'), el('option', { value: 'S' }, 'sim'));
+    controles.set(p.id, { controle, tipo: p.tipo });
+    return el('div', {}, el('label', {}, p.rotulo), controle);
+  }));
+  $('analisar').classList.remove('oculto');
+}
+$('sindrome').onchange = desenharPerguntas;
+
+function tabelaAntibiograma(bloco) {
+  const linhas = bloco.linhas.slice(0, 12);
+  return el('details', {},
+    el('summary', {}, el('span', {}, bloco.germe), el('i', {}, bloco.culturas + ' isolados')),
+    linhas.length ? el('table', {},
+      el('thead', {}, el('tr', {}, el('th', {}, 'Antibiótico'), el('th', { class: 'n' }, '%R'), el('th', { class: 'n' }, 'n'))),
+      el('tbody', {}, linhas.map(l => {
+        const alta = l.testados >= 20 && l.pctR >= 30;
+        return el('tr', {}, el('td', {}, l.rotulo), el('td', { class: 'n' + (alta ? ' alta' : '') }, l.pctR + '%'), el('td', { class: 'n' }, String(l.testados)));
+      })))
+      : el('p', { class: 'suave', style: 'margin:0 0 10px' }, 'Sem antibiograma local para este germe no período.'));
+}
+
+$('analisar').onclick = () => {
+  const s = sindromeAtual();
+  if (!s) return;
+  const respostas = {}, legivel = [];
+  for (const p of s.perguntas) {
+    const { controle, tipo } = controles.get(p.id);
+    if (tipo === 'escolha') {
+      respostas[p.id] = controle.value;
+      legivel.push(p.rotulo + ': ' + controle.selectedOptions[0].textContent);
+    } else {
+      respostas[p.id] = controle.value === 'S';
+      legivel.push(p.rotulo + ': ' + (respostas[p.id] ? 'sim' : 'não'));
+    }
+  }
+  const decisao = s.decidir(respostas);
+  const antibiograma = antibiogramaDe(s.germes);
+  const avisosLocais = AB ? avisosDeResistenciaLocal(decisao.esquemas, antibiograma, AB.periodoTexto) : [];
+  const avisos = [...avisosLocais, ...decisao.avisos];
+  ultimaAnalise = { sindrome: s.rotulo, respostas: legivel.join(' | '),
+    esquema: decisao.esquemas.map(e => e.rotulo + ' — ' + e.posologia).join(' | '), avisosLocais: avisosLocais.length };
+
+  const conduta = el('input', { type: 'text', id: 'conduta', placeholder: 'só se diferente da sugestão' });
+  $('resultado').replaceChildren(
+    el('h2', {}, 'Sugestão — ' + s.rotulo),
+    el('div', {}, decisao.esquemas.map(e => el('div', { class: 'esq' }, el('div', { class: 'rot' }, e.rotulo), el('div', { class: 'pos' }, e.posologia)))),
+    avisos.length ? el('div', { class: 'cartao aviso', style: 'margin:10px 0 0' },
+      el('strong', {}, '⚠ Avisos dos dados locais'), el('ul', {}, avisos.map(a => el('li', {}, a)))) : null,
+    el('h3', {}, 'Culturas e exames antes do antibiótico'),
+    el('ul', { class: 'exames' }, decisao.exames.map(x => el('li', {}, x))),
+    el('h3', {}, 'Antibiograma local dos germes prováveis'),
+    AB ? el('p', { class: 'suave', style: 'margin:0 0 6px' }, `Culturas do hospital com antibiograma no banco da CCIH, ${AB.periodoTexto} (consolidado em ${AB.geradoEm}). `
+      + 'Linhas em vermelho: ≥30% de resistência com n ≥ 20.') : null,
+    el('div', {}, antibiograma.map(tabelaAntibiograma)),
+    el('label', {}, 'Conduta adotada'), conduta,
+    el('button', { class: 'principal', onclick: registrar }, 'Registrar decisão'),
+    el('p', { class: 'suave', style: 'margin:10px 0 0' }, REVISAO_PROTOCOLO_ATB),
+    el('p', { class: 'suave' }, 'Fonte: ' + PROTOCOLO_ATB.fonte + '. Ferramenta de APOIO à decisão — não substitui o julgamento clínico nem a avaliação da CCIH para antimicrobianos auditados.'));
+  $('resultado').classList.remove('oculto');
+  $('resultado').scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
+/* ---- registros no aparelho ---- */
+let registros = [];
+try { registros = JSON.parse(lerLocal(CHAVE) || '[]'); } catch (e) { registros = []; }
+function gravar() { gravarLocal(CHAVE, JSON.stringify(registros)); conferirArmazenamento(); desenharLista(); }
+
+function registrar() {
+  if (!ultimaAnalise) return;
+  const agora = new Date();
+  registros.push({
+    Data: agora.toISOString().slice(0, 10), Hora: agora.toTimeString().slice(0, 5),
+    Prontuario: $('prontuario').value.trim(), Sindrome: ultimaAnalise.sindrome, Respostas: ultimaAnalise.respostas,
+    EsquemaSugerido: ultimaAnalise.esquema, AvisosLocais: String(ultimaAnalise.avisosLocais),
+    CondutaAdotada: ($('conduta') || {}).value || '', AntibiogramaPeriodo: AB ? AB.periodoTexto : '',
+    CriadoPor: $('medico').value.trim(), CriadoEm: agora.toISOString().slice(0, 16).replace('T', ' '), enviadoEm: null
+  });
+  gravar();
+  $('prontuario').value = '';
+  $('resultado').classList.add('oculto');
+  ultimaAnalise = null;
+  avisar('Decisão registrada. Envie à CCIH quando tiver rede.');
+  $('lista').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function desenharLista() {
+  const lista = $('lista');
+  lista.replaceChildren();
+  registros.forEach((r, i) => {
+    const div = el('div', { class: 'item' },
+      el('button', { class: 'excluir', style: 'float:right', onclick: () => { registros.splice(i, 1); gravar(); } }, 'excluir'),
+      el('div', {}, el('strong', {}, r.Sindrome), (r.Prontuario ? ' · pront. ' + r.Prontuario : '') + ' · ' + r.Data + ' ' + r.Hora),
+      el('div', { class: 'suave' }, r.EsquemaSugerido),
+      el('div', { class: 'selos' },
+        Number(r.AvisosLocais) ? el('span', {}, r.AvisosLocais + ' aviso(s) local(is)') : null,
+        r.CondutaAdotada ? el('span', {}, 'conduta: ' + r.CondutaAdotada) : null,
+        r.enviadoEm ? el('span', { class: 'enviado' }, 'enviado') : el('span', {}, 'aguardando envio')));
+    lista.appendChild(div);
+  });
+  const pendentes = registros.filter(r => !r.enviadoEm).length;
+  $('resumo').textContent = registros.length
+    ? `${registros.length} decisão(ões) registrada(s) neste aparelho · ${pendentes} aguardando envio`
+    : 'Nenhuma decisão registrada ainda.';
+}
+
+/* ---- envio (mesmo caminho dos outros miniapps: Apps Script → Drive; senão, arquivo + e-mail) ---- */
+function csvCampo(v) { v = String(v == null ? '' : v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+function tabelaCSV(nome, objetos) {
+  let saida = '##' + nome + '\n';
+  if (!objetos.length) return saida;
+  const colunas = Object.keys(objetos[0]);
+  saida += colunas.join(';') + '\n';
+  saida += objetos.map(o => colunas.map(c => csvCampo(o[c])).join(';')).join('\n') + '\n';
+  return saida;
+}
+function avisar(texto, erro) {
+  let st = document.getElementById('statusEnvio');
+  if (!st) { st = document.createElement('p'); st.id = 'statusEnvio'; $('enviar').after(st); }
+  st.style.cssText = 'font-weight:600;font-size:14px;margin-top:8px;color:' + (erro ? '#b03a2e' : '#14532d');
+  st.textContent = texto;
+}
+async function entregarArquivo(nome, texto) {
+  if (ENVIO_URL) {
+    try {
+      await fetch(ENVIO_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ segredo: ENVIO_SEGREDO, nome: nome, conteudo: texto }) });
+      avisar('Enviado para a pasta da CCIH no Drive: ' + nome);
+      return true;
+    } catch (e) {
+      avisar('Sem conexão para o envio direto — salvando o arquivo para enviar por e-mail.', true);
+    }
+  }
+  try {
+    const blob = new Blob(['﻿' + texto], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = nome;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    avisar('Arquivo "' + nome + '" salvo na pasta Downloads.');
+    const status = document.getElementById('statusEnvio');
+    const email = document.createElement('a');
+    email.href = 'mailto:' + EMAIL_DESTINO + '?subject=' + encodeURIComponent('CCIH — ' + nome)
+      + '&body=' + encodeURIComponent('Segue em anexo o arquivo ' + nome + ' (anexe-o pela pasta Downloads).');
+    email.textContent = '✉ Abrir e-mail para ' + EMAIL_DESTINO + ' (anexe o arquivo baixado)';
+    email.style.cssText = 'display:block;margin-top:8px;padding:10px;border:1px solid #14532d;border-radius:8px;color:#14532d;font-weight:700;text-align:center;text-decoration:none';
+    status.appendChild(email);
+    return true;
+  } catch (e) {
+    avisar('Não foi possível exportar: ' + e.message, true);
+    return false;
+  }
+}
+
+$('enviar').onclick = async () => {
+  const pendentes = registros.filter(r => !r.enviadoEm);
+  if (!pendentes.length) { avisar('Nada aguardando envio.', true); return; }
+  const quem = ($('medico').value.trim() || 'medico').replace(/[^A-Za-z0-9]+/g, '-');
+  const hoje = new Date().toISOString().slice(0, 10);
+  const nome = `DECISAO-ATB_${quem}_${hoje}_${Date.now().toString(36)}.csv`;
+  const linhas = pendentes.map(({ enviadoEm, ...r }) => r);
+  const pacote = '##ccih-miniapp;tipo=decisao_atb;versao=1\n' + tabelaCSV('decisoes', linhas);
+  if (await entregarArquivo(nome, pacote)) {
+    pendentes.forEach(r => r.enviadoEm = Date.now());
+    gravar();
+  }
+};
+$('limpar').onclick = () => {
+  if (!registros.length) return;
+  if (confirm('Apagar todas as decisões registradas neste aparelho? Se ainda não foram enviadas, serão perdidas.')) { registros = []; gravar(); }
+};
+
+$('rodape').textContent = AB
+  ? `Antibiograma consolidado ${AB.periodoTexto}, gerado em ${AB.geradoEm}. Para atualizar, a CCIH reconstrói o miniapp e o mesmo link passa a servir a versão nova.`
+  : '';
+desenharLista();
+conferirArmazenamento();
+</script>
+</body>
+</html>

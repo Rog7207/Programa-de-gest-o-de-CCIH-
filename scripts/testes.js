@@ -1872,6 +1872,21 @@ console.log('\n== 51. Decisão ATB: protocolo empírico + dados locais ==');
     avisosAB.length === 1 && avisosAB[0].includes('40%') && avisosAB[0].includes('n=25'), JSON.stringify(avisosAB));
   verificar('droga sem resistência relevante não gera aviso',
     prot.avisosDeResistenciaLocal([{ drogas: ['ceftriaxona'] }], ab).length === 0);
+
+  /* Recorte fechado para o miniapp: o que está fora da janela não conta. */
+  const fora = { ID_Cultura: 'FORA', Prontuario: '999', DataColeta: '2024-01-15',
+    Microrganismo: 'Escherichia coli', AvaliacaoCCIH: 'IRAS' };
+  const consolidado = prot.antibiogramaConsolidado(
+    { culturas: { culturas: [...culturasEcoli, fora],
+      sensibilidade: [...sensEcoli, { ID_Cultura: 'FORA', Antibiotico: 'Ciprofloxacino', Resultado: 'R' }] } },
+    ['Escherichia coli'], '2024-06-01', '2026-06-30');
+  const ciproCons = consolidado.germes[0].linhas.find(l => l.droga === 'ciprofloxacino');
+  verificar('consolidado: cultura fora da janela fica de fora; n e %R iguais aos de dentro',
+    consolidado.germes[0].culturas === 25 && ciproCons.testados === 25 && ciproCons.pctR === 40
+    && consolidado.periodo.de === '2024-06-01', JSON.stringify(consolidado));
+  verificar('aviso com período do recorte no texto',
+    prot.avisosDeResistenciaLocal([{ drogas: ['ciprofloxacino'] }], consolidado.germes, 'entre jun/2024 e jun/2026')[0]
+      .includes('testados entre jun/2024 e jun/2026'));
 }
 
 console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);

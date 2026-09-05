@@ -34,6 +34,9 @@ Autor: Rogério Sobroza de Mello (médico infectologista). Licença GPL-3.0.
 - `js/excel.js`: camada de dados (pasta, travas, leitura/gravação, cache por assinatura).
 - `miniapps/fonte/`: miniapps de celular; montados por `scripts/montar-miniapps.js` com
   segredos vindos de `config-local.json` (gitignorado — usar placeholders no código).
+  `decisao-atb.html` recebe do montador o próprio `js/protocolo-atb.js` (placeholder
+  `<!--PROTOCOLO-ATB-->`) e o antibiograma agregado de `antibiograma-consolidado.json`
+  (gitignorado; gerado por `scripts/consolidar-antibiograma.js`).
 - Manual do usuário em `MANUAL-DO-USUARIO.md` (+ .html gerado).
 
 ## Limitação das sessões na nuvem

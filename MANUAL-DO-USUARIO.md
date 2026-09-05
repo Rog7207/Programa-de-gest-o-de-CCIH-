@@ -133,12 +133,19 @@ A aba Antibióticos traz:
 
 ## 5. Miniapps (celular)
 
-Dois miniaplicativos rodam **offline no celular**, distribuídos por QR code (aba
+Três miniaplicativos rodam **offline no celular**, distribuídos por QR code (aba
 Configurações → distribuição):
 
 - **Visita à UTI**: dispositivos por paciente (com indicação e "sugerir retirada"),
   avaliação de antibióticos à beira do leito e **suspeita de IRAS** com foco.
 - **Higiene das mãos**: observação dos 5 momentos com cronômetro de fricção.
+- **Decisão de ATB empírica** (para o médico da emergência): o protocolo institucional
+  responde o esquema e os exames a coletar; o **antibiograma consolidado do hospital**,
+  embutido no arquivo, avisa quando a droga sugerida tem resistência local alta (≥30% com
+  n ≥ 20). Sem histórico individual do paciente — isso só existe na aba Decisão ATB do
+  computador. Cada decisão fica registrada no aparelho e é enviada à CCIH quando houver
+  rede (só prontuário, nunca nome). Para renovar o antibiograma: `node
+  scripts/consolidar-antibiograma.js --de AAAA-MM-DD --ate AAAA-MM-DD` e remontar.
 
 Ao final, o miniapp **exporta um arquivo** (compartilhe pelo próprio celular — e-mail ou
 WhatsApp para você mesmo). No computador, arraste esse arquivo na aba Importar: entra

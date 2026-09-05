@@ -329,6 +329,7 @@ Cada miniapp é **um único arquivo HTML** enviado ao celular (WhatsApp/e-mail/Q
 |---|---|---|
 | `visita-uti.html` | grade de leitos, dispositivos, ATB, suspeitas | `UTI_AAAA-MM-DD.xlsx` |
 | `higiene-maos.html` | contador rápido de oportunidades (5 momentos) | `HM_SETOR_AAAA-MM-DD.xlsx` |
+| `decisao-atb.html` | apoio à decisão de ATB empírico: protocolo + antibiograma consolidado embutido (`scripts/consolidar-antibiograma.js`) | `DECISAO-ATB_MEDICO_AAAA-MM-DD.csv` |
 | `bundle-dispositivos.html` | checklists de inserção/manutenção CVC, PAV, SVD | `BUNDLE_SETOR_AAAA-MM-DD.xlsx` |
 | `busca-pos-alta.html` | contato telefônico pós-cirurgia | `POSALTA_AAAA-MM-DD.xlsx` |
 

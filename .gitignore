@@ -5,8 +5,10 @@ Visitas UTI/
 Higiene das maos/
 _pasta-de-teste-vazia-NAO-USAR/
 
-# Valores desta instalação (e-mail da CCIH, segredo do Apps Script)
+# Valores desta instalação (e-mail da CCIH, segredo do Apps Script) e o antibiograma
+# consolidado do hospital (só agregados, mas é desta casa)
 miniapps/fonte/config-local.json
+miniapps/fonte/antibiograma-consolidado.json
 
 # Miniapps montados embutem os valores locais — cada instalação monta os seus
 # com: node scripts/montar-miniapps.js

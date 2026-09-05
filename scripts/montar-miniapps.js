@@ -31,6 +31,15 @@ if (configLocal.PASTA_DADOS) {
 }
 const paraArray = itens => itens.map(i => JSON.stringify(i)).join(', ');
 
+/* O miniapp de decisão de ATB leva o motor do protocolo (o MESMO js/protocolo-atb.js do
+   aplicativo, sem cópia divergente) e o antibiograma consolidado do hospital, gerado por
+   scripts/consolidar-antibiograma.js. Sem o JSON o miniapp monta, mas avisa que está sem
+   dados locais. */
+const protocoloATB = fs.readFileSync(path.join(raiz, 'js', 'protocolo-atb.js'), 'utf-8');
+let antibiogramaJSON = null;
+try { antibiogramaJSON = fs.readFileSync(path.join(pastaFonte, 'antibiograma-consolidado.json'), 'utf-8'); }
+catch (e) { console.log('(sem antibiograma-consolidado.json — rode node scripts/consolidar-antibiograma.js; decisao-atb sai sem dados locais)'); }
+
 for (const nome of fs.readdirSync(pastaFonte).filter(n => n.endsWith('.html'))) {
   let fonte = fs.readFileSync(path.join(pastaFonte, nome), 'utf-8');
   for (const [chave, valor] of Object.entries(configLocal)) {
@@ -45,9 +54,16 @@ for (const nome of fs.readdirSync(pastaFonte).filter(n => n.endsWith('.html'))) 
        para o antibiótico não padronizado. */
     fonte = fonte.replace(/const ATBS = \[[\s\S]*?\];/, `const ATBS = [${paraArray(atbsHospital)}];`);
   }
-  const montado = fonte.includes('<!--SHEETJS-->')
+  let montado = fonte.includes('<!--SHEETJS-->')
     ? fonte.replace('<!--SHEETJS-->', () => '<script>' + lib + '</script>')
     : fonte;
+  if (montado.includes('<!--PROTOCOLO-ATB-->')) {
+    montado = montado.replace('<!--PROTOCOLO-ATB-->', () => '<script>' + protocoloATB + '</script>');
+  }
+  if (montado.includes('<!--ANTIBIOGRAMA-->')) {
+    montado = montado.replace('<!--ANTIBIOGRAMA-->', () => antibiogramaJSON
+      ? '<script>const ANTIBIOGRAMA_CONSOLIDADO = ' + antibiogramaJSON + ';</script>' : '');
+  }
   fs.writeFileSync(path.join(raiz, 'miniapps', nome), montado);
   console.log('montado: miniapps/' + nome, `(${Math.round(montado.length / 1024)} KB)`);
 }

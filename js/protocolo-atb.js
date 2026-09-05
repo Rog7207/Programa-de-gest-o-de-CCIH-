@@ -360,7 +360,8 @@ function antibiogramaLocalPorGermes(bancos, germes, hoje, meses) {
 
 /* Cruza o esquema sugerido com o antibiograma local: droga com resistência alta nos
    germes prováveis vira aviso com número e n — o dado local corrigindo o consenso. */
-function avisosDeResistenciaLocal(esquemas, antibiograma) {
+function avisosDeResistenciaLocal(esquemas, antibiograma, periodoTexto) {
+  const periodo = periodoTexto || 'nos últimos 24 meses';
   const avisos = [];
   for (const esquema of (esquemas || [])) {
     for (const droga of (esquema.drogas || [])) {
@@ -368,7 +369,7 @@ function avisosDeResistenciaLocal(esquemas, antibiograma) {
         const linha = (bloco.linhas || []).find(l => l.droga === droga);
         if (!linha || linha.testados < 20 || linha.pctR < 30) continue;
         avisos.push(`Atenção — dado LOCAL: ${bloco.germe} tem ${linha.pctR}% de resistência a `
-          + `${linha.rotulo} (n=${linha.testados} testados nos últimos 24 meses). `
+          + `${linha.rotulo} (n=${linha.testados} testados ${periodo}). `
           + 'Considerar alternativa ou coleta de cultura antes da primeira dose.');
       }
     }
@@ -376,7 +377,22 @@ function avisosDeResistenciaLocal(esquemas, antibiograma) {
   return [...new Set(avisos)];
 }
 
+/* ---- Antibiograma consolidado para o miniapp ----
+   O celular não carrega o banco: leva um recorte FECHADO (ex.: jun/2024–jun/2026) do
+   antibiograma dos germes do protocolo, calculado aqui no computador da CCIH e embutido
+   no HTML pelo montador. Só agregados (n testados e %R) — nenhum dado de paciente sai. */
+function antibiogramaConsolidado(bancos, germes, de, ate) {
+  const culturas = ((bancos.culturas || {}).culturas || []).filter(c => {
+    const d = String(c.DataColeta).slice(0, 10);
+    return d >= de && d <= ate;
+  });
+  const recorte = { culturas: { culturas, sensibilidade: (bancos.culturas || {}).sensibilidade || [] } };
+  /* O corte por meses de antibiogramaLocalPorGermes fica folgado: o recorte por data já foi feito. */
+  const meses = Math.ceil((Date.parse(ate + 'T00:00:00Z') - Date.parse(de + 'T00:00:00Z')) / (30 * 86400000)) + 1;
+  return { periodo: { de, ate }, germes: antibiogramaLocalPorGermes(recorte, germes, ate, meses) };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { PROTOCOLO_ATB, REVISAO_PROTOCOLO_ATB, contextoLocalDoPaciente,
-    antibiogramaLocalPorGermes, avisosDeResistenciaLocal, drogaCanonicaATB };
+    antibiogramaLocalPorGermes, antibiogramaConsolidado, avisosDeResistenciaLocal, drogaCanonicaATB };
 }

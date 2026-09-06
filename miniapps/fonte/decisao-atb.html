@@ -40,7 +40,7 @@ td.alta { color: #b03a2e; font-weight: 700; }
 </style>
 </head>
 <body>
-<header>Decisão de ATB empírica <span class="versao">v06.09</span></header>
+<header>Decisão de ATB empírica <span class="versao">v06.09a</span></header>
 <main>
   <div class="cartao aviso" id="avisoAbertura">
     <strong>Este arquivo precisa ser aberto no navegador.</strong>
@@ -193,7 +193,8 @@ $('analisar').onclick = () => {
     esquema: decisao.esquemas.map(e => e.rotulo + ' — ' + e.posologia).join(' | '), avisosLocais: avisosLocais.length };
 
   const conduta = el('input', { type: 'text', id: 'conduta', placeholder: 'só se diferente da sugestão' });
-  $('resultado').replaceChildren(
+  /* Tudo passa por el(): replaceChildren não ignora null nem arrays (virava um "null" na tela). */
+  $('resultado').replaceChildren(el('div', {},
     el('h2', {}, 'Sugestão — ' + s.rotulo),
     el('div', {}, decisao.esquemas.map(e => el('div', { class: 'esq' }, el('div', { class: 'rot' }, e.rotulo), el('div', { class: 'pos' }, e.posologia)))),
     avisos.length ? el('div', { class: 'cartao aviso', style: 'margin:10px 0 0' },
@@ -219,7 +220,7 @@ $('analisar').onclick = () => {
     el('p', { class: 'suave', style: 'margin:10px 0 0' }, REVISAO_PROTOCOLO_ATB),
     el('p', { class: 'suave' }, 'Fonte: ' + PROTOCOLO_ATB.fonte + '. Ferramenta de APOIO à decisão — não substitui o julgamento clínico nem a avaliação da CCIH para antimicrobianos auditados.'),
     (PROTOCOLO_ATB.adendos || []).length ? el('p', { class: 'suave' }, 'Adendos validados pela CCIH: '
-      + PROTOCOLO_ATB.adendos.map(a => a.data.split('-').reverse().join('/') + ' — ' + a.texto).join(' · ')) : null);
+      + PROTOCOLO_ATB.adendos.map(a => a.data.split('-').reverse().join('/') + ' — ' + a.texto).join(' · ')) : null));
   $('resultado').classList.remove('oculto');
   $('resultado').scrollIntoView({ behavior: 'smooth', block: 'start' });
 };

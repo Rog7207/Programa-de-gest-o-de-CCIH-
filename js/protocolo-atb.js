@@ -38,7 +38,8 @@ const PROTOCOLO_ATB = {
       + '(nefrotoxicidade). Risco ESBL → ertapenem 1 g IV 1x/dia; alergia a beta-lactâmicos → levofloxacino com dose '
       + 'ajustada; ciprofloxacino VO ajustado para 24/24h.' },
     { data: '2026-09-06', texto: 'Função renal: a primeira dose é sempre plena; o ajuste começa na segunda dose, '
-      + 'pela tabela de correção exibida junto do esquema.' },
+      + 'pela tabela de correção exibida junto do esquema. Nível sérico de vancomicina/amicacina quando disponível; '
+      + 'sem dosagem, corrigir pela tabela e acompanhar creatinina.' },
     { data: '2026-09-06', texto: 'Risco de MRSA definido (MRSA prévio em 12 meses; internação/cirurgia/ATB IV em 90 dias; '
       + 'hemodiálise, ILPI ou droga injetável; falha de beta-lactâmico) com reforços por sítio — sem mudança de conduta.' },
     { data: '2026-09-06', texto: 'Pé diabético infectado acrescentado como síndrome (classificação IWGDF/IDSA 2023): leve VO, '
@@ -394,15 +395,18 @@ const PROTOCOLO_ATB = {
    moxifloxacino, fosfomicina) não ajustam. Referência: bula/Sanford — conferir com a
    farmácia em diálise. */
 const ORIENTACAO_RENAL = 'Primeira dose sempre plena (dose de ataque), qualquer que seja a função renal. '
-  + 'O ajuste começa na SEGUNDA dose, pela TFG/ClCr — e, para vancomicina e amicacina, pelo nível sérico.';
+  + 'O ajuste começa na SEGUNDA dose, pela TFG/ClCr. Vancomicina e amicacina: nível sérico QUANDO DISPONÍVEL; '
+  + 'sem dosagem, corrigir pela tabela e acompanhar creatinina a cada 48 h.';
 
 const AJUSTE_RENAL = {
-  vancomicina: { rotulo: 'Vancomicina', nota: 'Ataque 20–25 mg/kg. Manutenção guiada por vale (15–20 mg/L).', faixas: [
-    ['≥ 50', '15–20 mg/kg 8/8h a 12/12h'], ['20–49', '15–20 mg/kg 24/24h'], ['10–19', '15–20 mg/kg 24–48h'],
-    ['< 10 / diálise', 'redosar pelo nível sérico (após a diálise)']] },
-  amicacina: { rotulo: 'Amicacina', nota: '1ª dose 15 mg/kg plena; depois só pelo intervalo e nível (vale < 5 mg/L antes de redosar).', faixas: [
+  vancomicina: { rotulo: 'Vancomicina', nota: 'Ataque 20–25 mg/kg (máx. 2 g). Se houver dosagem: vale 15–20 mg/L antes da 4ª dose. '
+    + 'Sem dosagem: tabela + creatinina a cada 48 h.', faixas: [
+    ['> 90', '15–20 mg/kg 8/8h a 12/12h'], ['50–90', '15–20 mg/kg 12/12h'], ['30–49', '15–20 mg/kg 24/24h'],
+    ['15–29', '15–20 mg/kg 48/48h'], ['< 15 / diálise', 'ataque 15–20 mg/kg; depois 500 mg–1 g após cada sessão de diálise']] },
+  amicacina: { rotulo: 'Amicacina', nota: '1ª dose 15 mg/kg plena. Se houver dosagem: vale < 5 mg/L antes de redosar. '
+    + 'Sem dosagem: tabela, curso curto (≤ 5–7 dias) e creatinina a cada 48 h; com TFG < 30 preferir alternativa.', faixas: [
     ['≥ 60', '15 mg/kg 24/24h'], ['40–59', '15 mg/kg 36/36h'], ['20–39', '15 mg/kg 48/48h'],
-    ['< 20 / diálise', 'redosar só com nível sérico; em diálise, após a sessão']] },
+    ['10–19', '7,5 mg/kg 48/48h'], ['< 10 / diálise', '7,5 mg/kg após cada sessão de diálise']] },
   ciprofloxacino: { rotulo: 'Ciprofloxacino', faixas: [
     ['≥ 30', 'sem ajuste'], ['5–29', 'IV 400 mg 24/24h · VO 250–500 mg 24/24h'], ['diálise', 'como 5–29, dose após a sessão']] },
   levofloxacino: { rotulo: 'Levofloxacino', faixas: [

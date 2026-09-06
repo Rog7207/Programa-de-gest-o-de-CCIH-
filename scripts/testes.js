@@ -1848,6 +1848,9 @@ console.log('\n== 51. Decisão ATB: protocolo empírico + dados locais ==');
   verificar('toda linha da tabela renal tem rótulo e ≥2 faixas [tfg, dose]',
     Object.values(prot.AJUSTE_RENAL).every(r => r.rotulo && r.faixas.length >= 2 && r.faixas.every(f => f.length === 2 && f[0] && f[1])));
   verificar('orientação renal diz que a primeira dose é plena', /[Pp]rimeira dose sempre plena/.test(prot.ORIENTACAO_RENAL));
+  verificar('vanco e amicacina: nível sérico só "quando disponível"; tabela cobre diálise sem depender de dosagem',
+    /QUANDO DISPONÍVEL/.test(prot.ORIENTACAO_RENAL)
+    && ['vancomicina', 'amicacina'].every(d => prot.AJUSTE_RENAL[d].faixas.every(f => !/nível/.test(f[1]))));
   verificar('risco de MRSA tem a mesma definição base em PAC, pele e pé diabético, com reforço do sítio',
     ['respiratorio', 'pele', 'pe_diabetico'].every(id => {
       const p = sindrome(id).perguntas.find(q => q.rotulo === 'Risco de MRSA');

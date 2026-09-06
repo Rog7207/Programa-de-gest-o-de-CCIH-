@@ -1841,8 +1841,8 @@ console.log('\n== 51. Decisão ATB: protocolo empírico + dados locais ==');
   verificar('aspirativa com abscesso: ampicilina-sulbactam',
     aspCom.esquemas.length === 1 && aspCom.esquemas[0].drogas.join() === 'ampicilinasulbactam');
   const renalSepse = prot.ajusteRenalDosEsquemas(sindrome('sepse_fi').decidir({ riscoMDR: true }).esquemas);
-  verificar('ajuste renal: sepse MDR traz pip-tazo, vancomicina e cefepima, uma vez cada',
-    renalSepse.map(r => r.rotulo).sort().join('|') === 'Cefepima|Piperacilina-tazobactam|Vancomicina', JSON.stringify(renalSepse.map(r => r.rotulo)));
+  verificar('ajuste renal: sepse MDR traz pip-tazo, vancomicina, cefepima e a teicoplanina de transição, uma vez cada',
+    renalSepse.map(r => r.rotulo).sort().join('|') === 'Cefepima|Piperacilina-tazobactam|Teicoplanina|Vancomicina', JSON.stringify(renalSepse.map(r => r.rotulo)));
   verificar('ajuste renal: ceftriaxona sozinha não gera tabela',
     prot.ajusteRenalDosEsquemas(sindrome('sepse_fi').decidir({}).esquemas).length === 0);
   verificar('toda linha da tabela renal tem rótulo e ≥2 faixas [tfg, dose]',
@@ -1885,8 +1885,9 @@ console.log('\n== 51. Decisão ATB: protocolo empírico + dados locais ==');
     meningeIdoso.esquemas.some(e => e.drogas.includes('ampicilina'))
     && meningeIdoso.esquemas.some(e => /dexametasona/i.test(e.posologia)));
   const sepseMdr = sindrome('sepse_fi').decidir({ riscoMDR: true });
-  verificar('sepse FI com risco MDR: pip-tazo+vanco ou cefepima+vanco',
-    sepseMdr.esquemas.length === 2 && sepseMdr.esquemas.every(e => e.drogas.includes('vancomicina')));
+  verificar('sepse FI com risco MDR: pip-tazo+vanco ou cefepima+vanco (+ linha de transição para teicoplanina)',
+    sepseMdr.esquemas.length === 3 && sepseMdr.esquemas.slice(0, 2).every(e => e.drogas.includes('vancomicina'))
+    && sepseMdr.esquemas[2].drogas.join() === 'teicoplanina', JSON.stringify(sepseMdr.esquemas.map(e => e.rotulo)));
   verificar('todas as síndromes decidem sem resposta nenhuma (defaults seguros)',
     prot.PROTOCOLO_ATB.sindromes.every(s => {
       const d = s.decidir({});

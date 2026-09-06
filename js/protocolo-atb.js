@@ -15,6 +15,18 @@ const REVISAO_PROTOCOLO_ATB = 'Reavaliação obrigatória em 48–72h com as cul
 
 const VANCO = 'Vancomicina 15–20 mg/kg IV de 8/8h ou 12/12h';
 
+/* Definição única de "risco de MRSA" (CCIH, 06/09/2026; ATS/IDSA 2019 e IDSA 2014):
+   marcar "sim" se qualquer um. Cada síndrome acrescenta os seus reforços. A pergunta
+   `ajuda` aparece na tela abaixo do rótulo. */
+const RISCO_MRSA_BASE = [
+  'MRSA prévio: infecção ou colonização nos últimos 12 meses',
+  'Internação ≥ 48 h, cirurgia ou antibiótico IV nos últimos 90 dias',
+  'Hemodiálise, institucionalizado (ILPI) ou usuário de droga injetável',
+  'Falha de beta-lactâmico em curso'
+];
+const riscoMRSA = (id, reforcos) => ({ id, rotulo: 'Risco de MRSA', tipo: 'sim_nao',
+  ajuda: ['Marcar "sim" se qualquer um:', ...RISCO_MRSA_BASE, ...reforcos.map(r => r + ' (neste sítio)')] });
+
 const PROTOCOLO_ATB = {
   fonte: 'Protocolo de Tratamento Empírico de Infecções na Emergência — HNSC/SCIH',
   /* Alterações de conduta validadas pela CCIH depois do documento original. Cada uma é
@@ -26,7 +38,11 @@ const PROTOCOLO_ATB = {
       + '(nefrotoxicidade). Risco ESBL → ertapenem 1 g IV 1x/dia; alergia a beta-lactâmicos → levofloxacino com dose '
       + 'ajustada; ciprofloxacino VO ajustado para 24/24h.' },
     { data: '2026-09-06', texto: 'Função renal: a primeira dose é sempre plena; o ajuste começa na segunda dose, '
-      + 'pela tabela de correção exibida junto do esquema.' }
+      + 'pela tabela de correção exibida junto do esquema.' },
+    { data: '2026-09-06', texto: 'Risco de MRSA definido (MRSA prévio em 12 meses; internação/cirurgia/ATB IV em 90 dias; '
+      + 'hemodiálise, ILPI ou droga injetável; falha de beta-lactâmico) com reforços por sítio — sem mudança de conduta.' },
+    { data: '2026-09-06', texto: 'Pé diabético infectado acrescentado como síndrome (classificação IWGDF/IDSA 2023): leve VO, '
+      + 'moderada ceftriaxona + metronidazol, grave piperacilina-tazobactam + vancomicina; vancomicina associada se risco de MRSA.' }
   ],
   publico: 'Adultos e adolescentes (>14 anos) com infecção presente na admissão (<48h de internação). '
     + 'Sepse com foco conhecido segue o protocolo institucional de sepse.',
@@ -114,7 +130,7 @@ const PROTOCOLO_ATB = {
         { id: 'aspirativa', rotulo: 'Pneumonia aspirativa', tipo: 'sim_nao' },
         { id: 'abscesso', rotulo: 'Abscesso pulmonar (na aspirativa)', tipo: 'sim_nao' },
         { id: 'riscoPseudomonas', rotulo: 'Risco para Pseudomonas (bronquiectasias, fibrose cística)', tipo: 'sim_nao' },
-        { id: 'riscoMRSA', rotulo: 'Risco para MRSA hospitalar', tipo: 'sim_nao' }
+        riscoMRSA('riscoMRSA', ['Pós-influenza', 'Pneumonia cavitária/necrosante', 'Empiema'])
       ],
       decidir(r) {
         const exames = r.gravidade === 'leve'
@@ -157,7 +173,7 @@ const PROTOCOLO_ATB = {
           ['nao_purulenta', 'Não purulenta (celulite/erisipela)'], ['purulenta', 'Purulenta (abscesso / suspeita CA-MRSA)'],
           ['necrosante', 'Necrosante (ex.: Fournier)']] },
         { id: 'grave', rotulo: 'Quadro grave / necessidade de internação', tipo: 'sim_nao' },
-        { id: 'riscoMRSAHosp', rotulo: 'Risco de MRSA hospitalar, falha prévia ou IRAS', tipo: 'sim_nao' },
+        riscoMRSA('riscoMRSAHosp', ['Abscessos múltiplos ou recorrentes', 'Ferida operatória (IRAS)', 'Infecção purulenta grave']),
         { id: 'alergiaBL', rotulo: 'Alergia a beta-lactâmicos', tipo: 'sim_nao' }
       ],
       decidir(r) {
@@ -190,6 +206,59 @@ const PROTOCOLO_ATB = {
         return { esquemas: [
           { rotulo: 'Não purulenta leve-moderada', posologia: 'Cefalexina 500 mg–1 g VO 6/6h por 7–10 dias', drogas: ['cefalexina'] },
           { rotulo: 'Alternativa', posologia: 'Amoxicilina 500 mg–1 g VO 8/8h por 7–10 dias', drogas: ['amoxicilina'] }], exames, avisos: [] };
+      }
+    },
+
+    {
+      /* Acrescentado pela CCIH em 06/09/2026 (não consta do documento original). Classificação
+         IWGDF/IDSA 2023; esquemas seguem a padronização da casa e a preferência por 1x/dia. */
+      id: 'pe_diabetico', rotulo: 'Pé diabético infectado',
+      germes: ['Staphylococcus aureus', 'Streptococcus spp', 'Escherichia coli', 'Klebsiella pneumoniae', 'Pseudomonas aeruginosa'],
+      perguntas: [
+        { id: 'gravidade', rotulo: 'Gravidade (IWGDF/IDSA)', tipo: 'escolha', opcoes: [
+          ['leve', 'Leve — eritema ≤ 2 cm da úlcera, só pele/subcutâneo, sem sinais sistêmicos'],
+          ['moderada', 'Moderada — eritema > 2 cm ou estrutura profunda (abscesso, fasciíte, osteomielite, artrite), sem sinais sistêmicos'],
+          ['grave', 'Grave — sinais sistêmicos (SIRS) ou instabilidade']] },
+        { id: 'osteomielite', rotulo: 'Suspeita de osteomielite (osso exposto, probe-to-bone positivo, úlcera > 2 cm ou > 6 semanas, imagem)', tipo: 'sim_nao' },
+        riscoMRSA('riscoMRSA', ['Úlcera crônica com antibióticos repetidos', 'Amputação ou cirurgia prévia no pé']),
+        { id: 'alergiaBL', rotulo: 'Alergia a beta-lactâmicos', tipo: 'sim_nao' }
+      ],
+      decidir(r) {
+        const exames = ['Cultura de tecido profundo APÓS desbridamento (curetagem/biópsia) — swab superficial não orienta.',
+          'Radiografia do pé em todos; probe-to-bone; PCR/VHS. Osteomielite: biópsia óssea antes do ATB se estável.',
+          'Moderada/grave: 2 pares de hemoculturas. Avaliar perfusão (pulsos/ITB) e necessidade de desbridamento/drenagem — parte do tratamento.'];
+        const avisos = [];
+        if (r.osteomielite) avisos.push('Osteomielite suspeita: tratamento prolongado (≥ 6 semanas sem ressecção) — discutir com CCIH e ortopedia/vascular.');
+        const esquemas = [];
+        if (r.gravidade === 'grave') {
+          if (r.alergiaBL) {
+            esquemas.push({ rotulo: 'Grave, alergia a beta-lactâmicos', posologia: VANCO + ' + Ciprofloxacino 400 mg IV 12/12h + Metronidazol 500 mg IV 8/8h', drogas: ['vancomicina', 'ciprofloxacino', 'metronidazol'] });
+          } else {
+            esquemas.push({ rotulo: 'Grave (sinais sistêmicos)', posologia: 'Piperacilina + Tazobactam 4,5 g IV 6/6h + ' + VANCO, drogas: ['piperacilinatazobactam', 'vancomicina'] });
+          }
+          avisos.push('Grave: cobertura ampla (Gram-positivos, Gram-negativos, anaeróbios, MRSA) até cultura profunda — desescalonar em 48–72h.');
+        } else if (r.gravidade === 'moderada') {
+          if (r.alergiaBL) {
+            esquemas.push({ rotulo: 'Moderada, alergia a beta-lactâmicos', posologia: 'Ciprofloxacino 400 mg IV 12/12h + Clindamicina 600 mg IV 8/8h', drogas: ['ciprofloxacino', 'clindamicina'] });
+          } else {
+            esquemas.push({ rotulo: 'Moderada', posologia: 'Ceftriaxona 2 g IV 1x/dia + Metronidazol 500 mg IV 8/8h', drogas: ['ceftriaxona', 'metronidazol'] });
+            esquemas.push({ rotulo: 'Alternativa', posologia: 'Ampicilina + Sulbactam 3 g IV 6/6h', drogas: ['ampicilinasulbactam'] });
+          }
+          if (r.riscoMRSA) {
+            esquemas.push({ rotulo: 'Risco de MRSA — ASSOCIAR', posologia: VANCO, drogas: ['vancomicina'] });
+          }
+        } else {
+          if (r.alergiaBL) {
+            esquemas.push({ rotulo: 'Leve, alergia a beta-lactâmicos', posologia: 'Clindamicina 300–450 mg VO 8/8h por 1–2 semanas', drogas: ['clindamicina'] });
+          } else if (r.riscoMRSA) {
+            esquemas.push({ rotulo: 'Leve com risco de MRSA', posologia: 'Sulfametoxazol + Trimetoprima 800/160 mg VO 12/12h por 1–2 semanas (+ Cefalexina se celulite estreptocócica)', drogas: ['sulfametoxazoltrimetoprima'] });
+            esquemas.push({ rotulo: 'Alternativa', posologia: 'Doxiciclina 100 mg VO 12/12h por 1–2 semanas', drogas: ['doxiciclina'] });
+          } else {
+            esquemas.push({ rotulo: 'Leve', posologia: 'Cefalexina 500 mg–1 g VO 6/6h por 1–2 semanas', drogas: ['cefalexina'] });
+            esquemas.push({ rotulo: 'Alternativa', posologia: 'Amoxicilina + Clavulanato 875/125 mg VO 12/12h por 1–2 semanas', drogas: ['amoxicilinaacidoclavulanico'] });
+          }
+        }
+        return { esquemas, exames, avisos };
       }
     },
 
@@ -245,7 +314,8 @@ const PROTOCOLO_ATB = {
       germes: ['Staphylococcus aureus', 'Streptococcus spp'],
       perguntas: [
         { id: 'idosoComorb', rotulo: 'Idoso, diabético ou comorbidades crônicas', tipo: 'sim_nao' },
-        { id: 'posTrauma', rotulo: 'Pós-trauma ou procedimento cirúrgico prévio (IRAS)', tipo: 'sim_nao' },
+        { id: 'posTrauma', rotulo: 'Pós-trauma ou procedimento cirúrgico prévio (IRAS)', tipo: 'sim_nao',
+          ajuda: ['Inclui prótese ou material de síntese e pós-operatório recente — risco de MRSA e Pseudomonas.'] },
         { id: 'alergiaBL', rotulo: 'Alergia a beta-lactâmicos', tipo: 'sim_nao' },
         { id: 'riscoGramNeg', rotulo: 'Fator de risco para Gram-negativos', tipo: 'sim_nao' }
       ],

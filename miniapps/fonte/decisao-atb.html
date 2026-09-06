@@ -16,6 +16,8 @@ button { font-size: 15px; font-weight: 600; border-radius: 8px; padding: 11px; b
 .principal { background: #14532d; color: #fff; } .secundario { background: #fff; color: #14532d; border: 1px solid #14532d; }
 .excluir { background: none; border: none; color: #b03a2e; font-size: 13px; width: auto; padding: 2px 6px; margin: 0; }
 .suave { color: #61707f; font-size: 13px; }
+ul.ajuda { margin: 4px 0 0; padding-left: 18px; color: #61707f; font-size: 12.5px; }
+ul.ajuda li { margin: 1px 0; }
 .oculto { display: none; }
 .aviso { border-left: 5px solid #e5b95c; background: #fdf3dd; color: #633806; }
 .aviso p, .aviso li { margin: 6px 0 0; font-size: 14px; }
@@ -40,7 +42,7 @@ td.alta { color: #b03a2e; font-weight: 700; }
 </style>
 </head>
 <body>
-<header>Decisão de ATB empírica <span class="versao">v06.09a</span></header>
+<header>Decisão de ATB empírica <span class="versao">v06.09b</span></header>
 <main>
   <div class="cartao aviso" id="avisoAbertura">
     <strong>Este arquivo precisa ser aberto no navegador.</strong>
@@ -151,7 +153,8 @@ function desenharPerguntas() {
       ? el('select', {}, p.opcoes.map(([v, r]) => el('option', { value: v }, r)))
       : el('select', {}, el('option', { value: '' }, 'não'), el('option', { value: 'S' }, 'sim'));
     controles.set(p.id, { controle, tipo: p.tipo });
-    return el('div', {}, el('label', {}, p.rotulo), controle);
+    return el('div', {}, el('label', {}, p.rotulo), controle,
+      p.ajuda ? el('ul', { class: 'ajuda' }, p.ajuda.map(a => el('li', {}, a))) : null);
   }));
   $('analisar').classList.remove('oculto');
 }

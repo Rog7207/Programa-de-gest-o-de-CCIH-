@@ -62,7 +62,10 @@ async function montarDecisaoATB(conteudo) {
           el('option', { value: 'S', selected: preMarcada ? '' : null }, 'sim'));
       }
       controles.set(p.id, { controle, tipo: p.tipo });
-      return el('div', { class: 'linha-campos' }, el('label', {}, p.rotulo + ': ', controle));
+      return el('div', { class: 'linha-campos', style: 'flex-direction:column;align-items:flex-start' },
+        el('label', {}, p.rotulo + ': ', controle),
+        p.ajuda ? el('ul', { class: 'texto-suave', style: 'margin:2px 0 0;padding-left:18px;font-size:12px' },
+          p.ajuda.map(a => el('li', {}, a))) : null);
     });
     areaPerguntas.replaceChildren(
       el('p', { class: 'texto-suave' }, 'Germes prováveis (protocolo): ' + sindrome.germes.join(', ') + '.'),

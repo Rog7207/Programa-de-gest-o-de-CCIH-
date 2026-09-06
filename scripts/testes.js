@@ -1848,6 +1848,25 @@ console.log('\n== 51. Decisão ATB: protocolo empírico + dados locais ==');
   verificar('toda linha da tabela renal tem rótulo e ≥2 faixas [tfg, dose]',
     Object.values(prot.AJUSTE_RENAL).every(r => r.rotulo && r.faixas.length >= 2 && r.faixas.every(f => f.length === 2 && f[0] && f[1])));
   verificar('orientação renal diz que a primeira dose é plena', /[Pp]rimeira dose sempre plena/.test(prot.ORIENTACAO_RENAL));
+  verificar('risco de MRSA tem a mesma definição base em PAC, pele e pé diabético, com reforço do sítio',
+    ['respiratorio', 'pele', 'pe_diabetico'].every(id => {
+      const p = sindrome(id).perguntas.find(q => q.rotulo === 'Risco de MRSA');
+      return p && p.ajuda.some(a => /MRSA prévio/.test(a)) && p.ajuda.some(a => /neste sítio/.test(a));
+    }));
+  const pd = sindrome('pe_diabetico');
+  verificar('pé diabético leve: cefalexina VO; com risco MRSA: SMX-TMP',
+    pd.decidir({ gravidade: 'leve' }).esquemas[0].drogas.join() === 'cefalexina'
+    && pd.decidir({ gravidade: 'leve', riscoMRSA: true }).esquemas[0].drogas.join() === 'sulfametoxazoltrimetoprima');
+  const pdMod = pd.decidir({ gravidade: 'moderada', riscoMRSA: true });
+  verificar('pé diabético moderado com MRSA: ceftriaxona + metronidazol e vancomicina associada',
+    pdMod.esquemas.some(e => e.drogas.join() === 'ceftriaxona,metronidazol') && pdMod.esquemas.some(e => e.drogas.join() === 'vancomicina'));
+  const pdGrave = pd.decidir({ gravidade: 'grave', osteomielite: true });
+  verificar('pé diabético grave: pip-tazo + vanco; osteomielite gera aviso de duração',
+    pdGrave.esquemas[0].drogas.join() === 'piperacilinatazobactam,vancomicina' && pdGrave.avisos.some(a => /6 semanas/.test(a)));
+  verificar('pé diabético grave alérgico: vanco + cipro + metronidazol',
+    pd.decidir({ gravidade: 'grave', alergiaBL: true }).esquemas[0].drogas.join() === 'vancomicina,ciprofloxacino,metronidazol');
+  verificar('pé diabético pede cultura profunda, não swab',
+    pd.decidir({}).exames.some(x => /swab superficial/i.test(x)));
   verificar('todo adendo tem data e texto',
     prot.PROTOCOLO_ATB.adendos.every(a => /^\d{4}-\d{2}-\d{2}$/.test(a.data) && a.texto.length > 20));
   const meningeIdoso = sindrome('snc').decidir({ listeria: true });

@@ -1870,6 +1870,14 @@ console.log('\n== 51. Decisão ATB: protocolo empírico + dados locais ==');
     pd.decidir({ gravidade: 'grave', alergiaBL: true }).esquemas[0].drogas.join() === 'vancomicina,ciprofloxacino,metronidazol');
   verificar('pé diabético pede cultura profunda, não swab',
     pd.decidir({}).exames.some(x => /swab superficial/i.test(x)));
+  const osteoPos = sindrome('osteoarticular').decidir({ posTrauma: true });
+  verificar('teicoplanina aparece como transição em esquema com vancomicina fora do SNC',
+    osteoPos.esquemas.some(e => e.drogas.includes('vancomicina')) && osteoPos.esquemas[osteoPos.esquemas.length - 1].drogas.join() === 'teicoplanina');
+  verificar('SNC nunca oferece teicoplanina',
+    !sindrome('snc').decidir({ posNeuro: true }).esquemas.some(e => e.drogas.includes('teicoplanina')));
+  verificar('sem vancomicina no esquema, sem teicoplanina',
+    !sindrome('pele').decidir({ grave: true }).esquemas.some(e => e.drogas.includes('teicoplanina')));
+  verificar('teicoplanina tem tabela renal', prot.AJUSTE_RENAL.teicoplanina.faixas.length === 3);
   verificar('todo adendo tem data e texto',
     prot.PROTOCOLO_ATB.adendos.every(a => /^\d{4}-\d{2}-\d{2}$/.test(a.data) && a.texto.length > 20));
   const meningeIdoso = sindrome('snc').decidir({ listeria: true });

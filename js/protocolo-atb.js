@@ -43,7 +43,9 @@ const PROTOCOLO_ATB = {
     { data: '2026-09-06', texto: 'Risco de MRSA definido (MRSA prévio em 12 meses; internação/cirurgia/ATB IV em 90 dias; '
       + 'hemodiálise, ILPI ou droga injetável; falha de beta-lactâmico) com reforços por sítio — sem mudança de conduta.' },
     { data: '2026-09-06', texto: 'Pé diabético infectado acrescentado como síndrome (classificação IWGDF/IDSA 2023): leve VO, '
-      + 'moderada ceftriaxona + metronidazol, grave piperacilina-tazobactam + vancomicina; vancomicina associada se risco de MRSA.' }
+      + 'moderada ceftriaxona + metronidazol, grave piperacilina-tazobactam + vancomicina; vancomicina associada se risco de MRSA.' },
+    { data: '2026-09-06', texto: 'Teicoplanina (12 mg/kg 12/12h × 3, depois 1x/dia, IV ou IM) como opção de transição em todo '
+      + 'esquema com vancomicina fora do SNC — curso prolongado, alta precoce, ausência de dosagem sérica.' }
   ],
   publico: 'Adultos e adolescentes (>14 anos) com infecção presente na admissão (<48h de internação). '
     + 'Sepse com foco conhecido segue o protocolo institucional de sepse.',
@@ -387,6 +389,25 @@ const PROTOCOLO_ATB = {
   ]
 };
 
+/* ---- Teicoplanina para curso prolongado (CCIH, 06/09/2026) ----
+   Todo esquema com vancomicina fora do SNC ganha a opção de transição: 1x/dia, IM possível,
+   menos nefrotóxica e menos dependente de nível sérico (que a casa não tem). Não é o
+   empírico inicial — a carga de 3 dias atrasa o alvo; entra quando o curso vai ser longo
+   (osteomielite, pé diabético, prótese) ou para alta precoce. Aplicado por embrulho sobre
+   `decidir`, para valer em toda síndrome sem duplicar a regra. */
+const TEICOPLANINA = { rotulo: 'Curso prolongado (≥ 2 semanas) ou transição para 1x/dia / IM',
+  posologia: 'Teicoplanina 12 mg/kg IV ou IM 12/12h por 3 doses, depois 12 mg/kg 1x/dia (no lugar da vancomicina; não em SNC)',
+  drogas: ['teicoplanina'] };
+for (const sindrome of PROTOCOLO_ATB.sindromes) {
+  if (sindrome.id === 'snc') continue;
+  const original = sindrome.decidir;
+  sindrome.decidir = function (r) {
+    const decisao = original.call(this, r);
+    if (decisao.esquemas.some(e => (e.drogas || []).includes('vancomicina'))) decisao.esquemas.push(TEICOPLANINA);
+    return decisao;
+  };
+}
+
 /* ---- Ajuste à função renal ----
    Regra do protocolo (CCIH, 06/09/2026): a PRIMEIRA dose é sempre plena — dose de ataque —
    qualquer que seja a função renal; o ajuste começa na segunda dose. Faixas em TFG/ClCr
@@ -431,7 +452,9 @@ const AJUSTE_RENAL = {
     ['> 30', 'dose plena'], ['15–30', 'metade da dose'], ['< 15', 'evitar']] },
   cefalexina: { rotulo: 'Cefalexina', faixas: [
     ['≥ 60', '500 mg–1 g 6/6h'], ['30–59', 'máx. 1 g 8/8h'], ['15–29', '250–500 mg 8/8h a 12/12h'], ['5–14 / diálise', '250–500 mg 24/24h (após a sessão)']] },
-  nitrofurantoina: { rotulo: 'Nitrofurantoína', faixas: [['≥ 30', '100 mg 12/12h'], ['< 30', 'contraindicada']] }
+  nitrofurantoina: { rotulo: 'Nitrofurantoína', faixas: [['≥ 30', '100 mg 12/12h'], ['< 30', 'contraindicada']] },
+  teicoplanina: { rotulo: 'Teicoplanina', nota: 'As 3 doses de ataque (12/12h) não se ajustam; ajustar a partir do 4º dia.', faixas: [
+    ['> 60', '12 mg/kg 24/24h'], ['40–60', '12 mg/kg 48/48h'], ['< 40 / diálise', '12 mg/kg 72/72h']] }
 };
 
 /* Tabela de ajuste só das drogas presentes nos esquemas sugeridos. */

@@ -1814,6 +1814,17 @@ console.log('\n== 51. Decisão ATB: protocolo empírico + dados locais ==');
   const cistiteMulher = sindrome('urinario').decidir({ sexo: 'mulher', apresentacao: 'cistite' });
   verificar('cistite em mulher continua simples: nitrofurantoína e sem exames',
     cistiteMulher.esquemas[0].drogas.includes('nitrofurantoina') && /diagnóstico clínico/.test(cistiteMulher.exames[0]));
+  const esblTfg = sindrome('urinario').decidir({ apresentacao: 'pielonefrite', riscoEsbl: true, tfgBaixa: true });
+  verificar('pielonefrite ESBL com TFG<30: ertapenem, sem amicacina (adendo CCIH 05/09/2026)',
+    esblTfg.esquemas.length === 1 && esblTfg.esquemas[0].drogas.join() === 'ertapenem'
+    && esblTfg.avisos.some(a => /amicacina evitada/.test(a)), JSON.stringify(esblTfg));
+  const alergiaTfg = sindrome('urinario').decidir({ apresentacao: 'pielonefrite', alergiaBL: true, tfgBaixa: true });
+  verificar('pielonefrite alérgico com TFG<30: só levofloxacino ajustado, amicacina fora',
+    alergiaTfg.esquemas.length === 1 && alergiaTfg.esquemas[0].drogas.join() === 'levofloxacino'
+    && /48h/.test(alergiaTfg.esquemas[0].posologia));
+  const estavelTfg = sindrome('urinario').decidir({ apresentacao: 'pielonefrite', tfgBaixa: true });
+  verificar('pielonefrite estável com TFG<30: cipro 24/24h',
+    /24\/24h/.test(estavelTfg.esquemas[0].posologia) && estavelTfg.esquemas[0].drogas.join() === 'ciprofloxacino');
   const pieloEsbl = sindrome('urinario').decidir({ apresentacao: 'pielonefrite', riscoEsbl: true });
   verificar('pielonefrite com risco ESBL vai de amicacina',
     pieloEsbl.esquemas.length === 1 && pieloEsbl.esquemas[0].drogas.includes('amicacina'));

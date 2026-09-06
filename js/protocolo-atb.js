@@ -21,7 +21,10 @@ const PROTOCOLO_ATB = {
      uma decisão registrada aqui até ser incorporada ao texto do protocolo. */
   adendos: [
     { data: '2026-09-05', texto: 'Pneumonia aspirativa: ceftriaxona quando não há abscesso pulmonar; ampicilina-sulbactam '
-      + 'reservada à aspirativa com abscesso (4 doses/dia — praticidade pesa na adesão).' }
+      + 'reservada à aspirativa com abscesso (4 doses/dia — praticidade pesa na adesão).' },
+    { data: '2026-09-05', texto: 'Pielonefrite/ITU em homem com TFG < 30: amicacina deixa de ser empírico de escolha '
+      + '(nefrotoxicidade). Risco ESBL → ertapenem 1 g IV 1x/dia; alergia a beta-lactâmicos → levofloxacino com dose '
+      + 'ajustada; ciprofloxacino VO ajustado para 24/24h.' }
   ],
   publico: 'Adultos e adolescentes (>14 anos) com infecção presente na admissão (<48h de internação). '
     + 'Sepse com foco conhecido segue o protocolo institucional de sepse.',
@@ -59,11 +62,24 @@ const PROTOCOLO_ATB = {
           esquemas.push({ rotulo: 'Segunda linha oral', posologia: 'Amoxicilina + Clavulanato 875/125 mg VO 12/12h por 5–7 dias', drogas: ['amoxicilinaacidoclavulanico'] });
           return { esquemas, exames, avisos: [] };
         }
+        /* Adendo CCIH 05/09/2026: com TFG < 30 a amicacina sai do empírico. */
+        const levoAjustado = 'Levofloxacino 750 mg IV no 1º dia, depois 750 mg a cada 48h (TFG 20–49) ou 500 mg a cada 48h (TFG < 20)';
         if (r.riscoEsbl) {
+          const avisoEsbl = 'Risco ESBL assumido (internação/ATB/procedimento urológico em 90 dias).';
+          if (r.tfgBaixa) {
+            return { esquemas: [{ rotulo: 'Risco ESBL com TFG < 30', posologia: 'Ertapenem 1 g IV 1x/dia', drogas: ['ertapenem'] }],
+              exames, avisos: [...avisosBase, avisoEsbl,
+                'TFG < 30: amicacina evitada (nefrotoxicidade). Ertapenem cobre ESBL, não cobre Pseudomonas nem enterococo.'] };
+          }
           return { esquemas: [{ rotulo: 'Risco ESBL', posologia: 'Amicacina 15 mg/kg IV 1x/dia', drogas: ['amicacina'] }],
-            exames, avisos: [...avisosBase, 'Risco ESBL assumido (internação/ATB/procedimento urológico em 90 dias).'] };
+            exames, avisos: [...avisosBase, avisoEsbl] };
         }
         if (r.alergiaBL) {
+          if (r.tfgBaixa) {
+            return { esquemas: [{ rotulo: 'Alergia a beta-lactâmicos com TFG < 30', posologia: levoAjustado, drogas: ['levofloxacino'] }],
+              exames, avisos: [...avisosBase, 'TFG < 30: amicacina evitada (nefrotoxicidade). Se a quinolona não for opção, '
+                + 'amicacina só em dose única com nível sérico — discutir com a CCIH.'] };
+          }
           return { esquemas: [
             { rotulo: 'Alergia a beta-lactâmicos', posologia: 'Levofloxacino 750 mg IV 1x/dia', drogas: ['levofloxacino'] },
             { rotulo: 'Alternativa', posologia: 'Amicacina 15 mg/kg IV 1x/dia', drogas: ['amicacina'] }], exames, avisos: avisosBase };
@@ -72,8 +88,15 @@ const PROTOCOLO_ATB = {
           return { esquemas: [{ rotulo: ituHomemBaixa ? 'ITU em homem, internado' : 'Pielonefrite internada',
             posologia: 'Ceftriaxona 2 g IV 1x/dia', drogas: ['ceftriaxona'] }], exames, avisos: avisosBase };
         }
+        const estavel = ituHomemBaixa ? 'ITU em homem, estável (VO)' : 'Pielonefrite estável (VO)';
+        if (r.tfgBaixa) {
+          return { esquemas: [
+            { rotulo: estavel + ' — TFG < 30', posologia: 'Ciprofloxacino 500 mg VO 24/24h por 7 dias', drogas: ['ciprofloxacino'] },
+            { rotulo: 'Alternativa', posologia: levoAjustado.replace('IV', 'VO'), drogas: ['levofloxacino'] }],
+            exames, avisos: [...avisosBase, 'TFG < 30: doses de quinolona ajustadas à função renal.'] };
+        }
         return { esquemas: [
-          { rotulo: ituHomemBaixa ? 'ITU em homem, estável (VO)' : 'Pielonefrite estável (VO)', posologia: 'Ciprofloxacino 500 mg VO 12/12h por 7 dias', drogas: ['ciprofloxacino'] },
+          { rotulo: estavel, posologia: 'Ciprofloxacino 500 mg VO 12/12h por 7 dias', drogas: ['ciprofloxacino'] },
           { rotulo: 'Alternativa', posologia: 'Levofloxacino 750 mg VO 1x/dia por 5 dias', drogas: ['levofloxacino'] }], exames, avisos: avisosBase };
       }
     },

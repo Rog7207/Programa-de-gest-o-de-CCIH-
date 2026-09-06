@@ -24,7 +24,9 @@ const PROTOCOLO_ATB = {
       + 'reservada à aspirativa com abscesso (4 doses/dia — praticidade pesa na adesão).' },
     { data: '2026-09-05', texto: 'Pielonefrite/ITU em homem com TFG < 30: amicacina deixa de ser empírico de escolha '
       + '(nefrotoxicidade). Risco ESBL → ertapenem 1 g IV 1x/dia; alergia a beta-lactâmicos → levofloxacino com dose '
-      + 'ajustada; ciprofloxacino VO ajustado para 24/24h.' }
+      + 'ajustada; ciprofloxacino VO ajustado para 24/24h.' },
+    { data: '2026-09-06', texto: 'Função renal: a primeira dose é sempre plena; o ajuste começa na segunda dose, '
+      + 'pela tabela de correção exibida junto do esquema.' }
   ],
   publico: 'Adultos e adolescentes (>14 anos) com infecção presente na admissão (<48h de internação). '
     + 'Sepse com foco conhecido segue o protocolo institucional de sepse.',
@@ -314,6 +316,56 @@ const PROTOCOLO_ATB = {
   ]
 };
 
+/* ---- Ajuste à função renal ----
+   Regra do protocolo (CCIH, 06/09/2026): a PRIMEIRA dose é sempre plena — dose de ataque —
+   qualquer que seja a função renal; o ajuste começa na segunda dose. Faixas em TFG/ClCr
+   (mL/min), adulto. Só constam as drogas dos esquemas que precisam de ajuste; as demais
+   (ceftriaxona, metronidazol, azitromicina, clindamicina, doxiciclina, oxacilina,
+   moxifloxacino, fosfomicina) não ajustam. Referência: bula/Sanford — conferir com a
+   farmácia em diálise. */
+const ORIENTACAO_RENAL = 'Primeira dose sempre plena (dose de ataque), qualquer que seja a função renal. '
+  + 'O ajuste começa na SEGUNDA dose, pela TFG/ClCr — e, para vancomicina e amicacina, pelo nível sérico.';
+
+const AJUSTE_RENAL = {
+  vancomicina: { rotulo: 'Vancomicina', nota: 'Ataque 20–25 mg/kg. Manutenção guiada por vale (15–20 mg/L).', faixas: [
+    ['≥ 50', '15–20 mg/kg 8/8h a 12/12h'], ['20–49', '15–20 mg/kg 24/24h'], ['10–19', '15–20 mg/kg 24–48h'],
+    ['< 10 / diálise', 'redosar pelo nível sérico (após a diálise)']] },
+  amicacina: { rotulo: 'Amicacina', nota: '1ª dose 15 mg/kg plena; depois só pelo intervalo e nível (vale < 5 mg/L antes de redosar).', faixas: [
+    ['≥ 60', '15 mg/kg 24/24h'], ['40–59', '15 mg/kg 36/36h'], ['20–39', '15 mg/kg 48/48h'],
+    ['< 20 / diálise', 'redosar só com nível sérico; em diálise, após a sessão']] },
+  ciprofloxacino: { rotulo: 'Ciprofloxacino', faixas: [
+    ['≥ 30', 'sem ajuste'], ['5–29', 'IV 400 mg 24/24h · VO 250–500 mg 24/24h'], ['diálise', 'como 5–29, dose após a sessão']] },
+  levofloxacino: { rotulo: 'Levofloxacino', faixas: [
+    ['≥ 50', '750 mg 24/24h'], ['20–49', '750 mg 48/48h'], ['10–19 / diálise', '750 mg no 1º dia, depois 500 mg 48/48h']] },
+  piperacilinatazobactam: { rotulo: 'Piperacilina-tazobactam', faixas: [
+    ['> 40', '4,5 g 6/6h'], ['20–40', '3,375 g 6/6h'], ['< 20', '2,25 g 6/6h'], ['diálise', '2,25 g 8/8h + 0,75 g após a sessão']] },
+  cefepima: { rotulo: 'Cefepima', faixas: [
+    ['> 60', '2 g 8/8h'], ['30–60', '2 g 12/12h'], ['11–29', '2 g 24/24h'], ['< 11 / diálise', '1 g 24/24h (após a sessão)']] },
+  ceftazidima: { rotulo: 'Ceftazidima', faixas: [
+    ['> 50', '2 g 8/8h'], ['31–50', '1 g 12/12h'], ['16–30', '1 g 24/24h'], ['6–15', '500 mg 24/24h'], ['< 6 / diálise', '500 mg 48/48h (1 g após a sessão)']] },
+  meropenem: { rotulo: 'Meropenem', faixas: [
+    ['> 50', '1 g 8/8h'], ['26–50', '1 g 12/12h'], ['10–25', '500 mg 12/12h'], ['< 10 / diálise', '500 mg 24/24h (após a sessão)']] },
+  ertapenem: { rotulo: 'Ertapenem', faixas: [
+    ['> 30', '1 g 24/24h'], ['≤ 30 / diálise', '500 mg 24/24h (+150 mg após a sessão se a dose foi < 6h antes)']] },
+  ampicilina: { rotulo: 'Ampicilina', faixas: [
+    ['> 50', '2 g 4/4h'], ['10–50', '2 g 6/6h a 12/12h'], ['< 10 / diálise', '2 g 12/12h a 24/24h (após a sessão)']] },
+  ampicilinasulbactam: { rotulo: 'Ampicilina-sulbactam', faixas: [
+    ['≥ 30', '1,5–3 g 6/6h'], ['15–29', '1,5–3 g 12/12h'], ['5–14 / diálise', '1,5–3 g 24/24h (após a sessão)']] },
+  amoxicilinaacidoclavulanico: { rotulo: 'Amoxicilina-clavulanato', faixas: [
+    ['≥ 30', '875/125 mg 12/12h'], ['10–29', 'não usar 875 mg: 500/125 mg 12/12h'], ['< 10 / diálise', '500/125 mg 24/24h (após a sessão)']] },
+  sulfametoxazoltrimetoprima: { rotulo: 'Sulfametoxazol-trimetoprima', faixas: [
+    ['> 30', 'dose plena'], ['15–30', 'metade da dose'], ['< 15', 'evitar']] },
+  cefalexina: { rotulo: 'Cefalexina', faixas: [
+    ['≥ 60', '500 mg–1 g 6/6h'], ['30–59', 'máx. 1 g 8/8h'], ['15–29', '250–500 mg 8/8h a 12/12h'], ['5–14 / diálise', '250–500 mg 24/24h (após a sessão)']] },
+  nitrofurantoina: { rotulo: 'Nitrofurantoína', faixas: [['≥ 30', '100 mg 12/12h'], ['< 30', 'contraindicada']] }
+};
+
+/* Tabela de ajuste só das drogas presentes nos esquemas sugeridos. */
+function ajusteRenalDosEsquemas(esquemas) {
+  const drogas = [...new Set((esquemas || []).flatMap(e => e.drogas || []))];
+  return drogas.map(d => AJUSTE_RENAL[d]).filter(Boolean);
+}
+
 /* Sinônimos de grafia entre o protocolo e o laboratório (já normalizados). */
 const SINONIMOS_DROGA_ATB = {
   ceftriaxone: 'ceftriaxona', cefepime: 'cefepima', ciprofloxacina: 'ciprofloxacino',
@@ -435,6 +487,6 @@ function antibiogramaConsolidado(bancos, germes, de, ate) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { PROTOCOLO_ATB, REVISAO_PROTOCOLO_ATB, contextoLocalDoPaciente,
-    antibiogramaLocalPorGermes, antibiogramaConsolidado, avisosDeResistenciaLocal, drogaCanonicaATB };
+  module.exports = { PROTOCOLO_ATB, REVISAO_PROTOCOLO_ATB, ORIENTACAO_RENAL, AJUSTE_RENAL, ajusteRenalDosEsquemas,
+    contextoLocalDoPaciente, antibiogramaLocalPorGermes, antibiogramaConsolidado, avisosDeResistenciaLocal, drogaCanonicaATB };
 }

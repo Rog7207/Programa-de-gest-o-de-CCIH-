@@ -40,7 +40,7 @@ td.alta { color: #b03a2e; font-weight: 700; }
 </style>
 </head>
 <body>
-<header>Decisão de ATB empírica <span class="versao">v05.09d</span></header>
+<header>Decisão de ATB empírica <span class="versao">v06.09</span></header>
 <main>
   <div class="cartao aviso" id="avisoAbertura">
     <strong>Este arquivo precisa ser aberto no navegador.</strong>
@@ -188,6 +188,7 @@ $('analisar').onclick = () => {
   const antibiograma = antibiogramaDe(s.germes);
   const avisosLocais = AB ? avisosDeResistenciaLocal(decisao.esquemas, antibiograma, AB.periodoTexto) : [];
   const avisos = [...avisosLocais, ...decisao.avisos];
+  const renal = ajusteRenalDosEsquemas(decisao.esquemas);
   ultimaAnalise = { sindrome: s.rotulo, respostas: legivel.join(' | '),
     esquema: decisao.esquemas.map(e => e.rotulo + ' — ' + e.posologia).join(' | '), avisosLocais: avisosLocais.length };
 
@@ -199,6 +200,15 @@ $('analisar').onclick = () => {
       el('strong', {}, AB ? '⚠ Avisos dos dados locais' : '⚠ Avisos do protocolo'), el('ul', {}, avisos.map(a => el('li', {}, a)))) : null,
     el('h3', {}, 'Culturas e exames antes do antibiótico'),
     el('ul', { class: 'exames' }, decisao.exames.map(x => el('li', {}, x))),
+    el('h3', {}, 'Ajuste à função renal'),
+    el('p', { class: 'suave', style: 'margin:0 0 6px' }, ORIENTACAO_RENAL),
+    renal.length ? el('div', {}, renal.map(r => el('details', {},
+      el('summary', {}, el('span', {}, r.rotulo), el('i', {}, r.faixas.length + ' faixas')),
+      r.nota ? el('p', { class: 'suave', style: 'margin:0 0 6px' }, r.nota) : null,
+      el('table', {},
+        el('thead', {}, el('tr', {}, el('th', {}, 'TFG/ClCr (mL/min)'), el('th', {}, 'Dose'))),
+        el('tbody', {}, r.faixas.map(([tfg, dose]) => el('tr', {}, el('td', { class: 'n', style: 'text-align:left;white-space:nowrap' }, tfg), el('td', {}, dose))))))))
+      : el('p', { class: 'suave', style: 'margin:0' }, 'Nenhuma droga deste esquema precisa de ajuste renal.'),
     AB ? [
       el('h3', {}, 'Antibiograma local dos germes prováveis'),
       el('p', { class: 'suave', style: 'margin:0 0 6px' }, `Culturas do hospital com antibiograma no banco da CCIH, ${AB.periodoTexto} (consolidado em ${AB.geradoEm}). `

@@ -1840,6 +1840,14 @@ console.log('\n== 51. Decisão ATB: protocolo empírico + dados locais ==');
     aspSem.esquemas.length === 1 && aspSem.esquemas[0].drogas.join() === 'ceftriaxona', JSON.stringify(aspSem.esquemas));
   verificar('aspirativa com abscesso: ampicilina-sulbactam',
     aspCom.esquemas.length === 1 && aspCom.esquemas[0].drogas.join() === 'ampicilinasulbactam');
+  const renalSepse = prot.ajusteRenalDosEsquemas(sindrome('sepse_fi').decidir({ riscoMDR: true }).esquemas);
+  verificar('ajuste renal: sepse MDR traz pip-tazo, vancomicina e cefepima, uma vez cada',
+    renalSepse.map(r => r.rotulo).sort().join('|') === 'Cefepima|Piperacilina-tazobactam|Vancomicina', JSON.stringify(renalSepse.map(r => r.rotulo)));
+  verificar('ajuste renal: ceftriaxona sozinha não gera tabela',
+    prot.ajusteRenalDosEsquemas(sindrome('sepse_fi').decidir({}).esquemas).length === 0);
+  verificar('toda linha da tabela renal tem rótulo e ≥2 faixas [tfg, dose]',
+    Object.values(prot.AJUSTE_RENAL).every(r => r.rotulo && r.faixas.length >= 2 && r.faixas.every(f => f.length === 2 && f[0] && f[1])));
+  verificar('orientação renal diz que a primeira dose é plena', /[Pp]rimeira dose sempre plena/.test(prot.ORIENTACAO_RENAL));
   verificar('todo adendo tem data e texto',
     prot.PROTOCOLO_ATB.adendos.every(a => /^\d{4}-\d{2}-\d{2}$/.test(a.data) && a.texto.length > 20));
   const meningeIdoso = sindrome('snc').decidir({ listeria: true });

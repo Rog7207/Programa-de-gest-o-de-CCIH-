@@ -1803,6 +1803,17 @@ console.log('\n== 51. Decisão ATB: protocolo empírico + dados locais ==');
   verificar('cistite com TFG<30: sem nitrofurantoína, fosfomicina em 1ª',
     !cistiteTfgBaixa.esquemas.some(e => e.drogas.includes('nitrofurantoina'))
     && cistiteTfgBaixa.esquemas[0].drogas.includes('fosfomicina'), JSON.stringify(cistiteTfgBaixa.esquemas));
+  const cistiteHomem = sindrome('urinario').decidir({ sexo: 'homem', apresentacao: 'cistite' });
+  verificar('cistite em homem segue o caminho da ITU complicada: cipro/levo, urocultura antes, sem nitrofurantoína',
+    cistiteHomem.esquemas[0].drogas.includes('ciprofloxacino') && cistiteHomem.exames.some(x => /urocultura/i.test(x))
+    && !cistiteHomem.esquemas.some(e => e.drogas.includes('nitrofurantoina')) && cistiteHomem.avisos.some(a => /ITU em homem/.test(a)),
+    JSON.stringify(cistiteHomem));
+  const pieloMulher = sindrome('urinario').decidir({ sexo: 'mulher', apresentacao: 'pielonefrite' });
+  verificar('pielonefrite em mulher estável: cipro VO, sem aviso de ITU em homem',
+    pieloMulher.esquemas[0].drogas.includes('ciprofloxacino') && pieloMulher.avisos.length === 0);
+  const cistiteMulher = sindrome('urinario').decidir({ sexo: 'mulher', apresentacao: 'cistite' });
+  verificar('cistite em mulher continua simples: nitrofurantoína e sem exames',
+    cistiteMulher.esquemas[0].drogas.includes('nitrofurantoina') && /diagnóstico clínico/.test(cistiteMulher.exames[0]));
   const pieloEsbl = sindrome('urinario').decidir({ apresentacao: 'pielonefrite', riscoEsbl: true });
   verificar('pielonefrite com risco ESBL vai de amicacina',
     pieloEsbl.esquemas.length === 1 && pieloEsbl.esquemas[0].drogas.includes('amicacina'));

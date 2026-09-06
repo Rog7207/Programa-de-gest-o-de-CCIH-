@@ -31,19 +31,27 @@ const PROTOCOLO_ATB = {
       id: 'urinario', rotulo: 'Foco urinário',
       germes: ['Escherichia coli', 'Klebsiella pneumoniae', 'Proteus mirabilis', 'Enterococcus spp'],
       perguntas: [
+        /* O protocolo só chama de "cistite simples" a da mulher; ITU em homem, mesmo baixa,
+           segue o caminho da pielonefrite (cultura antes da dose, esquema do tratamento 2º). */
+        { id: 'sexo', rotulo: 'Paciente', tipo: 'escolha', opcoes: [['mulher', 'Mulher'], ['homem', 'Homem']] },
         { id: 'apresentacao', rotulo: 'Apresentação', tipo: 'escolha', opcoes: [
-          ['cistite', 'Cistite simples (mulher)'], ['pielonefrite', 'Pielonefrite ou ITU em homem']] },
+          ['cistite', 'Cistite (sintomas baixos, sem febre/dor lombar)'], ['pielonefrite', 'Pielonefrite']] },
         { id: 'internacao', rotulo: 'Necessita internação ou via oral inviável', tipo: 'sim_nao' },
         { id: 'riscoEsbl', rotulo: 'Risco ESBL: internação, antimicrobiano ou procedimento urológico nos últimos 90 dias', tipo: 'sim_nao' },
         { id: 'alergiaBL', rotulo: 'Alergia a beta-lactâmicos', tipo: 'sim_nao' },
         { id: 'tfgBaixa', rotulo: 'TFG < 30 mL/min', tipo: 'sim_nao' }
       ],
       decidir(r) {
-        const exames = r.apresentacao === 'cistite'
+        const cistiteSimples = r.apresentacao === 'cistite' && r.sexo !== 'homem';
+        const ituHomemBaixa = r.apresentacao === 'cistite' && r.sexo === 'homem';
+        const exames = cistiteSimples
           ? ['Cistite simples em mulher: diagnóstico clínico — não coletar exames de rotina.']
           : ['Urina tipo 1 (EAS) e urocultura com antibiograma ANTES da primeira dose.',
              '2 pares de hemoculturas se instabilidade hemodinâmica ou febre alta com calafrios.'];
-        if (r.apresentacao === 'cistite') {
+        const avisosBase = ituHomemBaixa
+          ? ['ITU em homem: o protocolo trata como ITU complicada (mesmo esquema da pielonefrite; nitrofurantoína/fosfomicina não se aplicam).']
+          : [];
+        if (cistiteSimples) {
           const esquemas = [];
           if (!r.tfgBaixa) esquemas.push({ rotulo: '1ª escolha', posologia: 'Nitrofurantoína 100 mg VO 12/12h por 5 dias', drogas: ['nitrofurantoina'] });
           esquemas.push({ rotulo: r.tfgBaixa ? '1ª escolha (TFG < 30: nitrofurantoína contraindicada)' : 'Alternativa',
@@ -53,19 +61,20 @@ const PROTOCOLO_ATB = {
         }
         if (r.riscoEsbl) {
           return { esquemas: [{ rotulo: 'Risco ESBL', posologia: 'Amicacina 15 mg/kg IV 1x/dia', drogas: ['amicacina'] }],
-            exames, avisos: ['Risco ESBL assumido (internação/ATB/procedimento urológico em 90 dias).'] };
+            exames, avisos: [...avisosBase, 'Risco ESBL assumido (internação/ATB/procedimento urológico em 90 dias).'] };
         }
         if (r.alergiaBL) {
           return { esquemas: [
             { rotulo: 'Alergia a beta-lactâmicos', posologia: 'Levofloxacino 750 mg IV 1x/dia', drogas: ['levofloxacino'] },
-            { rotulo: 'Alternativa', posologia: 'Amicacina 15 mg/kg IV 1x/dia', drogas: ['amicacina'] }], exames, avisos: [] };
+            { rotulo: 'Alternativa', posologia: 'Amicacina 15 mg/kg IV 1x/dia', drogas: ['amicacina'] }], exames, avisos: avisosBase };
         }
         if (r.internacao) {
-          return { esquemas: [{ rotulo: 'Pielonefrite internada', posologia: 'Ceftriaxona 2 g IV 1x/dia', drogas: ['ceftriaxona'] }], exames, avisos: [] };
+          return { esquemas: [{ rotulo: ituHomemBaixa ? 'ITU em homem, internado' : 'Pielonefrite internada',
+            posologia: 'Ceftriaxona 2 g IV 1x/dia', drogas: ['ceftriaxona'] }], exames, avisos: avisosBase };
         }
         return { esquemas: [
-          { rotulo: 'Pielonefrite estável (VO)', posologia: 'Ciprofloxacino 500 mg VO 12/12h por 7 dias', drogas: ['ciprofloxacino'] },
-          { rotulo: 'Alternativa', posologia: 'Levofloxacino 750 mg VO 1x/dia por 5 dias', drogas: ['levofloxacino'] }], exames, avisos: [] };
+          { rotulo: ituHomemBaixa ? 'ITU em homem, estável (VO)' : 'Pielonefrite estável (VO)', posologia: 'Ciprofloxacino 500 mg VO 12/12h por 7 dias', drogas: ['ciprofloxacino'] },
+          { rotulo: 'Alternativa', posologia: 'Levofloxacino 750 mg VO 1x/dia por 5 dias', drogas: ['levofloxacino'] }], exames, avisos: avisosBase };
       }
     },
 

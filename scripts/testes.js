@@ -1970,5 +1970,67 @@ console.log('\n== 51. Decisão ATB: protocolo empírico + dados locais ==');
       .includes('testados entre jun/2024 e jun/2026'));
 }
 
-console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
-process.exit(falharam ? 1 : 0);
+/* == 52. Fumaça da tela da Pós-alta: montar SEM explodir (DOM falso) ==
+   A tela é avaliada de verdade, com todos os status representados. Pega o que sintaxe e
+   testes de motor não pegam: referência fora de ordem (TDZ), helper renomeado, campo
+   esquecido — o bug que fez as cirurgias sob vigilância sumirem no hospital. */
+(async () => {
+  console.log('\n== 52. Fumaça da tela da Pós-alta (DOM falso, todos os status) ==');
+  const fakeNode = () => ({
+    append() {}, appendChild() {}, replaceChildren() {}, addEventListener() {},
+    setAttribute() {}, style: {}, classList: { add() {}, remove() {} },
+    querySelector: () => null, querySelectorAll: () => []
+  });
+  Object.assign(global, {
+    el: (tag, attrs, ...kids) => { kids.flat(9); return fakeNode(); },
+    fmtInt: n => String(n), hojeISO: () => '2026-09-08', agoraCurto: () => '2026-09-08 20:00',
+    detalharNaLinha: () => null, proximoIDLista: () => 'X-1', abrirPaciente: () => {}, navegar: () => {},
+    app: { usuario: 'Teste' },
+    config: { rotina: { vigilanciaCategorias: [], atbAvaliados: [], mdrMonitorados: [] },
+      vocabulario: { setores: [], topografias: [] }, gruposDeSetores: () => new Map(), aliases: [] },
+    comTrava: async (arquivos, fn) => fn(), gravarBanco: async () => {},
+    prompt: () => null, confirm: () => false, alert: () => {},
+    window: { open: () => null }, localStorage: { getItem: () => null, setItem: () => {} },
+    TIPOS_ISC: { superficial: 'ISC incisional superficial' },
+    JANELA_VIGILANCIA: imp.JANELA_VIGILANCIA || { inicioDias: 30, fimDias: 120, implanteDias: 90 },
+    classificarParaVigilancia: imp.classificarParaVigilancia,
+    diasDesde: imp.diasDesde, telefoneWhatsApp: imp.telefoneWhatsApp,
+    mensagemVigilancia: imp.mensagemVigilancia, linkWhatsApp: imp.linkWhatsApp,
+    normalizarProntuario: imp.normalizarProntuario,
+    indiceDeObitos: imp.indiceDeObitos, faleceuAposCirurgia: imp.faleceuAposCirurgia,
+    acrescentarObservacao: imp.acrescentarObservacao
+  });
+  /* Um paciente em cada situação — cada fila e cada seção da tela é montada. */
+  const cirurgia = (id, extra) => ({ ID_Cirurgia: id, Prontuario: '77', DataCirurgia: '2026-08-01',
+    Procedimento: 'Colecistectomia', ProcedimentoNHSN: 'Colecistectomia', ...extra });
+  const bancosFixture = {
+    cirurgias: { cirurgias: [
+      cirurgia('C01', { StatusVigilancia: 'pendente' }),
+      cirurgia('C02', { StatusVigilancia: 'pendente', DataCirurgia: '2026-08-25' }),
+      cirurgia('C03', { StatusVigilancia: 'sob vigilância', VigilanciaPor: 'Enf', DataCirurgia: '2026-04-01' }),
+      cirurgia('C04', { StatusVigilancia: 'mensagem enviada', MensagemEnviadaEm: '2026-09-01' }),
+      cirurgia('C05', { StatusVigilancia: 'em investigação', ISC: 'S', TipoISC: 'superficial', ID_IRAS: 'IRA-1', InvestigadoPor: 'Enf', ObservacoesVigilancia: 'linha1\nlinha2' }),
+      cirurgia('C06', { StatusVigilancia: 'sem infecção' }),
+      cirurgia('C07', { StatusVigilancia: 'infecção confirmada', ISC: 'S', TipoISC: 'superficial', ValidadoPor: 'Dr', ValidadoEm: '2026-09-01' }),
+      cirurgia('C08', { StatusVigilancia: 'encerrada sem contato' }),
+      cirurgia('C09', { StatusVigilancia: 'encerrada — número incorreto' }),
+      cirurgia('C10', { StatusVigilancia: 'dispensada' }),
+      cirurgia('C11', { StatusVigilancia: 'encerrada — óbito', Prontuario: '900' })
+    ] },
+    pacientes: { pacientes: [{ Prontuario: '77', Nome: 'Teste da Silva', Telefone: '48999887766' }],
+      internacoes: [], obitos: [{ Prontuario: '900', DataObito: '2026-08-10' }] },
+    config: { meta: [] }
+  };
+  global.lerBanco = async n => JSON.parse(JSON.stringify(bancosFixture[n] || { casos: [], precaucoes: [] }));
+  const codigoTela = fs.readFileSync(path.join(__dirname, '..', 'js', 'ui-vigilancia.js'), 'utf-8');
+  eval(codigoTela);
+  try {
+    await montarVigilancia(fakeNode());
+    verificar('montarVigilancia monta com todos os status sem exceção', true);
+  } catch (e) {
+    verificar('montarVigilancia monta com todos os status sem exceção', false, e.stack ? e.stack.split('\n')[0] : e.message);
+  }
+
+  console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
+  process.exit(falharam ? 1 : 0);
+})();

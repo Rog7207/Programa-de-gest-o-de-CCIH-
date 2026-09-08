@@ -448,8 +448,11 @@ async function montarVigilancia(conteudo) {
   }
 
   /* Erro de cadastro: número incorreto ou inexistente. Dá baixa, mas numa categoria
-     própria — no relatório é descarte por cadastro, não falha da busca. */
-  const botaoNumeroIncorreto = c => el('button', {
+     própria — no relatório é descarte por cadastro, não falha da busca.
+     FUNÇÃO (içada), não const: é chamada na montagem da fila "sob vigilância", que fica
+     ACIMA desta declaração no arquivo — como const, a tela morria ali e as triadas
+     sumiam com tudo que vem depois. */
+  function botaoNumeroIncorreto(c) { return el('button', {
     class: 'botao-secundario', title: 'Telefone incorreto ou inexistente no cadastro — dá baixa em categoria própria',
     onclick: async () => {
       try {
@@ -459,10 +462,11 @@ async function montarVigilancia(conteudo) {
         });
         recarregar();
       } catch (e) { alert(e.message); }
-    } }, '☎ Número incorreto');
+    } }, '☎ Número incorreto'); }
 
-  /* Botão "＋": observação avulsa a qualquer momento, sem mudar o status. */
-  const botaoMaisObservacao = c => el('button', {
+  /* Botão "＋": observação avulsa a qualquer momento, sem mudar o status.
+     Também FUNÇÃO içada — é chamada na montagem das filas. */
+  function botaoMaisObservacao(c) { return el('button', {
     class: 'botao-secundario', title: 'Adicionar observação ao diário (não muda o status)',
     onclick: async () => {
       const texto = prompt('Nova observação para ' + (nomeDe(c) || c.Prontuario) + ':');
@@ -471,7 +475,7 @@ async function montarVigilancia(conteudo) {
         await mudarStatusCirurgia(c.ID_Cirurgia, alvo => anotar(alvo, '', texto));
         recarregar();
       } catch (e) { alert(e.message); }
-    } }, '＋');
+    } }, '＋'); }
 
   if (enviadas.length) {
     conteudo.append(el('div', { class: 'cartao' },

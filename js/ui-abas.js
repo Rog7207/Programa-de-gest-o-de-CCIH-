@@ -484,6 +484,31 @@ async function montarIsolamentos(conteudo) {
   } catch (e) { conteudo.append(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message)); return; }
   const nomes = new Map(bancoPacientes.pacientes.map(p => [normalizarProntuario(p.Prontuario), p.Nome]));
   const nomeDe = pr => nomes.get(normalizarProntuario(pr)) || '';
+
+  /* ---- Encerramento automático por alta/óbito ----
+     Com o censo importado em dia, quem saiu do hospital não fica "isolado" na tela:
+     a precaução encerra na data da alta ou do óbito, gravado uma vez sob trava.
+     Complementa a foto diária dos isolados — censo e lista se corrigem mutuamente. */
+  {
+    const indiceObitos = indiceDeObitos(bancoPacientes);
+    const previa = encerrarIsolamentosPorSaida(
+      JSON.parse(JSON.stringify(banco.precaucoes)), bancoPacientes.internacoes, indiceObitos, hojeISO());
+    if (previa.encerradas) {
+      try {
+        await comTrava(['isolamentos'], async () => {
+          const atual = await lerBanco('isolamentos');
+          encerrarIsolamentosPorSaida(atual.precaucoes, bancoPacientes.internacoes, indiceObitos, hojeISO());
+          await gravarBanco('isolamentos', atual);
+        });
+        banco = await lerBanco('isolamentos');
+        conteudo.append(el('p', { class: 'texto-suave' },
+          `✓ ${fmtInt(previa.encerradas)} precaução(ões) encerradas automaticamente por alta/óbito no censo (` +
+          previa.detalhes.slice(0, 5).map(d => `${nomeDe(d.Prontuario) || d.Prontuario}: ${d.motivo} em ${d.quando.split('-').reverse().join('/')}`).join(' · ')
+          + (previa.detalhes.length > 5 ? ' …' : '') + ').'));
+      } catch (e) { /* trava de outro usuário: tenta de novo no próximo carregamento */ }
+    }
+  }
+
   const ativas = banco.precaucoes.filter(p => !String(p.DataFim || '').trim());
   const pendencias = pendenciasIsolamento(
     bancoCulturas.culturas, bancoCulturas.sensibilidade, banco.precaucoes, banco.decisoes, hojeISO(),

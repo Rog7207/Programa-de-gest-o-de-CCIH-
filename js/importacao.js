@@ -873,6 +873,48 @@ function encerrarIsolamentosAusentes(existentes, importados, dataFoto) {
   return encerradas;
 }
 
+/* Precaução de quem saiu do hospital encerra sozinha: se o censo mostra ALTA na
+   internação que cobria o início da precaução — ou ÓBITO em data igual/posterior — o
+   isolamento acaba naquela data. Conservador de propósito: sem internação que case no
+   censo, a precaução fica como está (censo atrasado não pode encerrar isolamento vivo);
+   internação ainda aberta mantém tudo. */
+function encerrarIsolamentosPorSaida(precaucoes, internacoes, indiceObitos, hoje) {
+  const porPront = new Map();
+  for (const i of (internacoes || [])) {
+    const chave = normalizarProntuario(i.Prontuario);
+    if (!porPront.has(chave)) porPront.set(chave, []);
+    porPront.get(chave).push(i);
+  }
+  let encerradas = 0;
+  const detalhes = [];
+  for (const p of (precaucoes || [])) {
+    if ((p.Status && p.Status !== 'ativo') || String(p.DataFim || '').trim()) continue;
+    const chave = normalizarProntuario(p.Prontuario);
+    const inicio = String(p.DataInicio || '').slice(0, 10);
+    if (!/^\d{4}-/.test(inicio)) continue;
+
+    let saida = '';
+    let motivo = '';
+    const dataObito = indiceObitos && indiceObitos.get(chave);
+    if (dataObito && dataObito >= inicio) { saida = dataObito; motivo = 'óbito'; }
+    if (!saida) {
+      for (const i of (porPront.get(chave) || [])) {
+        const entrada = String(i.DataInternacao || '').slice(0, 10);
+        const alta = String(i.DataAlta || '').slice(0, 10);
+        if (!/^\d{4}-/.test(entrada) || entrada > inicio) continue;
+        if (!/^\d{4}-/.test(alta)) { saida = ''; motivo = ''; break; } /* internação aberta: fica */
+        if (alta >= inicio && (!saida || alta < saida)) { saida = alta; motivo = 'alta'; }
+      }
+    }
+    if (!saida || saida > String(hoje).slice(0, 10)) continue;
+    p.DataFim = saida;
+    p.Status = 'encerrado';
+    encerradas++;
+    detalhes.push({ Prontuario: p.Prontuario, quando: saida, motivo });
+  }
+  return { encerradas, detalhes };
+}
+
 /* ---- Catálogo da farmácia ----
    A farmácia cataloga apresentações ("CLORIDRATO DE VANCOMICINA 500MG FA"), não princípios
    ativos. Para o vocabulário do app — que é comparado com o antibiograma do laboratório e
@@ -1983,7 +2025,7 @@ if (typeof module !== 'undefined' && module.exports) {
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,
     preClassificarCultura, culturaDoPainel, indiceSepse, culturaDeProtocoloSepse, JANELA_CULTURA_SEPSE,
-    prepararRelatorio, adesaoHigiene, tipoPrecaucao, encerrarIsolamentosAusentes, dataDoRelatorio, vincularAvaliacaoAPrescricao,
+    prepararRelatorio, adesaoHigiene, tipoPrecaucao, encerrarIsolamentosAusentes, encerrarIsolamentosPorSaida, dataDoRelatorio, vincularAvaliacaoAPrescricao,
     momentoCanonico, categoriaProfissional, normalizarObservacaoHigiene, MOMENTOS_OMS,
     principioAtivo, aplicarObitos,
     classificarParaVigilancia, categoriaDeVigilancia, CATEGORIAS_VIGILANCIA, CATEGORIAS_VIGILANCIA_PADRAO,

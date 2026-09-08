@@ -991,6 +991,31 @@ console.log('\n== 34. Isolamento é foto do momento: quem sumiu, encerrou ==');
     n3 === 1 && banco3[0].Status === 'encerrado' && banco3[0].DataFim === '2026-09-01', JSON.stringify(banco3[0]));
   verificar('precaução do app presente na foto ganha VistoEm e segue',
     !banco3[1].DataFim && banco3[1].VistoEm === '2026-09-01', JSON.stringify(banco3[1]));
+
+  /* Alta e óbito também encerram: quem saiu do hospital não fica "isolado" na tela. */
+  const precaucoes4 = [
+    { ID_Precaucao: 'PRC-1', Prontuario: '10', TipoPrecaucao: 'Contato', DataInicio: '2026-08-10', DataFim: '', Status: '' },
+    { ID_Precaucao: 'PRC-2', Prontuario: '20', TipoPrecaucao: 'Contato', DataInicio: '2026-08-10', DataFim: '', Status: 'ativo' },
+    { ID_Precaucao: 'PRC-3', Prontuario: '30', TipoPrecaucao: 'Contato', DataInicio: '2026-08-10', DataFim: '', Status: 'ativo' },
+    { ID_Precaucao: 'PRC-4', Prontuario: '40', TipoPrecaucao: 'Contato', DataInicio: '2026-08-10', DataFim: '', Status: 'ativo' },
+    { ID_Precaucao: 'PRC-5', Prontuario: '50', TipoPrecaucao: 'Contato', DataInicio: '2026-08-10', DataFim: '2026-08-12', Status: 'encerrado' }
+  ];
+  const internacoes4 = [
+    { Prontuario: '10', DataInternacao: '2026-08-01', DataAlta: '2026-08-20' },   /* alta cobre o início */
+    { Prontuario: '20', DataInternacao: '2026-08-01', DataAlta: '' },             /* ainda internado */
+    { Prontuario: '40', DataInternacao: '2026-07-01', DataAlta: '2026-08-05' }    /* alta ANTES do início: não cobre */
+  ];
+  const obitos4 = imp.indiceDeObitos({ obitos: [{ Prontuario: '30', DataObito: '2026-08-15' }], internacoes: [] });
+  const r4 = imp.encerrarIsolamentosPorSaida(precaucoes4, internacoes4, obitos4, '2026-09-08');
+  verificar('alta que cobre o início encerra na data da alta',
+    precaucoes4[0].DataFim === '2026-08-20' && precaucoes4[0].Status === 'encerrado', JSON.stringify(precaucoes4[0]));
+  verificar('internação aberta mantém a precaução', !precaucoes4[1].DataFim);
+  verificar('óbito encerra na data do óbito', precaucoes4[2].DataFim === '2026-08-15');
+  verificar('alta anterior ao início (ou censo sem casar) mantém — conservador', !precaucoes4[3].DataFim);
+  verificar('já encerrada não é tocada', precaucoes4[4].DataFim === '2026-08-12');
+  verificar('resumo conta e detalha os motivos',
+    r4.encerradas === 2 && r4.detalhes.some(d => d.motivo === 'alta') && r4.detalhes.some(d => d.motivo === 'óbito'),
+    JSON.stringify(r4));
 }
 
 console.log('\n== 35. Higiene das mãos: adesão em duas informações ==');

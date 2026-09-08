@@ -146,6 +146,29 @@ async function montarVigilancia(conteudo) {
   const triagem = porStatus('pendente').filter(naJanela).filter(c => !faleceu(c))
     .sort((a, b) => String(a.DataCirurgia).localeCompare(String(b.DataCirurgia)));
 
+  /* Triagem vazia parecia defeito quando era eficiência: a equipe zera a janela e as
+     cirurgias novas ainda não completaram 30 dias. O painel agora conta as que estão
+     a caminho e diz QUANDO a primeira entra. */
+  const aCaminho = porStatus('pendente').filter(c => {
+    const d = idadePosOp(c);
+    return d !== null && d >= 0 && d < JANELA_VIGILANCIA.inicioDias;
+  }).filter(c => !faleceu(c));
+  const proximaEntrada = aCaminho.length
+    ? new Date(Date.parse(aCaminho.map(c => String(c.DataCirurgia).slice(0, 10)).sort()[0] + 'T00:00:00Z')
+        + JANELA_VIGILANCIA.inicioDias * 86400000).toISOString().slice(0, 10).split('-').reverse().join('/')
+    : null;
+  const avisoACaminho = aCaminho.length
+    ? el('p', { class: 'texto-suave' },
+        `⏳ ${fmtInt(aCaminho.length)} cirurgia(s) recentes aguardam completar ${JANELA_VIGILANCIA.inicioDias} dias de pós-operatório — a primeira entra na triagem em ${proximaEntrada}.`)
+    : null;
+  if (!triagem.length) {
+    conteudo.append(el('div', { class: 'cartao' },
+      el('h2', {}, 'Triagem — nenhuma cirurgia aguardando'),
+      el('p', { class: 'texto-suave' },
+        'Todas as cirurgias da janela de 30–120 dias já foram triadas.'),
+      avisoACaminho || el('p', { class: 'texto-suave' }, 'Também não há cirurgias recentes a caminho — confira se o relatório do centro cirúrgico está sendo importado.')));
+  }
+
   if (triagem.length) {
     const caixas = new Map();
     const linhasTabela = triagem.map(c => {
@@ -165,6 +188,7 @@ async function montarVigilancia(conteudo) {
     const msgTriagem = el('p', { class: 'aviso-erro-texto' });
     conteudo.append(el('div', { class: 'cartao' },
       el('h2', {}, `Triagem — ${fmtInt(triagem.length)} cirurgias de 30 a 120 dias`),
+      avisoACaminho,
       el('p', { class: 'texto-suave' },
         'Pré-marcadas conforme a rotina da instituição (Configurações → Rotina → cirurgias vigiadas; '
         + 'padrão de fábrica: próteses/implantes, cesarianas e limpas). O relatório do centro cirúrgico '

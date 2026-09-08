@@ -495,6 +495,25 @@ async function montarIsolamentos(conteudo) {
   ].map(([r, n]) => el('div', { class: 'cartao cartao-numero' },
     el('div', { class: 'numero-grande' }, fmtInt(n)), el('div', { class: 'texto-suave' }, r)))));
 
+  /* Painel parado parecia defeito quando era falta de importação: se a última cultura e a
+     última lista de isolados têm mais de 3 dias, quem olha precisa saber que o retrato é
+     velho — os "pacientes novos" só aparecem depois de importar. */
+  {
+    const maxData = lista => lista.map(x => String(x.CriadoEm || '').slice(0, 10)).filter(d => /^\d{4}-/.test(d)).sort().slice(-1)[0] || '';
+    const ultimaCultura = maxData(bancoCulturas.culturas || []);
+    const ultimaPrecaucao = maxData(banco.precaucoes || []);
+    const idadeDias = d => d ? Math.round((Date.parse(hojeISO()) - Date.parse(d)) / 86400000) : null;
+    const atrasos = [];
+    if (idadeDias(ultimaCultura) > 3) atrasos.push(`a última cultura importada é de ${ultimaCultura.split('-').reverse().join('/')}`);
+    if (idadeDias(ultimaPrecaucao) > 3) atrasos.push(`a última lista de isolados é de ${ultimaPrecaucao.split('-').reverse().join('/')}`);
+    if (atrasos.length) {
+      conteudo.append(el('div', { class: 'aviso-alerta' },
+        el('div', { class: 'alerta-titulo' }, '⚠ Painel possivelmente desatualizado'),
+        el('div', { class: 'texto-suave' },
+          atrasos.join(' e ') + ' — pacientes novos só aparecem aqui depois de importar as culturas do dia e a lista de isolamentos (aba Importar).')));
+    }
+  }
+
   conteudo.append(el('div', { class: 'cartao' },
     el('h2', {}, 'Multirresistentes sem precaução registrada (últimos 30 dias)'),
     pendencias.length ? el('table', { class: 'tabela' },

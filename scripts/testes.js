@@ -979,6 +979,18 @@ console.log('\n== 34. Isolamento é foto do momento: quem sumiu, encerrou ==');
     imp.encerrarIsolamentosAusentes(banco2, [], '2026-08-20') === 0 && banco2[0].Status === 'ativo');
   verificar('sem data da foto não encerra nada',
     imp.encerrarIsolamentosAusentes(banco2, [], '') === 0);
+
+  /* Precaução registrada NO APP nascia sem Status e virava "isolada eterna" — a foto
+     nunca a encerrava e todo MDR parecia isolado para sempre. */
+  const banco3 = [
+    { ID_Precaucao: 'PRC-000001', Prontuario: '555', TipoPrecaucao: 'Contato', DataInicio: '2026-08-10', DataFim: '', Status: '' },
+    { ID_Precaucao: 'PRC-000002', Prontuario: '666', TipoPrecaucao: 'Contato', DataInicio: '2026-08-11', DataFim: '', Status: '' }
+  ];
+  const n3 = imp.encerrarIsolamentosAusentes(banco3, [{ Prontuario: '666', TipoPrecaucao: 'Contato' }], '2026-09-01');
+  verificar('precaução do app (Status vazio) ausente da foto É encerrada',
+    n3 === 1 && banco3[0].Status === 'encerrado' && banco3[0].DataFim === '2026-09-01', JSON.stringify(banco3[0]));
+  verificar('precaução do app presente na foto ganha VistoEm e segue',
+    !banco3[1].DataFim && banco3[1].VistoEm === '2026-09-01', JSON.stringify(banco3[1]));
 }
 
 console.log('\n== 35. Higiene das mãos: adesão em duas informações ==');

@@ -858,7 +858,11 @@ function encerrarIsolamentosAusentes(existentes, importados, dataFoto) {
   const presentes = new Set(importados.map(chaveDe));
   let encerradas = 0;
   for (const p of existentes) {
-    if (p.Status !== 'ativo' || p.DataFim) continue;
+    /* Status vazio conta como ativo: as precauções registradas NO APP (revisão de
+       pendências) nasciam sem Status e viravam "isoladas eternas" — a foto diária nunca
+       as encerrava, a lista de ativos inchava com pacientes de alta e as pendências
+       novas sumiam (todo MDR já "parecia isolado"). */
+    if ((p.Status && p.Status !== 'ativo') || String(p.DataFim || '').trim()) continue;
     if (String(p.DataInicio || '').slice(0, 10) > dataFoto) continue;
     const chave = chaveDe(p);
     if (presentes.has(chave)) { p.VistoEm = dataFoto; continue; }

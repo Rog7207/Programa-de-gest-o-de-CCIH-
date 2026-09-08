@@ -621,6 +621,9 @@ async function montarIsolamentos(conteudo) {
               ID_Precaucao: proximoIDLista(atual.precaucoes, 'ID_Precaucao', 'PRC'),
               Prontuario: m.Prontuario, Setor: m.Setor, Leito: '',
               TipoPrecaucao: selTipo.value, Motivo: `${m.Mecanismo} — ${m.Microrganismo}`,
+              /* Status 'ativo' desde o nascimento: é o que deixa a foto diária dos
+                 isolados encerrar esta precaução quando o paciente sair da lista. */
+              Status: 'ativo',
               DataInicio: hojeISO(), DataFim: '', CriadoPor: app.usuario, CriadoEm: agoraCurto()
             });
           }

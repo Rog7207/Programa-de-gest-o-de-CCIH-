@@ -358,6 +358,208 @@ function rotuloSimples(s) {
     .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+/* ---- PDF "cirurgias realizadas" -------------------------------------------------------
+   Relatório de sistema impresso em PDF: tabela larga, nomes longos quebrados em várias
+   linhas. Recortado por POSIÇÃO (o x de cada item), não por regex sobre a linha achatada —
+   com regex o nome do paciente vira convênio.
+
+   A regra que decide tudo: as bordas das colunas MUDAM DE PÁGINA PARA PÁGINA, porque a
+   largura se adapta ao conteúdo. Fixar as bordas da primeira página derrubava o acerto de
+   100% para 18%. Por isso o cabeçalho é relido em cada página.
+
+   "Tipo Anest" está na lista mesmo sem ser importado: sem uma borda à direita do
+   anestesista, o tipo de anestesia grudava no nome dele ("Daniela Cristina GERAL Pousada").
+
+   O CID, por sua vez, recebe a data — neste relatório o valor começa uns 8 pontos à
+   esquerda do rótulo. Fica assim de propósito: a data é relida por regex da linha inteira e
+   confere em 100% dos 4.194 registros, o CID não é importado, e afrouxar a borda para
+   resolvê-lo arriscaria os campos que hoje estão certos, porque a coluna de procedimento é
+   larga e invadiria a vizinha. */
+const CAMPOS_CIRURGIA_PDF = ['Atend', 'Procedimento Principal', 'CID', 'Data Início', 'Min',
+  'Paciente', 'Idade', 'Convênio', 'Cirurgião', 'Anestesista', 'Tipo Anest'];
+const NUMERO_DE_CIRURGIA = /^\d{1,3}\.\d{3}$/;
+const RODAPE_HORA = /^\d{1,2}:\d{2}:\d{2}$/;
+/* Campos de texto que continuam na linha de baixo quando não cabem. */
+const CAMPOS_QUE_QUEBRAM = ['Procedimento Principal', 'Paciente', 'Cirurgião', 'Anestesista'];
+
+function bordasDoCabecalho(pagina, i) {
+  const itens = (pagina[i] || {}).itens || [];
+  /* O rótulo pode chegar quebrado em vários itens ("Procedimento" + "Principal", "Data" +
+     "Início"): procuramos a SEQUÊNCIA de palavras e devolvemos o x da primeira. Procurar um
+     item único não achava nada, e nenhuma página era reconhecida. */
+  const achar = campo => {
+    const palavras = campo.split(/\s+/).map(normalizarTexto).filter(Boolean);
+    for (let i = 0; i + palavras.length <= itens.length; i++) {
+      let bate = true;
+      for (let k = 0; k < palavras.length; k++) {
+        if (normalizarTexto(itens[i + k].str) !== palavras[k]) { bate = false; break; }
+      }
+      if (bate) return itens[i].x;
+    }
+    const colado = itens.find(it => normalizarTexto(it.str).startsWith(palavras.join('')));
+    return colado ? colado.x : null;
+  };
+  /* Guarda pelos ITENS, não pelo texto remontado: linhaDeItens insere três espaços em vão
+     largo e nenhum em vão negativo, então "Procedimento Principal" às vezes vira
+     "Procedimento   Principal" e às vezes "ProcedimentoPrincipal". Testar a string era
+     depender da largura da fonte. */
+  if (achar('Atend') === null || achar('Procedimento Principal') === null) return null;
+  const bordas = [];
+  for (const campo of CAMPOS_CIRURGIA_PDF) {
+    const x = achar(campo);
+    if (x !== null) bordas.push({ campo, x });
+  }
+  if (bordas.length < 8) return null;
+  /* "Cirurgia" e "Unide atend" ficam na linha ACIMA do cabeçalho principal; sem essa
+     fronteira o código da unidade gruda no nome do paciente. */
+  bordas.push({ campo: 'Cirurgia', x: 0 });
+  const anteriores = ((pagina[i - 1] || {}).itens || []);
+  const acima = anteriores.find((it, k) => normalizarTexto(it.str) === 'unide'
+    && normalizarTexto((anteriores[k + 1] || {}).str || '') === 'atend')
+    || anteriores.find(it => normalizarTexto(it.str).startsWith('unideatend'));
+  if (acima) bordas.push({ campo: 'Unid', x: acima.x });
+  bordas.sort((a, b) => a.x - b.x);
+  return bordas;
+}
+
+/* Um item de texto pode ATRAVESSAR a fronteira de duas colunas: o pdf.js entrega o trecho
+   como um único item quando o PDF o desenha de uma vez, e num relatório em colunas isso
+   junta o nome do cirurgião ao do anestesista numa string só. Sem cortar, um campo engole o
+   outro (44 registros em 533 no primeiro teste).
+
+   Não há posição por caractere disponível, então a largura do item é dividida pelo número
+   de caracteres para estimar onde cai a fronteira — e o corte é EMPURRADO para o espaço
+   mais próximo, para nunca partir uma palavra ao meio. */
+function indiceDeCorte(texto, aproximado) {
+  if (aproximado <= 0 || aproximado >= texto.length) return -1;
+  for (let d = 0; d <= texto.length; d++) {
+    if (texto[aproximado - d] === ' ') return aproximado - d;
+    if (texto[aproximado + d] === ' ') return aproximado + d;
+  }
+  return -1;
+}
+
+function partirNasBordas(item, bordas) {
+  const largura = item.largura || 0;
+  const texto = String(item.str || '');
+  const fim = item.x + largura;
+  const cortes = bordas.map(b => b.x).filter(x => x > item.x + 2 && x < fim - 2).sort((a, b) => a - b);
+  if (!cortes.length || !largura || !texto.trim() || !/\s/.test(texto)) return [item];
+  const porChar = largura / texto.length;
+  const pedacos = [];
+  let inicio = 0, xPedaco = item.x;
+  for (const cx of cortes) {
+    const idx = indiceDeCorte(texto, Math.round((cx - item.x) / porChar));
+    if (idx <= inicio) continue;
+    const trecho = texto.slice(inicio, idx).trim();
+    if (trecho) pedacos.push({ x: xPedaco, largura: (idx - inicio) * porChar, str: trecho });
+    inicio = idx + 1;
+    /* O pedaço seguinte começa NA BORDA, não no x estimado: como o corte é empurrado até o
+       espaço mais próximo, o x calculado pode cair alguns pontos antes da fronteira e o
+       trecho voltaria para a coluna de onde acabou de sair. */
+    xPedaco = cx;
+  }
+  const resto = texto.slice(inicio).trim();
+  if (resto) pedacos.push({ x: xPedaco, largura: (texto.length - inicio) * porChar, str: resto });
+  return pedacos.length ? pedacos : [item];
+}
+
+function fatiarPorBordas(itensBrutos, bordas) {
+  const itens = [];
+  for (const it of itensBrutos) for (const p of partirNasBordas(it, bordas)) itens.push(p);
+  const saida = {};
+  bordas.forEach(b => { saida[b.campo] = []; });
+  for (const it of itens) {
+    /* O carimbo de emissão do rodapé ("10:35:56") cai na altura da última linha de cada
+       página e grudava no nome do procedimento — uma contaminação por página, 228 em 228.
+       Hora COM SEGUNDOS não existe na tabela (lá é HH:MM), então o padrão é inequívoco. */
+    if (RODAPE_HORA.test(it.str.trim())) continue;
+    /* Folga pequena porque o valor costuma começar um fio à esquerda do rótulo. */
+    let escolhida = bordas[0];
+    for (const b of bordas) if (it.x >= b.x - 2) escolhida = b;
+    saida[escolhida.campo].push(it.str);
+  }
+  const texto = {};
+  for (const campo of Object.keys(saida)) {
+    texto[campo] = saida[campo].join(' ').replace(/\s+/g, ' ').trim();
+  }
+  return texto;
+}
+
+/* Segunda passada de agrupamento vertical. As células de uma mesma linha da tabela não
+   ficam exatamente na mesma altura: neste relatório a data/hora sai ~2,6 pontos acima do
+   número da cirurgia, enquanto a continuação de um nome longo cai 6 a 15 pontos abaixo.
+   Com a tolerância fina da extração (2 pontos), UMA linha da tabela virava três — a data ia
+   parar num registro e o procedimento noutro. Aqui juntamos o que está a menos de
+   `tolerancia`; as continuações, bem mais afastadas, seguem separadas e são tratadas como
+   continuação. */
+function agruparLinhasProximas(pagina, tolerancia) {
+  const ordenadas = (pagina || []).slice().sort((a, b) => a.y - b.y);
+  const saida = [];
+  for (const grupo of ordenadas) {
+    const anterior = saida[saida.length - 1];
+    if (anterior && Math.abs(grupo.y - anterior.y) <= tolerancia) {
+      anterior.itens = anterior.itens.concat(grupo.itens).sort((a, b) => a.x - b.x);
+    } else {
+      saida.push({ y: grupo.y, itens: grupo.itens.slice() });
+    }
+  }
+  return saida;
+}
+
+function analisarPDFCirurgias(paginasBrutas) {
+  const cirurgias = [];
+  let paginasSemCabecalho = 0;
+  const paginas = (paginasBrutas || []).map(p => agruparLinhasProximas(p, 4));
+  for (const pagina of paginas) {
+    let bordas = null, iCab = -1;
+    for (let i = 0; i < pagina.length; i++) {
+      const achadas = bordasDoCabecalho(pagina, i);
+      if (achadas) { bordas = achadas; iCab = i; break; }
+    }
+    if (!bordas) { if (pagina.length) paginasSemCabecalho++; continue; }
+
+    let atual = null;
+    for (const grupo of pagina.slice(iCab + 1)) {
+      const itens = grupo.itens || [];
+      if (!itens.length) continue;
+      const campos = fatiarPorBordas(itens, bordas);
+      if (NUMERO_DE_CIRURGIA.test(campos.Cirurgia || '')) {
+        /* A data/hora fica na fronteira com "Min" e às vezes se parte na fatia. Como o
+           padrão é inequívoco, vale reler da linha inteira. Alguns PDFs trazem a hora
+           truncada NA ORIGEM ("19/03/2026 12:") — a data, que é o que a vigilância usa,
+           continua íntegra. */
+        const dh = linhaDeItens(itens).match(/\d{2}\/\d{2}\/\d{4}(\s+\d{2}:\d{2})?/);
+        if (dh) campos['Data Início'] = dh[0].replace(/\s+/, ' ');
+        if (atual) cirurgias.push(atual);
+        atual = campos;
+      } else if (atual) {
+        for (const campo of CAMPOS_QUE_QUEBRAM) {
+          if (campos[campo]) atual[campo] = (atual[campo] + ' ' + campos[campo]).trim();
+        }
+      }
+    }
+    if (atual) cirurgias.push(atual);
+  }
+  return { cirurgias, paginasSemCabecalho };
+}
+
+/* Do formato do PDF para as colunas do banco. O PDF NÃO traz prontuário — traz o número do
+   ATENDIMENTO. A ligação com o paciente depende do censo individual; até lá a cirurgia
+   entra identificada pelo atendimento, e a vigilância pós-alta, que precisa do telefone,
+   fica esperando esse cruzamento. */
+function cirurgiaDoPDF(c) {
+  const dh = String(c['Data Início'] || '').trim();
+  return {
+    Atendimento: String(c.Atend || '').trim(),
+    DataCirurgia: normalizarData(dh.slice(0, 10)) || '',
+    Procedimento: c['Procedimento Principal'] || '',
+    Cirurgiao: c['Cirurgião'] || '',
+    DuracaoMin: /^\d{1,4}$/.test(c.Min || '') ? c.Min : '',
+    Setor: c.Unid || ''
+  };
+}
+
 const MESES_PT = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho',
   'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 /* As planilhas antigas vieram de um Excel em inglês e gravaram "1/Dec". */
@@ -2444,7 +2646,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome,
     enriquecerCirurgia, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, lerDispositivosDia, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

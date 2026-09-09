@@ -11,6 +11,7 @@ global.CLASSIFICACOES_CULTURA = esquemas.CLASSIFICACOES_CULTURA;
 global.SINONIMOS_CLASSIFICACAO = esquemas.SINONIMOS_CLASSIFICACAO;
 global.CLASSES_TRIAGEM = esquemas.CLASSES_TRIAGEM;
 global.normalizarTexto = leitura.normalizarTexto;
+global.linhaDeItens = leitura.linhaDeItens;
 const imp = require(path.join(__dirname, '..', 'js', 'importacao.js'));
 global.normalizarProntuario = imp.normalizarProntuario;
 global.prescricaoAtiva = imp.prescricaoAtiva;
@@ -2434,6 +2435,96 @@ console.log('\n== 60. Taxas por 1.000 dias de dispositivo ==');
   const semDispositivos = rel.relatorioIRAS({ ...bancos, denominadores: {} }, ['CTI'], '2026-08-01', '2026-08-31');
   verificar('sem dias de dispositivo, nenhuma taxa é inventada',
     !semDispositivos.secoes.some(s => s.titulo === 'Taxas por 1.000 dias de dispositivo'));
+}
+
+console.log('\n== 62. PDF de cirurgias: recorte por coluna, página a página ==');
+{
+  /* Monta a estrutura que extrairPaginasPDF devolve: páginas → linhas → itens com x. */
+  const it = (x, str) => ({ x, largura: str.length * 5, str });
+  const linha = (y, ...itens) => ({ y, itens });
+  const cabecalho = (x0) => [
+    linha(74, it(x0 + 0, 'Cirurgia'), it(x0 + 450, 'Unide'), it(x0 + 470, 'atend')),
+    linha(79, it(x0 + 54, 'Atend'), it(x0 + 106, 'Procedimento'), it(x0 + 160, 'Principal'),
+      it(x0 + 228, 'CID'), it(x0 + 262, 'Data'), it(x0 + 285, 'Início'), it(x0 + 332, 'Min'),
+      it(x0 + 359, 'Paciente'), it(x0 + 511, 'Idade'), it(x0 + 540, 'Convênio'),
+      it(x0 + 627, 'Cirurgião'), it(x0 + 704, 'Anestesista'), it(x0 + 780, 'Tipo'), it(x0 + 800, 'Anest'))
+  ];
+  /* Página 1 e página 2 com bordas DIFERENTES: é o caso que derrubava o acerto para 18%
+     quando as bordas eram fixadas na primeira página. */
+  const pagina1 = [
+    ...cabecalho(0),
+    /* a data sai ~2,6 pontos ACIMA do número da cirurgia — mesma linha visual */
+    linha(96.4, it(254, '05/01/2026'), it(296, '08:20'), it(359, 'Ana'), it(627, 'Marcelo'), it(704, 'Daniela')),
+    linha(99, it(12, '21.417'), it(54, '497.736'), it(106, 'Laqueadura'), it(151, 'Tubária'),
+      it(335, '60'), it(462, 'UExt-01'), it(519, '37'), it(540, 'SC'), it(553, 'Saúde'), it(780, 'Geral')),
+    linha(105.5, it(106, 'Laparoscópica'), it(359, 'Prates'), it(704, 'Pousada')),
+    /* rodapé: carimbo de emissão na altura da última linha */
+    linha(112, it(106, '10:35:56'))
+  ];
+  const pagina2 = [
+    ...cabecalho(20),
+    linha(96.4, it(274, '06/01/2026'), it(316, '14:00')),
+    linha(99, it(12, '21.418'), it(74, '497.900'), it(126, 'Cesariana'), it(352, '45'),
+      it(482, 'UExt-02'), it(539, '29'), it(560, 'Unimed'), it(647, 'Paulo'))
+  ];
+  const r = imp.analisarPDFCirurgias([pagina1, pagina2]);
+  verificar('lê as duas páginas, cada uma com as bordas do SEU cabeçalho',
+    r.cirurgias.length === 2 && r.paginasSemCabecalho === 0, JSON.stringify(r.cirurgias));
+
+  const a = imp.cirurgiaDoPDF(r.cirurgias[0]);
+  verificar('a data que vem na linha de cima entra no registro certo',
+    a.DataCirurgia === '2026-01-05', a.DataCirurgia);
+  verificar('a continuação da linha de baixo completa o procedimento',
+    a.Procedimento === 'Laqueadura Tubária Laparoscópica', a.Procedimento);
+  verificar('atendimento, duração e setor saem das colunas certas',
+    a.Atendimento === '497.736' && a.DuracaoMin === '60' && a.Setor === 'UExt-01', JSON.stringify(a));
+  verificar('o tipo de anestesia não gruda no nome do cirurgião',
+    a.Cirurgiao === 'Marcelo' && !/Geral/.test(a.Cirurgiao), a.Cirurgiao);
+  verificar('o carimbo de hora do rodapé não entra no procedimento',
+    !/10:35:56/.test(a.Procedimento) && !/10:35:56/.test(r.cirurgias[0].Paciente || ''));
+
+  const b = imp.cirurgiaDoPDF(r.cirurgias[1]);
+  verificar('a segunda página, com bordas deslocadas, também sai certa',
+    b.DataCirurgia === '2026-01-06' && b.Atendimento === '497.900'
+    && b.Procedimento === 'Cesariana' && b.Setor === 'UExt-02', JSON.stringify(b));
+
+  /* Hora truncada NA ORIGEM: a data, que é o que a vigilância usa, tem de sobreviver. */
+  const truncada = imp.analisarPDFCirurgias([[...cabecalho(0),
+    linha(96.4, it(254, '19/03/2026'), it(296, '12:')),
+    linha(99, it(12, '21.500'), it(54, '498.000'), it(106, 'Herniorrafia'), it(335, '40'))]]);
+  verificar('hora truncada na origem não estraga a data',
+    imp.cirurgiaDoPDF(truncada.cirurgias[0]).DataCirurgia === '2026-03-19',
+    truncada.cirurgias[0]['Data Início']);
+
+  /* Página sem cabeçalho (capa, resumo) é contada, não confundida com dados. */
+  const semCab = imp.analisarPDFCirurgias([[linha(100, it(10, 'Relação'), it(60, 'das'), it(90, 'Cirurgias'))]]);
+  verificar('página sem cabeçalho é contada e não vira cirurgia',
+    semCab.cirurgias.length === 0 && semCab.paginasSemCabecalho === 1);
+  verificar('PDF vazio não quebra',
+    imp.analisarPDFCirurgias([]).cirurgias.length === 0 && imp.analisarPDFCirurgias(null).cirurgias.length === 0);
+
+  /* O pdf.js entrega como UM item o trecho que o PDF desenha de uma vez — e num relatório
+     em colunas isso cola o nome do cirurgião ao do anestesista. Sem cortar, um campo engolia
+     o outro em 44 dos 533 registros de janeiro. */
+  const bordas = [{ campo: 'Cirurgião', x: 627 }, { campo: 'Anestesista', x: 704 }, { campo: 'Tipo Anest', x: 776 }];
+  const partido = imp.partirNasBordas({ x: 627, largura: 141, str: 'Lucas Duarte Braga Fernando Antonio' }, bordas);
+  verificar('item que atravessa a borda é partido em dois',
+    partido.length === 2, JSON.stringify(partido));
+  verificar('o corte cai num espaço, nunca no meio de uma palavra',
+    partido.every(p => !/^\S*[a-z]$/.test('') && p.str === p.str.trim())
+    && partido[0].str === 'Lucas Duarte Braga' && partido[1].str === 'Fernando Antonio',
+    JSON.stringify(partido.map(p => p.str)));
+  verificar('o pedaço seguinte começa NA borda, para não voltar à coluna de origem',
+    partido[1].x === 704, String(partido[1].x));
+  const inteiro = imp.partirNasBordas({ x: 627, largura: 40, str: 'Ana Silva' }, bordas);
+  verificar('item que cabe numa coluna só não é tocado',
+    inteiro.length === 1 && inteiro[0].str === 'Ana Silva');
+  const semEspaco = imp.partirNasBordas({ x: 627, largura: 141, str: 'PalavraUnicaMuitoLonga' }, bordas);
+  verificar('sem espaço onde cortar, o item fica inteiro (melhor que partir palavra)',
+    semEspaco.length === 1);
+
+  verificar('agruparLinhasProximas junta a linha da data e separa a continuação',
+    imp.agruparLinhasProximas([linha(96.4, it(1, 'a')), linha(99, it(2, 'b')), linha(105.5, it(3, 'c'))], 4).length === 2);
 }
 
 /* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==

@@ -84,10 +84,22 @@ async function importarArquivoAutomatico(arquivo) {
     }
   }
   if (/\.pdf$/i.test(arquivo.name)) {
-    const aoa = analisarPDFCulturas(await extrairLinhasPDF(buffer));
-    if (!aoa) return { nome: arquivo.name, situacao: 'modelo de PDF não reconhecido' };
-    bruto = { linhas: aoa };
-    linhaCab = 0;
+    /* Mesmos dois modelos da importação avulsa, na mesma ordem. */
+    const paginas = await extrairPaginasPDF(buffer);
+    const doPDF = analisarPDFCirurgias(paginas);
+    if (doPDF.cirurgias.length) {
+      const colunas = ['Atendimento', 'DataCirurgia', 'Procedimento', 'Cirurgiao', 'DuracaoMin', 'Setor'];
+      const linhas = doPDF.cirurgias.map(cirurgiaDoPDF);
+      bruto = { linhas: [colunas, ...linhas.map(l => colunas.map(c => l[c] || ''))] };
+      linhaCab = 0;
+    } else {
+      const achatadas = [];
+      for (const pagina of paginas) for (const grupo of pagina) achatadas.push(linhaDeItens(grupo.itens));
+      const aoa = analisarPDFCulturas(achatadas);
+      if (!aoa) return { nome: arquivo.name, situacao: 'modelo de PDF não reconhecido' };
+      bruto = { linhas: aoa };
+      linhaCab = 0;
+    }
   } else {
     bruto = lerBruto(buffer, arquivo.name, 'auto');
     const tabelaInvasivos = analisarInvasivos(bruto.linhas);
@@ -273,7 +285,28 @@ async function processarArquivo(arquivo, codificacao, opcoesAba) {
       }
     }
     if (/\.pdf$/i.test(arquivo.name)) {
-      const aoa = analisarPDFCulturas(await extrairLinhasPDF(imp.buffer));
+      /* Uma leitura só, aproveitada pelos dois modelos: as cirurgias precisam da posição e
+         da divisão de páginas; as culturas trabalham com as linhas achatadas. */
+      const paginas = await extrairPaginasPDF(imp.buffer);
+      const doPDF = analisarPDFCirurgias(paginas);
+      if (doPDF.cirurgias.length) {
+        /* Vira tabela com os nomes das colunas do banco e segue pelo assistente normal —
+           validação, vocabulário e deduplicação são os mesmos de qualquer importação. */
+        const colunas = ['Atendimento', 'DataCirurgia', 'Procedimento', 'Cirurgiao', 'DuracaoMin', 'Setor'];
+        const linhas = doPDF.cirurgias.map(cirurgiaDoPDF);
+        const aoa = [colunas, ...linhas.map(l => colunas.map(c => l[c] || ''))];
+        imp.bruto = { linhas: aoa, nomeArquivo: arquivo.name, formato: 'pdf (cirurgias)',
+          codificacao: '—', totalLinhas: aoa.length,
+          aviso: doPDF.paginasSemCabecalho
+            ? `${doPDF.paginasSemCabecalho} página(s) sem cabeçalho reconhecido foram ignoradas.` : '' };
+        imp.linhaCabecalho = 0;
+        aoMudarCabecalho();
+        renderDetalhesArquivo();
+        return;
+      }
+      const achatadas = [];
+      for (const pagina of paginas) for (const grupo of pagina) achatadas.push(linhaDeItens(grupo.itens));
+      const aoa = analisarPDFCulturas(achatadas);
       if (!aoa) throw new Error('Modelo de PDF não reconhecido — me envie um exemplar para eu criar o leitor.');
       imp.bruto = { linhas: aoa, nomeArquivo: arquivo.name, formato: 'pdf', codificacao: '—', totalLinhas: aoa.length };
       imp.linhaCabecalho = 0;

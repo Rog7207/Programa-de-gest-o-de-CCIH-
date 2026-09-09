@@ -107,40 +107,67 @@ function calcularFingerprint(cabecalhos) {
   return h.toString(16).padStart(8, '0');
 }
 
-/* Extrai as linhas de texto de um PDF digital (pdf.js), reconstruindo colunas por posição. */
-async function extrairLinhasPDF(buffer) {
+/* Lê o PDF (pdf.js) devolvendo a estrutura CRUA: páginas → linhas → itens com posição x.
+   Guardar o x é o que permite recortar tabela por coluna; e guardar a divisão de PÁGINAS é
+   obrigatório em relatório de sistema, onde a largura das colunas se adapta ao conteúdo e
+   muda de uma página para outra. Achatar tudo numa lista só de texto — como fazíamos —
+   destrói as duas informações. */
+async function extrairPaginasPDF(buffer) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'lib/pdf.worker.min.js';
   const doc = await pdfjsLib.getDocument({ data: buffer.slice() }).promise;
-  const linhas = [];
+  const paginas = [];
   for (let numero = 1; numero <= doc.numPages; numero++) {
     const pagina = await doc.getPage(numero);
-    const conteudo = await pagina.getTextContent();
+    /* disableCombineTextItems: sem isso o pdf.js junta trechos vizinhos num item só, e num
+       relatório em colunas o nome do cirurgião vinha colado ao do anestesista numa única
+       string — sem nenhuma coordenada onde cortar. Com a opção ligada cada trecho mantém o
+       seu x, que é o que permite recortar por coluna. */
+    const conteudo = await pagina.getTextContent({ disableCombineTextItems: true });
+    /* As coordenadas do item vêm no espaço do PDF, SEM a rotação da página. Num relatório
+       em paisagem (/Rotate 90) isso troca linhas por colunas: os rótulos "Cirurgião",
+       "Anestesista" e "Tipo Anest" saíam todos no mesmo x, cada um num y — e nenhuma tabela
+       era reconhecida. A viewport aplica a rotação e devolve a posição como o olho vê, com
+       y crescendo para BAIXO. */
+    const viewport = pagina.getViewport({ scale: 1 });
     const porY = [];
     for (const item of conteudo.items) {
       if (!item.str || !item.str.trim()) continue;
-      const y = item.transform[5];
+      const m = pdfjsLib.Util.transform(viewport.transform, item.transform);
+      const x = m[4], y = m[5];
       let grupo = porY.find(g => Math.abs(g.y - y) <= 2);
       if (!grupo) { grupo = { y, itens: [] }; porY.push(grupo); }
-      grupo.itens.push({ x: item.transform[4], largura: item.width || 0, str: item.str });
+      grupo.itens.push({ x, largura: item.width || 0, str: item.str });
     }
-    porY.sort((a, b) => b.y - a.y);
-    for (const grupo of porY) {
-      grupo.itens.sort((a, b) => a.x - b.x);
-      let linha = '', fim = null;
-      for (const it of grupo.itens) {
-        if (fim !== null) {
-          const vao = it.x - fim;
-          linha += vao > 6 ? '   ' : (vao > 0.8 ? ' ' : '');
-        }
-        linha += it.str;
-        fim = it.x + it.largura;
-      }
-      linhas.push(linha);
-    }
+    porY.sort((a, b) => a.y - b.y);
+    porY.forEach(g => g.itens.sort((a, b) => a.x - b.x));
+    paginas.push(porY);
   }
+  return paginas;
+}
+
+/* Junta os itens de uma linha num texto só, com espaçamento aproximado pelo vão. */
+function linhaDeItens(itens) {
+  let linha = '', fim = null;
+  for (const it of (itens || [])) {
+    if (fim !== null) {
+      const vao = it.x - fim;
+      linha += vao > 6 ? '   ' : (vao > 0.8 ? ' ' : '');
+    }
+    linha += it.str;
+    fim = it.x + it.largura;
+  }
+  return linha;
+}
+
+/* Extrai as linhas de texto de um PDF digital, achatadas. Mantido para os leitores que já
+   trabalham assim (culturas); quem precisa de coluna usa extrairPaginasPDF. */
+async function extrairLinhasPDF(buffer) {
+  const paginas = await extrairPaginasPDF(buffer);
+  const linhas = [];
+  for (const pagina of paginas) for (const grupo of pagina) linhas.push(linhaDeItens(grupo.itens));
   return linhas;
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { lerBruto, detectarCabecalho, normalizarTexto, calcularFingerprint, extensaoDe, FORMATOS_TABULARES };
+  module.exports = { lerBruto, detectarCabecalho, normalizarTexto, calcularFingerprint, extensaoDe, FORMATOS_TABULARES, linhaDeItens };
 }

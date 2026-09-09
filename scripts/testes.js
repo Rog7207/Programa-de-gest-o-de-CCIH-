@@ -1995,6 +1995,39 @@ console.log('\n== 51. Decisão ATB: protocolo empírico + dados locais ==');
       .includes('testados entre jun/2024 e jun/2026'));
 }
 
+console.log('\n== 55. Classificação por padrão: coluna que traz o MOTIVO, não a classe ==');
+{
+  const c = imp.classificacaoCanonica;
+  /* O que já funcionava continua valendo. */
+  verificar('classe canônica exata', c('Colonização') === 'Colonização');
+  verificar('sinônimo declarado', c('infeccao hospitalar') === 'IRAS');
+  verificar('valor vazio devolve vazio', c('') === '' && c(null) === '');
+
+  /* Texto livre da planilha da Unimed. */
+  verificar('"CULTURA VIGILANCIA SEMANAL UTI" é colonização',
+    c('CULTURA VIGILANCIA SEMANAL UTI') === 'Colonização' && c('Cultura de Vigilância Semanal UTI') === 'Colonização');
+  verificar('variações de admissão', c('ADM') === 'Presente na admissão'
+    && c('ADMISSÃO PIELONEFRITE') === 'Presente na admissão' && c('ADM CALCULO RENAL') === 'Presente na admissão');
+  verificar('pronto atendimento é presente na admissão',
+    c('PA') === 'Presente na admissão' && c('ATENDIMENTO PA') === 'Presente na admissão');
+  verificar('PAC (pneumonia adquirida na comunidade) é presente na admissão', c('PAC') === 'Presente na admissão');
+  verificar('"PACIENTE" NÃO vira admissão — âncora do ^pac$', c('Paciente') !== 'Presente na admissão');
+  verificar('proveniente de outra instituição', c('PROVENIENTE DE OUTRA INSTITUIÇÃO') === 'Presente na admissão'
+    && c('INTERNAÇÃO RECENTE EM OUTRA INSTITUIÇÃO') === 'Presente na admissão');
+  verificar('ISC é IRAS', c('ISC OC') === 'IRAS');
+  verificar('"IRAS — ITU associada a cateter" (sufixo do HNSC) é IRAS',
+    c('IRAS — ITU associada a cateter vesical') === 'IRAS');
+  verificar('"sem critério" e variantes viram Informativa (decisão da CCIH em 09/09/2026)',
+    c('SEM CRITÉRIO') === 'Informativa' && c('Sem criterio') === 'Informativa'
+    && c('NÃO PREENCHE CRITÉRIO') === 'Informativa' && c('SEM CRITÉRIO PARA ISC') === 'Informativa');
+  verificar('sem crescimento é negativa', c('Não houve crescimento de microrganismos') === 'Negativa');
+  verificar('amostra não coletada não é cultura', c('AMOSTRA NÃO COLETADA') === 'Não é cultura');
+
+  /* O que É julgamento clínico continua indo para revisão humana. */
+  verificar('topografias de IRAS ficam para revisão (precisam de confirmação)',
+    c('PAV') === '' && c('IPCS NÃO ASSOC. A CVC') === '' && c('TRAQUEOBRONQUITE CLÍNICA') === '');
+}
+
 console.log('\n== 54. Leitura multi-aba: planilha com uma aba por mês ==');
 {
   /* Planilha de controle da CCIH: uma aba por mês, mesmo cabeçalho, meses futuros

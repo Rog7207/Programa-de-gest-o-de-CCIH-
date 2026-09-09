@@ -390,12 +390,35 @@ function textoAntibiograma(itens) {
 
 /* Converte a classificação escrita no relatório de origem para a lista canônica do app.
    Devolve '' quando não reconhece (o valor original fica no campo, para revisão). */
+/* Quando a coluna de classificação é texto livre — a CCIH escreve o MOTIVO, não a classe
+   ("ADMISSÃO PIELONEFRITE", "CULTURA VIGILANCIA SEMANAL UTI", "ATENDIMENTO PA") — o
+   casamento exato não pega nada e tudo cai na fila de revisão. Estas regras leem a
+   intenção. Ordem importa: a mais específica primeiro. */
+const PADROES_CLASSIFICACAO = [
+  [/vigilancia|rastreio|swabsemanal/, 'Colonização'],
+  [/^isc|infeccaodesitiocirurgico/, 'IRAS'],
+  [/^iras|infeccaohospitalar/, 'IRAS'],
+  /* ^pac$ ancorado: "paciente" contém "pac" e viraria admissão por engano. */
+  [/^adm|admissao|comunitari|nascimento|^pa$|^pac$|atendimentopa|prontoatendimento/, 'Presente na admissão'],
+  [/outrainstituicao|outroservico|outrohospital|transferencia/, 'Presente na admissão'],
+  [/semcrescimento|naohouvecrescimento|ausenciadecrescimento/, 'Negativa'],
+  [/naocoletada|amostranaocoletada|naorealizado/, 'Não é cultura'],
+  /* "Sem critério", "não preenche critério (para ISC/PNM)": a CCIH avaliou e concluiu que
+     não é IRAS, sem afirmar que veio da comunidade — decisão dele em 09/09/2026. Fica
+     fora da fila de revisão, mas continua visível no painel e no perfil microbiológico. */
+  [/semcriterio|naopreenche.*criterio|naopreenchecriterio/, 'Informativa']
+];
+
 function classificacaoCanonica(valor) {
   const n = normalizarTexto(valor);
   if (!n) return '';
   if (SINONIMOS_CLASSIFICACAO[n]) return SINONIMOS_CLASSIFICACAO[n];
   const exata = CLASSIFICACOES_CULTURA.find(c => normalizarTexto(c) === n);
-  return exata || '';
+  if (exata) return exata;
+  for (const [padrao, classe] of PADROES_CLASSIFICACAO) {
+    if (padrao.test(n)) return classe;
+  }
+  return '';
 }
 
 /* ---- Triagem automática das culturas ----

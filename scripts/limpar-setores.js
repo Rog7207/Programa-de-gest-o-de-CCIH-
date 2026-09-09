@@ -7,12 +7,11 @@
    reescreve o setor em TODOS os lugares onde ele aparece (VOCAB_APLICACAO.setores) e
    deixa um alias registrado, para a próxima importação já normalizar sozinha.
 
-   Casos deliberadamente NÃO tocados (decisão humana, não de script):
-   - "H CENTRO OBSTETRICO (HNSC)", "H UNID 22 ONCOLOGIA (HNSC)": não há nome limpo
-     equivalente no vocabulário — são setores de verdade, só com o rótulo do Tasy.
-   - "H ESPERA DE CIRURGIA (HNSC)" e "H UNIDADE DE ESPERA DE LEITO - (HNSC)": há mais de
-     um destino plausível (sala de preparo × pós-operatória; três variantes de espera de
-     leitos). Unificar no palpite erraria a estatística por setor. */
+   Os quatro rótulos do Tasy que não tinham nome limpo equivalente ganharam um, definido
+   por ele em 09/09/2026: Centro Obstétrico, Oncologia, Unidade de Espera Cirúrgica e
+   Unidade de Espera de Leitos Clínicos. As esperas cirúrgica/obstétrica que já existiam
+   (Sala de Preparo, Pós-Operatória, Centro Obstétrico) ficam como estão — já identificam
+   bem o lugar. Único caso ainda sem destino: "HNSC (não especificado)", 1 registro. */
 
 const fs = require('fs');
 const path = require('path');
@@ -40,8 +39,13 @@ const UNIFICACOES = {
   'H HEMO CARDIACA DIAG E CIRURG (HNSC)': 'Hemodinâmica Cardíaca',
   'H UNID DE ESPERA DE PREPARO (HNSC)': 'Unidade de Espera Sala de Preparo',
   /* Digitado à mão no miniapp de higiene antes de existir a lista de setores; ele
-     confirmou em 09/09/2026 que é a UTI adulto. */
-  'Uti': 'CTI - Dr. Joaquim David Ferreira Lima'
+     confirmou em 09/09/2026 que a UTI adulto é o próprio CTI. */
+  'Uti': 'CTI - Dr. Joaquim David Ferreira Lima',
+  /* Rótulos do Tasy que passam a ter nome limpo (os destinos nascem no vocabulário). */
+  'H CENTRO OBSTETRICO (HNSC)': 'Centro Obstétrico',
+  'H UNID 22 ONCOLOGIA (HNSC)': 'Oncologia',
+  'H ESPERA DE CIRURGIA (HNSC)': 'Unidade de Espera Cirúrgica',
+  'H UNIDADE DE ESPERA DE LEITO - (HNSC)': 'Unidade de Espera de Leitos Clínicos'
 };
 
 /* Entradas do vocabulário que não são setor nenhum. Só saem se não tiverem NENHUM

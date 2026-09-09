@@ -19,8 +19,13 @@ function decodificarTexto(buffer, codificacao) {
   }
 }
 
-/* Lê o arquivo bruto. `codificacao`: 'auto' | 'utf-8' | 'windows-1252' | 'cp850' (dbf/csv). */
-function lerBruto(buffer, nomeArquivo, codificacao) {
+/* Lê o arquivo bruto. `codificacao`: 'auto' | 'utf-8' | 'windows-1252' | 'cp850' (dbf/csv).
+   `opcoes.aba`: nome ou índice da aba (padrão: a primeira).
+   `opcoes.todasAsAbas`: junta TODAS as abas de mesmo cabeçalho num só conjunto de linhas —
+   é o caso das planilhas de controle da CCIH com uma aba por mês. Abas com cabeçalho
+   diferente são deixadas de fora e devolvidas em `abasIgnoradas`, porque concatenar
+   colunas que não casam embaralharia os dados em silêncio. */
+function lerBruto(buffer, nomeArquivo, codificacao, opcoes) {
   const ext = extensaoDe(nomeArquivo);
   if (!FORMATOS_TABULARES.includes(ext)) {
     throw new Error(`Formato não suportado: .${ext}`);
@@ -38,9 +43,37 @@ function lerBruto(buffer, nomeArquivo, codificacao) {
     }
     wb = XLSX.read(buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer), opcoes);
   }
-  const aba = wb.Sheets[wb.SheetNames[0]];
-  const linhas = XLSX.utils.sheet_to_json(aba, { header: 1, raw: true, defval: '' });
-  return { linhas, nomeArquivo, formato: ext, codificacao: codUsada, totalLinhas: linhas.length };
+  const abas = wb.SheetNames;
+  const paraLinhas = nome => XLSX.utils.sheet_to_json(wb.Sheets[nome], { header: 1, raw: true, defval: '' });
+
+  if ((opcoes || {}).todasAsAbas && abas.length > 1) {
+    let cabecalho = null, assinatura = null;
+    const linhas = [];
+    const abasLidas = [], abasIgnoradas = [];
+    for (const nome of abas) {
+      const daAba = paraLinhas(nome);
+      if (!daAba.length) continue;
+      const iCab = detectarCabecalho(daAba);
+      const corpo = daAba.slice(iCab + 1).filter(l => l.some(c => String(c).trim() !== ''));
+      if (!corpo.length) continue;             /* aba de mês ainda não preenchido */
+      const daqui = calcularFingerprint(daAba[iCab] || []);
+      if (!cabecalho) { cabecalho = daAba[iCab]; assinatura = daqui; }
+      else if (daqui !== assinatura) { abasIgnoradas.push(nome); continue; }
+      linhas.push(...corpo);
+      abasLidas.push(nome);
+    }
+    if (cabecalho) linhas.unshift(cabecalho);
+    return { linhas, nomeArquivo, formato: ext, codificacao: codUsada,
+      totalLinhas: linhas.length, abas, abasLidas, abasIgnoradas };
+  }
+
+  const escolha = (opcoes || {}).aba;
+  const nomeAba = escolha == null ? abas[0]
+    : (typeof escolha === 'number' ? abas[escolha] : escolha);
+  if (!wb.Sheets[nomeAba]) throw new Error(`Aba não encontrada: ${escolha}`);
+  const linhas = paraLinhas(nomeAba);
+  return { linhas, nomeArquivo, formato: ext, codificacao: codUsada,
+    totalLinhas: linhas.length, abas, abaLida: nomeAba };
 }
 
 /* Heurística: acha a linha de cabeçalho (relatórios costumam ter título/logotipo antes). */

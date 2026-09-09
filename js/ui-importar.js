@@ -229,8 +229,11 @@ function avisoDeUnificacoes(quantas) {
     el('button', { class: 'botao-secundario', onclick: () => navegar('pacientes') }, 'Revisar na aba Pacientes'));
 }
 
-async function processarArquivo(arquivo, codificacao) {
+async function processarArquivo(arquivo, codificacao, opcoesAba) {
   try {
+    /* Arquivo diferente zera a escolha de aba — senão a aba do anterior valeria para o
+       próximo, escolhendo dado errado sem avisar. */
+    if (imp.arquivo !== arquivo) imp.opcoesAba = null;
     imp.arquivo = arquivo;
     imp.buffer = new Uint8Array(await arquivo.arrayBuffer());
     if (/\.xlsx?$/i.test(arquivo.name)) {
@@ -259,7 +262,11 @@ async function processarArquivo(arquivo, codificacao) {
       const pacote = analisarPacoteCSV(decodificarTexto(imp.buffer, 'auto').texto);
       if (pacote) { await ingerirMiniapp(pacote.tipo, pacote.abas, arquivo); return; }
     }
-    imp.bruto = lerBruto(imp.buffer, arquivo.name, codificacao);
+    /* Planilha de controle da CCIH costuma ter uma aba por mês: a escolha de aba (ou de
+       juntar todas) fica guardada em imp.opcoesAba para sobreviver à troca de codificação
+       e ao redesenho da tela. */
+    imp.opcoesAba = opcoesAba || imp.opcoesAba || {};
+    imp.bruto = lerBruto(imp.buffer, arquivo.name, codificacao, imp.opcoesAba);
     const tabelaInvasivos = analisarInvasivos(imp.bruto.linhas);
     if (tabelaInvasivos) {
       imp.bruto = { ...imp.bruto, linhas: tabelaInvasivos, totalLinhas: tabelaInvasivos.length };
@@ -579,6 +586,25 @@ function renderDetalhesArquivo() {
     el('option', { value: c, selected: (b.codificacao || '').startsWith(c) ? '' : null }, c)));
   seletorCodificacao.addEventListener('change', () => processarArquivo(imp.arquivo, seletorCodificacao.value));
 
+  /* Seletor de aba: só aparece quando o arquivo tem mais de uma. "Todas as abas" junta as
+     que têm o mesmo cabeçalho — o caso das planilhas com uma aba por mês. */
+  let controleAba = null;
+  if ((b.abas || []).length > 1) {
+    const atual = imp.opcoesAba || {};
+    const sel = el('select', {},
+      el('option', { value: '@todas', selected: atual.todasAsAbas ? '' : null },
+        `todas as abas (${b.abas.length})`),
+      b.abas.map(nome => el('option', { value: nome, selected: (!atual.todasAsAbas && b.abaLida === nome) ? '' : null }, nome)));
+    sel.addEventListener('change', () => processarArquivo(imp.arquivo, seletorCodificacao.value,
+      sel.value === '@todas' ? { todasAsAbas: true } : { aba: sel.value }));
+    const nota = b.abasLidas
+      ? el('span', { class: 'texto-suave' },
+          ` ${b.abasLidas.length} aba(s) com dados: ${b.abasLidas.join(', ')}`
+          + ((b.abasIgnoradas || []).length ? ` · ⚠ fora por cabeçalho diferente: ${b.abasIgnoradas.join(', ')}` : ''))
+      : null;
+    controleAba = el('label', {}, 'Aba: ', sel, nota);
+  }
+
   const opcoesLinha = [];
   for (let i = 0; i < Math.min(b.linhas.length, 20); i++) {
     const previa = (b.linhas[i] || []).slice(0, 4).map(c => String(c).trim()).filter(Boolean).join(' | ') || '(vazia)';
@@ -629,6 +655,7 @@ function renderDetalhesArquivo() {
     el('div', { class: 'linha-campos' },
       el('label', {}, 'Linha do cabeçalho: ', seletorLinha),
       el('label', {}, 'Codificação: ', seletorCodificacao)),
+    controleAba ? el('div', { class: 'linha-campos' }, controleAba) : null,
     tabela, reconhecimento));
 }
 

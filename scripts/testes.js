@@ -1995,6 +1995,46 @@ console.log('\n== 51. Decisão ATB: protocolo empírico + dados locais ==');
       .includes('testados entre jun/2024 e jun/2026'));
 }
 
+console.log('\n== 54. Leitura multi-aba: planilha com uma aba por mês ==');
+{
+  /* Planilha de controle da CCIH: uma aba por mês, mesmo cabeçalho, meses futuros
+     vazios — e uma aba de outro assunto, que NÃO pode ser concatenada. */
+  const wb = XLSX.utils.book_new();
+  const comCabecalho = linhas => XLSX.utils.aoa_to_sheet([
+    ['Controle de Culturas — 2026'], [], [],
+    ['Atendimento', 'Paciente', 'Microrganismo'],
+    ...linhas]);
+  XLSX.utils.book_append_sheet(wb, comCabecalho([['1', 'A', 'E. coli'], ['2', 'B', 'K. pneumoniae']]), 'Janeiro');
+  XLSX.utils.book_append_sheet(wb, comCabecalho([['3', 'C', 'S. aureus']]), 'Fevereiro');
+  XLSX.utils.book_append_sheet(wb, comCabecalho([]), 'Março');           /* mês ainda vazio */
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+    ['Outra coisa'], [], [], ['Data', 'Consumo'], ['01/01', '10']]), 'Consumo');
+  const buffer = new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
+
+  const primeira = leitura.lerBruto(buffer, 'controle.xlsx', 'auto');
+  verificar('sem opção, lê a primeira aba e informa as demais',
+    primeira.abaLida === 'Janeiro' && primeira.abas.length === 4, JSON.stringify(primeira.abas));
+
+  const escolhida = leitura.lerBruto(buffer, 'controle.xlsx', 'auto', { aba: 'Fevereiro' });
+  verificar('lê a aba escolhida pelo nome',
+    escolhida.abaLida === 'Fevereiro' && escolhida.linhas.some(l => l[2] === 'S. aureus'));
+  verificar('aba inexistente é erro explícito',
+    (() => { try { leitura.lerBruto(buffer, 'x.xlsx', 'auto', { aba: 'Abril' }); return false; }
+      catch (e) { return /Aba não encontrada/.test(e.message); } })());
+
+  const todas = leitura.lerBruto(buffer, 'controle.xlsx', 'auto', { todasAsAbas: true });
+  verificar('junta as abas de mesmo cabeçalho, com UM cabeçalho só',
+    todas.abasLidas.join(',') === 'Janeiro,Fevereiro' && todas.totalLinhas === 4,
+    JSON.stringify({ lidas: todas.abasLidas, linhas: todas.totalLinhas }));
+  verificar('mês vazio não entra nem atrapalha', !todas.abasLidas.includes('Março'));
+  verificar('aba de outro assunto fica de fora, e é declarada',
+    todas.abasIgnoradas.join(',') === 'Consumo', JSON.stringify(todas.abasIgnoradas));
+  verificar('o cabeçalho da junção é a linha 1',
+    leitura.detectarCabecalho(todas.linhas) === 0 && todas.linhas[0][0] === 'Atendimento');
+  verificar('todos os registros dos meses com dado estão lá',
+    todas.linhas.slice(1).map(l => l[1]).join(',') === 'A,B,C');
+}
+
 console.log('\n== 53. Decisões do miniapp: adesão ao protocolo e volta do CSV ==');
 {
   const seguiu = imp.seguiuProtocoloEmpirico;

@@ -5,6 +5,8 @@ const path = require('path');
 
 const raiz = path.join(__dirname, '..');
 const lib = fs.readFileSync(path.join(raiz, 'lib', 'xlsx.full.min.js'), 'utf-8');
+const libQR = fs.readFileSync(path.join(raiz, 'lib', 'qrcode.min.js'), 'utf-8');
+const catalogoMiniapps = fs.readFileSync(path.join(raiz, 'js', 'miniapps-catalogo.js'), 'utf-8');
 const pastaFonte = path.join(raiz, 'miniapps', 'fonte');
 
 /* Valores desta instalação (e-mail da CCIH, segredo do Apps Script) vivem em
@@ -66,6 +68,18 @@ for (const nome of fs.readdirSync(pastaFonte).filter(n => n.endsWith('.html'))) 
   if (montado.includes('<!--ANTIBIOGRAMA-->')) {
     montado = montado.replace('<!--ANTIBIOGRAMA-->', () => antibiogramaJSON
       ? '<script>const ANTIBIOGRAMA_CONSOLIDADO = ' + antibiogramaJSON + ';</script>' : '');
+  }
+  /* Página de QR codes (apps.html): leva a biblioteca de QR e o MESMO catálogo que o
+     aplicativo usa no cartão de Distribuição — miniapp novo aparece nos dois lugares sem
+     edição manual. */
+  if (montado.includes('<!--QRCODE-LIB-->')) {
+    montado = montado.replace('<!--QRCODE-LIB-->', () => '<script>' + libQR + '</script>');
+  }
+  if (montado.includes('<!--CATALOGO-->')) {
+    montado = montado.replace('<!--CATALOGO-->', () => '<script>' + catalogoMiniapps + '</script>');
+  }
+  if (montado.includes('<!--DATA-->')) {
+    montado = montado.replace('<!--DATA-->', new Date().toISOString().slice(0, 10).split('-').reverse().join('/'));
   }
   fs.writeFileSync(path.join(raiz, 'miniapps', nome), montado);
   console.log('montado: miniapps/' + nome, `(${Math.round(montado.length / 1024)} KB)`);

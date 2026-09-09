@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CCIH — Aplicativos de celular</title>
+<style>
+:root { --tinta: #1f2933; --suave: #61707f; --linha: #eef1f5; --verde: #14532d; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--tinta); background: #f6f8fa; }
+header { background: var(--verde); color: #fff; padding: 18px 16px; }
+header h1 { margin: 0; font-size: 19px; }
+header p { margin: 4px 0 0; font-size: 13.5px; opacity: .9; }
+main { max-width: 980px; margin: 0 auto; padding: 16px; }
+.aviso { background: #fdf3dd; border: 1px solid #e6cd8f; border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; font-size: 14px; }
+.aviso strong { display: block; margin-bottom: 4px; }
+.grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.cartao { background: #fff; border: 1px solid var(--linha); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; }
+.cartao h2 { margin: 0 0 2px; font-size: 16.5px; }
+.para { margin: 0 0 8px; font-size: 12.5px; color: var(--suave); text-transform: uppercase; letter-spacing: .3px; }
+.descricao { margin: 0 0 12px; font-size: 14px; line-height: 1.45; }
+.qr { text-align: center; margin-bottom: 10px; }
+.qr img { width: 176px; height: 176px; image-rendering: pixelated; border: 1px solid var(--linha); border-radius: 8px; }
+.qr p { margin: 4px 0 0; font-size: 12px; color: var(--suave); }
+.botoes { margin-top: auto; display: flex; flex-wrap: wrap; gap: 6px; }
+a.botao, button.botao { flex: 1 1 auto; text-align: center; text-decoration: none; font-size: 13.5px; font-weight: 600;
+  padding: 9px 10px; border-radius: 8px; border: 1px solid var(--verde); color: var(--verde); background: #fff; cursor: pointer; }
+a.botao.cheio { background: var(--verde); color: #fff; }
+.pendente { background: #fdf3dd; border: 1px dashed #e6cd8f; border-radius: 8px; padding: 12px; font-size: 13.5px; }
+footer { text-align: center; font-size: 12.5px; color: var(--suave); padding: 20px 16px 30px; }
+@media print {
+  body { background: #fff; } header { background: #fff; color: #000; border-bottom: 2px solid #000; }
+  .botoes, .aviso { display: none; } .cartao { break-inside: avoid; border-color: #999; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>CCIH — Aplicativos de celular</h1>
+  <p>Aponte a câmera do celular para o QR code do aplicativo que você usa.</p>
+</header>
+<main>
+  <div class="aviso">
+    <strong>No celular, o arquivo precisa ser BAIXADO e aberto no navegador.</strong>
+    A pré-visualização do Google Drive mostra a tela mas não executa o aplicativo — os campos não respondem.
+    Depois de baixado (⋮ → Abrir com → Chrome, ou abrir pela pasta Downloads), funciona sem internet.
+  </div>
+  <div class="grade" id="grade"></div>
+</main>
+<footer id="rodape"></footer>
+
+<!--QRCODE-LIB-->
+<script>
+/* O catálogo (js/miniapps-catalogo.js) é injetado pelo montador — mesma fonte que o
+   cartão de Distribuição do aplicativo, para as duas telas nunca divergirem. */
+</script>
+<!--CATALOGO-->
+<script>
+const grade = document.getElementById('grade');
+function qrImg(url, rotulo) {
+  const qr = qrcode(0, 'M');
+  qr.addData(url);
+  qr.make();
+  const img = document.createElement('img');
+  img.src = qr.createDataURL(4, 8);
+  img.alt = 'QR code — ' + rotulo;
+  return img;
+}
+for (const app of (typeof CATALOGO_MINIAPPS !== 'undefined' ? CATALOGO_MINIAPPS : [])) {
+  const cartao = document.createElement('div');
+  cartao.className = 'cartao';
+  const cabecalho = document.createElement('div');
+  cabecalho.innerHTML = '<h2></h2><p class="para"></p><p class="descricao"></p>';
+  cabecalho.querySelector('h2').textContent = app.titulo;
+  cabecalho.querySelector('.para').textContent = app.para;
+  cabecalho.querySelector('.descricao').textContent = app.descricao;
+  cartao.appendChild(cabecalho);
+
+  if (!app.url) {
+    const pendente = document.createElement('div');
+    pendente.className = 'pendente';
+    pendente.textContent = 'Ainda não publicado no Drive — peça o arquivo à CCIH.';
+    cartao.appendChild(pendente);
+  } else {
+    const caixa = document.createElement('div');
+    caixa.className = 'qr';
+    try {
+      caixa.appendChild(qrImg(app.url, app.titulo));
+    } catch (e) {
+      const erro = document.createElement('p');
+      erro.textContent = 'QR indisponível — use o botão abaixo.';
+      caixa.appendChild(erro);
+    }
+    const legenda = document.createElement('p');
+    legenda.textContent = app.arquivo === false ? 'abre a pasta no Drive' : 'abre a página de download';
+    caixa.appendChild(legenda);
+    cartao.appendChild(caixa);
+
+    const botoes = document.createElement('div');
+    botoes.className = 'botoes';
+    const baixar = document.createElement('a');
+    baixar.className = 'botao cheio';
+    baixar.href = app.url;
+    baixar.target = '_blank';
+    baixar.rel = 'noopener';
+    baixar.textContent = app.arquivo === false ? 'Abrir a pasta' : 'Baixar o aplicativo';
+    botoes.appendChild(baixar);
+    const zap = document.createElement('a');
+    zap.className = 'botao';
+    zap.href = 'https://wa.me/?text=' + encodeURIComponent(app.mensagem + '\n' + app.url);
+    zap.target = '_blank';
+    zap.rel = 'noopener';
+    zap.textContent = 'Enviar pelo WhatsApp';
+    botoes.appendChild(zap);
+    cartao.appendChild(botoes);
+  }
+  grade.appendChild(cartao);
+}
+document.getElementById('rodape').textContent =
+  'Comissão de Controle de Infecção Hospitalar · página gerada com o aplicativo da CCIH · versão de <!--DATA-->';
+</script>
+</body>
+</html>

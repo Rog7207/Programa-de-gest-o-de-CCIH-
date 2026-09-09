@@ -841,23 +841,9 @@ async function montarConfiguracoes(conteudo) {
    (Aplicativo CCIH online/miniapps), e não para cópias avulsas: assim, toda vez que os
    miniapps são reconstruídos aqui, a sincronização publica a versão nova sozinha e o
    mesmo QR code continua valendo. Nada de subir arquivo à mão. */
-const APPS_DISTRIBUICAO = [
-  { titulo: 'Visita à UTI (celular)',
-    url: 'https://drive.usercontent.google.com/download?id=1pFiQ82NVNAKbPMlX7uCp-5gilLqQEc2q&export=download',
-    mensagem: 'CCIH HNSC — aplicativo de visita à UTI.\n\n1) Toque no link e BAIXE o arquivo.\n2) Abra-o pela pasta Downloads (ou ⋮ → Abrir com → Chrome).\n\nNão funciona na pré-visualização do Google Drive — precisa abrir no navegador. Depois de aberto funciona sem internet.' },
-  { titulo: 'Higiene das mãos (celular)',
-    url: 'https://drive.usercontent.google.com/download?id=1ImY8epQS2Iqp1rxF_hxHw41Ff6bx4bzo&export=download',
-    mensagem: 'CCIH HNSC — aplicativo de auditoria de higiene das mãos.\n\n1) Toque no link e BAIXE o arquivo.\n2) Abra-o pela pasta Downloads (ou ⋮ → Abrir com → Chrome).\n\nNão funciona na pré-visualização do Google Drive — precisa abrir no navegador. Depois de aberto funciona sem internet.' },
-  { titulo: 'Avaliação de antimicrobianos (médicos)', arquivo: false,
-    url: 'https://drive.google.com/drive/folders/1dZuoG2xjoRwTGNedTp2PQfciG8wyAE2Z',
-    mensagem: 'CCIH HNSC — pasta com a avaliação de antimicrobianos do dia. Baixe o arquivo mais recente e abra no navegador (a senha é fornecida pela CCIH):' },
-  /* Para os médicos ASSISTENTES: protocolo empírico no bolso, sem dado de paciente
-     embarcado. O ID do Drive entra quando o arquivo for publicado — até lá o cartão
-     explica como distribuir. */
-  { titulo: 'Decisão de ATB empírica (médicos assistentes)',
-    url: '',
-    mensagem: 'CCIH HNSC — apoio à decisão de antibioticoterapia empírica, conforme o protocolo institucional.\n\n1) Toque no link e BAIXE o arquivo.\n2) Abra-o pela pasta Downloads (ou ⋮ → Abrir com → Chrome).\n\nFunciona sem internet. Registre as decisões do dia e toque em "Enviar decisões registradas à CCIH" ao fim do plantão/semana — sai só o prontuário, nunca o nome do paciente.' }
-];
+/* O catálogo vive em js/miniapps-catalogo.js — mesma fonte da página de QR codes
+   (miniapps/apps.html). Acrescentar um miniapp lá o faz aparecer nos dois lugares. */
+const APPS_DISTRIBUICAO = CATALOGO_MINIAPPS;
 
 /* Endereço que o Android resolve abrindo o Chrome, e não o aplicativo do Drive — é o que
    tira a página da pré-visualização, onde o JavaScript não roda. Fora do Android o

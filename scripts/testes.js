@@ -2366,11 +2366,158 @@ console.log('\n== 59. Dispositivos invasivos: prancheta diária, cabeçalho em d
     && imp.mesDoNome('Março 2022') === 3 && imp.mesDoNome('Plan1') === 0);
 }
 
+console.log('\n== 60. Taxas por 1.000 dias de dispositivo ==');
+{
+  global.inferirMecanismo = require(path.join(__dirname, '..', 'js', 'alertas.js')).inferirMecanismo;
+  const rel = require(path.join(__dirname, '..', 'js', 'relatorios.js'));
+
+  /* normalizarTexto COLA as palavras: padrão com espaço nunca casaria e a infecção sairia
+     da taxa em silêncio. Estes casos existem para travar exatamente isso. */
+  verificar('cateter central agrupa CVC, PICC, femoral e hemodiálise (regra NHSN)',
+    ['CVC', 'PICC', 'CVC femoral', 'Hemodiálise femoral D', 'Cateter central', 'Acesso central']
+      .every(n => rel.grupoDoDispositivo(n) === 'Cateter central'));
+  verificar('ventilação mecânica reconhece VM e o nome por extenso',
+    ['VM', 'Ventilação mecânica', 'Ventilacao Mecanica', 'TOT']
+      .every(n => rel.grupoDoDispositivo(n) === 'Ventilação mecânica'));
+  verificar('sonda vesical reconhece SVD e "Sonda vesical de demora"',
+    ['SVD', 'Sonda vesical', 'Sonda vesical de demora']
+      .every(n => rel.grupoDoDispositivo(n) === 'Sonda vesical'));
+  verificar('pacientes-dia NÃO é dispositivo', rel.grupoDoDispositivo('Pacientes-dia') === '');
+  verificar('rótulo desconhecido não vira grupo nenhum',
+    rel.grupoDoDispositivo('Dreno de tórax') === '' && rel.grupoDoDispositivo('') === '');
+
+  const bancos = {
+    denominadores: { dispositivos_dia: [
+      /* 2 dias de CTI: cateter central = 4+1 (CVC) + 2 (PICC) = some 10 no período. */
+      { Data: '2026-08-01', Setor: 'CTI', Estrato: '', Dispositivo: 'CVC', Contagem: 4 },
+      { Data: '2026-08-01', Setor: 'CTI', Estrato: '', Dispositivo: 'PICC', Contagem: 1 },
+      { Data: '2026-08-01', Setor: 'CTI', Estrato: '', Dispositivo: 'VM', Contagem: 3 },
+      { Data: '2026-08-01', Setor: 'CTI', Estrato: '', Dispositivo: 'Pacientes-dia', Contagem: 9 },
+      { Data: '2026-08-02', Setor: 'CTI', Estrato: '', Dispositivo: 'CVC', Contagem: 4 },
+      { Data: '2026-08-02', Setor: 'CTI', Estrato: '', Dispositivo: 'PICC', Contagem: 1 },
+      { Data: '2026-08-02', Setor: 'CTI', Estrato: '', Dispositivo: 'VM', Contagem: 2 },
+      /* Outro setor e outro período: não podem entrar na conta do CTI em agosto. */
+      { Data: '2026-08-01', Setor: 'UTI Neonatal', Estrato: '≤750g', Dispositivo: 'CVC', Contagem: 50 },
+      { Data: '2026-07-15', Setor: 'CTI', Estrato: '', Dispositivo: 'CVC', Contagem: 99 }
+    ] },
+    iras: { casos: [
+      { DataInfeccao: '2026-08-10', Setor: 'CTI', Topografia: 'ICS', DispositivoAssociado: 'CVC' },
+      { DataInfeccao: '2026-08-11', Setor: 'CTI', Topografia: 'ICS', DispositivoAssociado: 'PICC' },
+      { DataInfeccao: '2026-08-12', Setor: 'CTI', Topografia: 'PAV', DispositivoAssociado: 'Ventilação mecânica' },
+      { DataInfeccao: '2026-08-13', Setor: 'CTI', Topografia: 'ITU', DispositivoAssociado: 'Sonda vesical' }
+    ] },
+    pacientes: { internacoes: [] }, culturas: {}, antibioticos: {}, isolamentos: {}
+  };
+  const dias = rel.diasDeDispositivo(bancos, '2026-08-01', '2026-08-31', ['CTI']);
+  verificar('dias de cateter central somam CVC + PICC do setor e período certos',
+    dias.porGrupo.get('Cateter central') === 10, JSON.stringify([...dias.porGrupo]));
+  verificar('outro setor e outro mês ficam de fora',
+    dias.porGrupo.get('Cateter central') !== 60 && dias.porGrupo.get('Ventilação mecânica') === 5);
+  verificar('conta quantos DIAS de contagem sustentam o denominador', dias.diasContados === 2);
+
+  const taxas = rel.taxasPorDispositivo(bancos, bancos.iras.casos, '2026-08-01', '2026-08-31', ['CTI']);
+  const porGrupo = new Map(taxas.linhas.map(l => [l[0], l]));
+  verificar('ICS de CVC e de PICC contam juntas contra os dias de linha central (2/10 = 200)',
+    porGrupo.get('Cateter central')[2] === 2 && porGrupo.get('Cateter central')[3] === '200.00',
+    JSON.stringify(porGrupo.get('Cateter central')));
+  verificar('PAV usa o denominador de ventilação (1/5 = 200)',
+    porGrupo.get('Ventilação mecânica')[3] === '200.00');
+  verificar('sonda sem denominador NÃO vira linha de taxa (seria contagem disfarçada)',
+    !porGrupo.has('Sonda vesical'), JSON.stringify(taxas.linhas));
+
+  /* A seção só entra no relatório quando existe denominador. */
+  const comTaxa = rel.relatorioIRAS(bancos, ['CTI'], '2026-08-01', '2026-08-31');
+  verificar('o relatório ganha a seção de taxas por dispositivo',
+    comTaxa.secoes.some(s => s.titulo === 'Taxas por 1.000 dias de dispositivo'));
+  verificar('e declara em quantos dias de contagem ela se apoia',
+    comTaxa.secoes.some(s => /dia\(s\) de contagem registrada/.test(s.corpo || '')));
+  const semDispositivos = rel.relatorioIRAS({ ...bancos, denominadores: {} }, ['CTI'], '2026-08-01', '2026-08-31');
+  verificar('sem dias de dispositivo, nenhuma taxa é inventada',
+    !semDispositivos.secoes.some(s => s.titulo === 'Taxas por 1.000 dias de dispositivo'));
+}
+
+/* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==
+   A tela é avaliada de verdade, com DOM falso. Pega o que sintaxe e teste de motor não
+   pegam: helper que não existe (era `config.usuario`, que nunca existiu no projeto),
+   referência fora de ordem, campo esquecido. */
+console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
+{
+  const criados = [];
+  const fakeNode = () => ({
+    append() {}, appendChild() {}, replaceChildren(...k) { criados.push(k); }, addEventListener() {},
+    setAttribute() {}, style: {}, classList: { add() {}, remove() {} }, value: '',
+    querySelector: () => null, querySelectorAll: () => [], textContent: ''
+  });
+  const antes = { el: global.el, fmtInt: global.fmtInt, app: global.app,
+    config: global.config, comTrava: global.comTrava, lerBanco: global.lerBanco,
+    gravarBanco: global.gravarBanco };
+  Object.assign(global, {
+    el: (tag, attrs, ...kids) => { kids.flat(9); return fakeNode(); },
+    fmtInt: n => String(n),
+    app: { usuario: 'Enf. Teste' },
+    config: { vocabulario: { setores: ['UTI Adulto', 'UTI Neonatal'] }, aliases: {} },
+    comTrava: async (_, f) => f(),
+    lerBanco: async () => ({ dispositivos_dia: [] }),
+    gravarBanco: async (_, banco) => { global.__gravado = banco; },
+    lerDispositivosDia: imp.lerDispositivosDia,
+    proximoID: imp.proximoID,
+    normalizarTexto: leitura.normalizarTexto,
+    TIPOS_RELATORIO: esquemas.TIPOS_RELATORIO, ESQUEMAS: esquemas.ESQUEMAS
+  });
+  const abasFixture = { 'Março 2025': [
+    ['', 'Controle de Utilização — FM-CCIH-26'], [],
+    ['', 'Dia', 'Paciente dia', 'SVD', 'Central', '', 'VM'],
+    ['', '', '', '', 'CVC', 'PICC', ''],
+    ['', '01/03/25', '10', '4', '2', '1', '3'],
+    ['', 'Total', '10', '4', '2', '1', '3']
+  ] };
+  /* `let imp` dentro do eval fica no escopo do próprio eval — o preenchimento tem de ir
+     no MESMO texto avaliado, senão as funções continuam vendo imp = null. */
+  const fonte = fs.readFileSync(path.join(__dirname, '..', 'js', 'ui-importar.js'), 'utf-8');
+  eval(fonte + `
+    imp = { detalhes: fakeNode(), area: fakeNode(), passo: 0 };
+    global.__tela = telaDispositivosDia;
+    global.__gravar = gravarDispositivosDia;
+  `);
+  const lida = global.lerDispositivosDia(abasFixture, { setor: '', ano: '2025' });
+  try {
+    global.__tela(abasFixture, { name: 'Coleta … Invasivos UTI 2025.xlsx' }, lida);
+    verificar('telaDispositivosDia monta sem exceção', true);
+  } catch (e) {
+    verificar('telaDispositivosDia monta sem exceção', false, (e.stack || e.message).split('\n')[0]);
+  }
+  /* A gravação é assíncrona: a promessa entra numa fila que o bloco final aguarda, senão
+     o teste rodaria DEPOIS do resumo e não contaria. E os stubs são reaplicados aqui
+     dentro porque a seção 52, que roda antes da fila ser drenada, troca os globais. */
+  const stubs = { el: global.el, fmtInt: global.fmtInt, app: global.app, config: global.config,
+    comTrava: global.comTrava, lerBanco: global.lerBanco, gravarBanco: global.gravarBanco,
+    proximoID: global.proximoID, normalizarTexto: global.normalizarTexto };
+  (global.__pendentes = global.__pendentes || []).push((async () => {
+    Object.assign(global, stubs);
+    try {
+      await global.__gravar(abasFixture, { name: 'UTI 2025.xlsx' }, 'UTI Adulto');
+      const gravado = (global.__gravado || {}).dispositivos_dia || [];
+      verificar('gravarDispositivosDia grava as contagens com ID, setor e autor',
+        gravado.length > 0 && gravado[0].ID_Dispositivo && gravado[0].Setor === 'UTI Adulto'
+        && gravado[0].CriadoPor === 'Enf. Teste', JSON.stringify(gravado[0]));
+    } catch (e) {
+      verificar('gravarDispositivosDia roda sem exceção', false, (e.stack || e.message).split('\n')[0]);
+    }
+    /* Restaura só no fim da promessa: restaurar de forma síncrona apagaria os stubs
+       enquanto a gravação ainda está suspensa num await, e `el` sumiria no meio dela. */
+    Object.assign(global, antes);
+  })());
+}
+
 /* == 52. Fumaça da tela da Pós-alta: montar SEM explodir (DOM falso) ==
    A tela é avaliada de verdade, com todos os status representados. Pega o que sintaxe e
    testes de motor não pegam: referência fora de ordem (TDZ), helper renomeado, campo
    esquecido — o bug que fez as cirurgias sob vigilância sumirem no hospital. */
 (async () => {
+  /* Drena a fila assíncrona ANTES de montar os stubs desta seção: as duas trocam os
+     mesmos globais, e interleaving faria uma corromper a outra. */
+  await Promise.all(global.__pendentes || []);
+
   console.log('\n== 52. Fumaça da tela da Pós-alta (DOM falso, todos os status) ==');
   const fakeNode = () => ({
     append() {}, appendChild() {}, replaceChildren() {}, addEventListener() {},

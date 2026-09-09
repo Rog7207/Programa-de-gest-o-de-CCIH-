@@ -96,6 +96,62 @@ function pacientesDiaDoCenso(bancos, inicio, fim, setoresEscopo) {
   return total > 0 ? { dias: total, meses: meses.size } : null;
 }
 
+/* Dias de dispositivo no período, do banco `denominadores`. É o denominador das taxas que
+   a CCIH de fato reporta: PAV por 1.000 dias de ventilação, ICS por 1.000 dias de cateter
+   central, ITU por 1.000 dias de sonda vesical.
+
+   O cateter central é somado como o NHSN manda — CVC, PICC, femoral e cateter de
+   hemodiálise são todos linha central, e a infecção de corrente sanguínea não distingue
+   qual deles estava lá. Separar daria quatro taxas pequenas e nenhuma comparável. */
+/* Atenção ao escrever estes padrões: normalizarTexto COLA as palavras (tira espaço e
+   pontuação), então alternativa com espaço — "sonda vesical" — nunca casaria, e a infecção
+   assim rotulada sairia da taxa sem ninguém notar. Tudo aqui é sem espaço, de propósito. */
+const GRUPOS_DISPOSITIVO = [
+  { grupo: 'Cateter central', casa: /^(cvc|picc|catetercentral|acessocentral|hemodialise|cateterdehemodialise)/ },
+  { grupo: 'Ventilação mecânica', casa: /^(vm|ventila|tot|tubo)/ },
+  { grupo: 'Sonda vesical', casa: /^(svd|sondavesical|sondadedemora)/ }
+];
+
+function grupoDoDispositivo(nome) {
+  const t = normalizarTexto(nome);
+  const achado = GRUPOS_DISPOSITIVO.find(g => g.casa.test(t));
+  return achado ? achado.grupo : '';
+}
+
+function diasDeDispositivo(bancos, inicio, fim, setoresEscopo) {
+  const linhas = ((bancos.denominadores || {}).dispositivos_dia || []);
+  if (!linhas.length) return null;
+  const porGrupo = new Map(), diasContados = new Set();
+  for (const l of linhas) {
+    const data = String(l.Data || '').slice(0, 10);
+    if (!/^\d{4}-/.test(data) || data < inicio || data > fim) continue;
+    if (!relEscopo(l.Setor, setoresEscopo)) continue;
+    const n = Number(String(l.Contagem == null ? '' : l.Contagem).replace(',', '.'));
+    if (!isFinite(n) || n <= 0) continue;
+    /* O dia entra na cobertura mesmo vindo da linha de pacientes-dia: dia em que a
+       enfermagem passou nos leitos e não havia nenhum dispositivo é dia CONTADO, e contá-lo
+       só quando há dispositivo subestimaria a cobertura da vigilância. */
+    diasContados.add(data + '|' + l.Setor);
+    const grupo = grupoDoDispositivo(l.Dispositivo);
+    if (!grupo) continue;   /* pacientes-dia não é dispositivo: entra na cobertura, não no numerador */
+    porGrupo.set(grupo, (porGrupo.get(grupo) || 0) + n);
+  }
+  return porGrupo.size ? { porGrupo, diasContados: diasContados.size } : null;
+}
+
+/* Taxa de infecção por 1.000 dias de dispositivo. Só sai a linha do dispositivo que TEM
+   denominador: taxa sem denominador não é taxa, é contagem disfarçada. */
+function taxasPorDispositivo(bancos, casos, inicio, fim, setoresEscopo) {
+  const denominador = diasDeDispositivo(bancos, inicio, fim, setoresEscopo);
+  if (!denominador) return null;
+  const linhas = [];
+  for (const [grupo, dias] of [...denominador.porGrupo.entries()].sort()) {
+    const infeccoes = casos.filter(k => grupoDoDispositivo(k.DispositivoAssociado) === grupo).length;
+    linhas.push([grupo, Math.round(dias), infeccoes, (infeccoes / dias * 1000).toFixed(2)]);
+  }
+  return { linhas, diasContados: denominador.diasContados };
+}
+
 /* ---- 1. IRAS do período ---- */
 function relatorioIRAS(bancos, setoresEscopo, inicio, fim) {
   const casos = ((bancos.iras || {}).casos || [])
@@ -130,6 +186,19 @@ function relatorioIRAS(bancos, setoresEscopo, inicio, fim) {
     { titulo: 'Microrganismos (top 10)', tipo: 'tabela', colunas: ['Microrganismo', 'Casos'],
       linhas: relContar(casos, k => k.Microrganismo).slice(0, 10) }
   ];
+  /* A taxa que a CCIH de fato reporta. Só aparece quando existe denominador: sem os dias
+     de dispositivo, "3 PAV" é contagem, não indicador. */
+  const porDispositivo = taxasPorDispositivo(bancos, casos, inicio, fim, setoresEscopo);
+  if (porDispositivo) {
+    secoes.push({ titulo: 'Taxas por 1.000 dias de dispositivo', tipo: 'tabela',
+      colunas: ['Dispositivo', 'Dias de dispositivo', 'Infecções', 'Taxa/1.000'],
+      linhas: porDispositivo.linhas });
+    secoes.push({ titulo: 'Sobre o denominador dos dispositivos', tipo: 'texto',
+      corpo: `Base: ${porDispositivo.diasContados} dia(s) de contagem registrada `
+        + '(dia × setor). A contagem é feita passando de leito em leito; dia em que ela não '
+        + 'foi feita não entra em nenhum dos dois lados da divisão. Cateter central soma '
+        + 'CVC, PICC, femoral e cateter de hemodiálise, como o NHSN define linha central.' });
+  }
   if (setoresEscopo && !doCenso) secoes.push({ titulo: 'Nota', tipo: 'texto', corpo: TEXTO_SEM_DENSIDADE_SETOR });
   return { titulo: 'IRAS do período', secoes,
     resumo: [['IRAS', casos.length], ['IRAS confirmadas', confirmadas.length],
@@ -710,6 +779,7 @@ if (typeof module !== 'undefined' && module.exports) {
     relatorioAntibioticos, relatorioIsolamentos, relatorioSepse, relatorioPosAlta,
     relatorioResumoExecutivo, RELATORIOS_PADRAO, BANCOS_RELATORIOS, pacientesDia, pacientesDiaDoCenso,
     relMediana, relDiasEntre, mesAnteriorIntervalo,
+    diasDeDispositivo, taxasPorDispositivo, grupoDoDispositivo,
     perfilMicrobiologico, colunasDoPerfil, classificarGram, especieEnterobacteria,
     tabelaResistenciaEnterobacterias, corDeResistencia, indiceSensibilidade, mecanismoDaCultura };
 }

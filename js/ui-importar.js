@@ -243,7 +243,7 @@ async function processarArquivo(arquivo, codificacao, opcoesAba) {
   try {
     /* Arquivo diferente zera a escolha de aba — senão a aba do anterior valeria para o
        próximo, escolhendo dado errado sem avisar. */
-    if (imp.arquivo !== arquivo) imp.opcoesAba = null;
+    if (imp.arquivo !== arquivo) { imp.opcoesAba = null; imp.forcarPlanilhaComum = false; }
     imp.arquivo = arquivo;
     imp.buffer = new Uint8Array(await arquivo.arrayBuffer());
     if (/\.xlsx?$/i.test(arquivo.name)) {
@@ -257,6 +257,19 @@ async function processarArquivo(arquivo, codificacao, opcoesAba) {
         });
         await ingerirMiniapp(meta.Tipo, dados, arquivo);
         return;
+      }
+      /* Prancheta diária de dispositivos: reconhecida pela ESTRUTURA (abas com nome de mês,
+         coluna "Dia" e colunas de dispositivo), não pelo nome do arquivo. Só desvia se o
+         leitor realmente extraiu contagens — e a tela ainda pede confirmação, com um botão
+         para voltar ao caminho normal caso a detecção erre. */
+      if (!imp.forcarPlanilhaComum) {
+        const wb = XLSX.read(imp.buffer, { type: 'array' });
+        const abas = {};
+        for (const n of wb.SheetNames) {
+          abas[n] = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: false, defval: '' });
+        }
+        const leitura = lerDispositivosDia(abas, { setor: '', ano: (/(20\d{2})/.exec(arquivo.name) || [])[1] });
+        if (leitura.linhas.length) { telaDispositivosDia(abas, arquivo, leitura); return; }
       }
     }
     if (/\.pdf$/i.test(arquivo.name)) {
@@ -330,6 +343,113 @@ function analisarPacoteCSV(texto) {
   }
   fechar();
   return { tipo: meta.tipo, abas };
+}
+
+/* ---- Prancheta diária de dispositivos invasivos ---------------------------------------
+   Não passa pelo assistente de mapeamento: nesta planilha a coluna não tem nome único, tem
+   um caminho ("Central" + "PICC"), e o arquivo traz o ano inteiro, uma aba por mês. Quem
+   lê é lerDispositivosDia (núcleo puro, testado). Aqui só entram a confirmação, a escolha
+   do setor e a gravação.
+
+   A planilha NÃO diz de qual UTI é — o mesmo formulário serve à adulto e à neonatal. Por
+   isso o setor é escolhido à mão, e não adivinhado do nome do arquivo: errar isso jogaria
+   o denominador de uma UTI em cima da outra. */
+function telaDispositivosDia(abas, arquivo, leitura) {
+  const setores = (config.vocabulario.setores || []).slice().sort();
+  const meses = [...new Set(leitura.linhas.map(l => l.Competencia))].sort();
+  const divergentes = leitura.conferencia.filter(c => c.confere === false);
+  const parciais = leitura.cobertura.filter(c => c.diasMedidos && !c.completo);
+  const vazios = leitura.cobertura.filter(c => !c.diasMedidos);
+  const dispositivos = [...new Set(leitura.linhas.map(l => l.Dispositivo))].sort();
+
+  const selSetor = el('select', {},
+    el('option', { value: '' }, 'escolha o setor…'),
+    setores.map(s => el('option', { value: s }, s)));
+  const aviso = el('p', { class: 'aviso-erro-texto', style: 'display:none' });
+
+  imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
+    el('h2', {}, 'Contagem diária de dispositivos invasivos'),
+    el('p', {}, `Reconheci ${arquivo.name} como a prancheta diária (uma aba por mês). `
+      + `${fmtInt(leitura.linhas.length)} contagens em ${meses.length} mês(es): `
+      + (meses.length ? meses[0] + ' a ' + meses[meses.length - 1] : '—') + '.'),
+    el('p', { class: 'texto-suave' }, 'Dispositivos reconhecidos: ' + (dispositivos.join(', ') || '—')),
+    /* A conferência contra o TOTAL que a própria planilha calcula é o que dá confiança na
+       leitura — e denuncia soma quebrada na origem, que é comum nestes formulários. */
+    el('p', {}, `Conferência contra o total da planilha: `
+      + `${leitura.conferencia.filter(c => c.confere === true).length} conferem, `
+      + `${divergentes.length} divergem.`),
+    divergentes.length ? el('details', {},
+      el('summary', {}, 'ver as divergências'),
+      el('ul', {}, divergentes.slice(0, 30).map(c => el('li', {},
+        `${c.competencia} · ${c.estrato ? c.estrato + ' · ' : ''}${c.dispositivo}: `
+        + `lido ${c.nosso}, total da planilha ${c.planilha}`)))) : null,
+    parciais.length ? el('p', { class: 'texto-suave' },
+      'Meses contados só em parte (dia em branco não entra no denominador): '
+      + parciais.map(c => `${c.competencia} (${c.diasMedidos}/${c.diasNoMes})`).join(', ')) : null,
+    vazios.length ? el('p', { class: 'texto-suave' },
+      'Meses sem nenhum dia contado, que não serão importados: '
+      + vazios.map(c => c.competencia).join(', ')) : null,
+    leitura.problemas.length ? el('details', {},
+      el('summary', {}, `${leitura.problemas.length} aviso(s) de leitura`),
+      el('ul', {}, leitura.problemas.slice(0, 40).map(p => el('li', {}, p)))) : null,
+    el('p', {}, el('label', {}, 'Setor a que esta planilha se refere ', selSetor)),
+    aviso,
+    el('p', {},
+      el('button', { class: 'primario', onclick: async () => {
+        if (!selSetor.value) {
+          aviso.textContent = 'Escolha o setor: a planilha não diz de qual UTI é.';
+          aviso.style.display = '';
+          return;
+        }
+        await gravarDispositivosDia(abas, arquivo, selSetor.value);
+      } }, 'Importar'),
+      ' ',
+      el('button', { onclick: () => {
+        /* Escape: se a detecção errou, o arquivo volta para o caminho normal. */
+        imp.forcarPlanilhaComum = true;
+        processarArquivo(arquivo, 'auto');
+      } }, 'Não é isso — ler como planilha comum'))));
+}
+
+async function gravarDispositivosDia(abas, arquivo, setor) {
+  imp.detalhes.replaceChildren(el('div', { class: 'cartao' }, el('p', {}, 'Gravando…')));
+  const ano = (/(20\d{2})/.exec(arquivo.name) || [])[1] || '';
+  const leitura = lerDispositivosDia(abas, { setor, ano });
+  const agora = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  try {
+    const resumo = await comTrava(['denominadores'], async () => {
+      const banco = await lerBanco('denominadores');
+      banco.dispositivos_dia = banco.dispositivos_dia || [];
+      /* Reimportar o mesmo ano tem de ATUALIZAR, não duplicar: a planilha é preenchida ao
+         longo do mês e reenviada várias vezes. A identidade é dia + setor + estrato +
+         dispositivo. */
+      const chaveDe = l => [l.Data, normalizarTexto(l.Setor), normalizarTexto(l.Estrato),
+        normalizarTexto(l.Dispositivo)].join('|');
+      const porChave = new Map(banco.dispositivos_dia.map(l => [chaveDe(l), l]));
+      const gerarID = proximoID(banco.dispositivos_dia, 'ID_Dispositivo', 'DSP');
+      let novos = 0, atualizados = 0;
+      for (const l of leitura.linhas) {
+        const chave = chaveDe(l);
+        const existente = porChave.get(chave);
+        if (existente) { Object.assign(existente, l, { CriadoEm: existente.CriadoEm }); atualizados++; }
+        else {
+          const nova = { ID_Dispositivo: gerarID(), ...l, CriadoPor: app.usuario || '', CriadoEm: agora };
+          banco.dispositivos_dia.push(nova);
+          porChave.set(chave, nova);
+          novos++;
+        }
+      }
+      await gravarBanco('denominadores', banco);
+      return { novos, atualizados };
+    });
+    imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
+      el('h2', {}, 'Importado'),
+      el('p', {}, `${fmtInt(resumo.novos)} contagens novas e ${fmtInt(resumo.atualizados)} atualizadas `
+        + `em ${setor}.`),
+      el('p', { class: 'texto-suave' }, 'As taxas por 1.000 dias de dispositivo passam a usar estes dados.')));
+  } catch (e) {
+    imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao gravar: ' + e.message));
+  }
 }
 
 /* Ingestão direta: arquivos gerados pelos miniapps entram sem assistente. */

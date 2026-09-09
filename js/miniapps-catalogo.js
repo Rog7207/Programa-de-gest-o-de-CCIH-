@@ -29,7 +29,7 @@ const CATALOGO_MINIAPPS = [
     descricao: 'O protocolo institucional de tratamento empírico no bolso: escolhe a síndrome, responde as '
       + 'perguntas e recebe o esquema, os exames antes da primeira dose e o ajuste renal. Registra as '
       + 'decisões do plantão e envia à CCIH — sai só o prontuário, nunca o nome do paciente.',
-    url: '',
+    url: 'https://drive.usercontent.google.com/download?id=1vP4sWK10UaoIYlcDAAdAe57SVeyC9Z6H&export=download',
     mensagem: 'CCIH HNSC — apoio à decisão de antibioticoterapia empírica, conforme o protocolo institucional.\n\n1) Toque no link e BAIXE o arquivo.\n2) Abra-o pela pasta Downloads (ou ⋮ → Abrir com → Chrome).\n\nFunciona sem internet. Registre as decisões do dia e toque em "Enviar decisões registradas à CCIH" ao fim do plantão/semana — sai só o prontuário, nunca o nome do paciente.'
   },
   {

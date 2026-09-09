@@ -162,6 +162,7 @@ async function importarArquivoAutomatico(arquivo) {
     const gerarID = proximoID(existentes, definicao.campoID, definicao.prefixoID);
     const tempoCorte = config.tempoCortePorProcedimento();
     const linhasSensibilidade = [];
+    const linhasAvaliacao = [];
     for (const registro of novos) {
       const id = gerarID();
       const linha = montarLinhaImportada(registro, tipo, id, app.usuario, agora, tempoCorte);
@@ -169,9 +170,15 @@ async function importarArquivoAutomatico(arquivo) {
       for (const item of registro._antibiograma || []) {
         linhasSensibilidade.push({ ID_Cultura: id, Antibiotico: item.Antibiotico, Resultado: item.Resultado });
       }
+      /* Relatório que traz prescrição e parecer na mesma linha alimenta as duas abas. */
+      if (tipo === 'antibioticos') {
+        const avaliacao = avaliacaoDaPrescricao(registro, id, agora);
+        if (avaliacao) linhasAvaliacao.push(avaliacao);
+      }
     }
     banco[definicao.abaDestino] = existentes;
     if (definicao.permiteAntibiograma) banco.sensibilidade = (banco.sensibilidade || []).concat(linhasSensibilidade);
+    if (linhasAvaliacao.length) banco.avaliacoes = (banco.avaliacoes || []).concat(linhasAvaliacao);
     if (novos.length || internacoesAtualizadas || reparadasAntigas) await gravarBanco(definicao.destino, banco);
 
     const bancoPacientes = await lerBanco('pacientes');

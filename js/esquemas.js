@@ -43,7 +43,7 @@ const ESQUEMAS = {
     arquivo: 'antibioticos.xlsx',
     abas: {
       prescricoes: ['ID_Prescricao', 'Prontuario', 'Antibiotico', 'Dose', 'Via', 'Frequencia', 'DataInicio', 'DataFim', 'Setor', 'Indicacao', 'UltimaEvolucao', 'Restrito', 'ParecerInfecto', 'CriadoPor', 'CriadoEm'],
-      avaliacoes: ['ID_Prescricao', 'Prontuario', 'Antibiotico', 'Indicacao', 'Avaliacao', 'Recomendacao', 'ParecerTexto', 'Avaliador', 'DataDados', 'CriadoEm'],
+      avaliacoes: ['ID_Prescricao', 'Prontuario', 'Antibiotico', 'Indicacao', 'Topografia', 'OrigemInfeccao', 'Avaliacao', 'Recomendacao', 'ParecerTexto', 'Avaliador', 'DataDados', 'CriadoEm'],
       /* Decisões empíricas registradas pelos médicos assistentes no miniapp: o que foi
          perguntado (Respostas), o que o protocolo sugeriu e o que foi de fato prescrito.
          É a matéria-prima do cruzamento futuro entre conduta e desfecho microbiológico. */
@@ -392,7 +392,16 @@ const TIPOS_RELATORIO = {
       { id: 'DataFim', rotulo: 'Data de fim', tipo: 'data', sinonimos: ['datafim', 'dtfim', 'fim', 'datasuspensao', 'dtsuspensao', 'termino'] },
       { id: 'Setor', rotulo: 'Setor', tipo: 'vocab', vocab: 'setores', sinonimos: ['setor', 'unidade', 'clinica', 'localizacao'] },
       { id: 'Indicacao', rotulo: 'Indicação', tipo: 'texto', sinonimos: ['indicacao', 'justificativa', 'motivo'] },
-      { id: 'UltimaEvolucao', rotulo: 'Última evolução', tipo: 'texto', sinonimos: ['evolucao', 'ultimaevolucao', 'evolucaomedica', 'historia', 'quadroclinico'] }
+      { id: 'UltimaEvolucao', rotulo: 'Última evolução', tipo: 'texto', sinonimos: ['evolucao', 'ultimaevolucao', 'evolucaomedica', 'historia', 'quadroclinico'] },
+      /* Alguns relatórios trazem, na MESMA linha, a prescrição e o parecer do
+         infectologista. Preenchidos, estes campos geram também um registro na aba de
+         avaliações — é a fila de stewardship alimentada pelo próprio relatório. */
+      { id: 'DataAvaliacao', rotulo: 'Data da avaliação do infectologista', tipo: 'data', sinonimos: ['dataavaliacao', 'dtavaliacao', 'dtavaliacaoinfecto', 'dataavaliacaoinfecto', 'dataparecer'] },
+      { id: 'Avaliador', rotulo: 'Infectologista que avaliou', tipo: 'texto', sinonimos: ['infectologista', 'avaliador', 'medicoavaliador', 'parecerista'] },
+      { id: 'DefinicaoInfecto', rotulo: 'Definição do infectologista', tipo: 'texto', sinonimos: ['definicaoinfecto', 'definicao', 'parecer', 'parecerinfecto', 'conduta'] },
+      { id: 'Topografia', rotulo: 'Topografia da infecção', tipo: 'texto', sinonimos: ['topografia', 'sitio', 'foco', 'focoinfeccioso'] },
+      { id: 'OrigemInfeccao', rotulo: 'Origem da infecção (comunitária/hospitalar)', tipo: 'texto', sinonimos: ['origeminfeccao', 'origem', 'origemdainfeccao', 'procedencia'] },
+      { id: 'ObservacaoAvaliacao', rotulo: 'Observação do parecer', tipo: 'texto', sinonimos: ['observacao', 'obs', 'observacoes'] }
     ],
     fixos: { Restrito: '', ParecerInfecto: '' }
   },

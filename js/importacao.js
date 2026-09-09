@@ -329,6 +329,52 @@ function normalizarLinhas(linhas, linhaCabecalho, mapeamento, tipo, aliases) {
   return { registros, problemas };
 }
 
+/* ---- Parecer do infectologista embutido no relatório de prescrições ----
+   Alguns serviços entregam prescrição e parecer na MESMA linha. O que o infectologista
+   escreve como conduta ("Concorda com o prescrito") vira o par avaliação+recomendação da
+   fila de stewardship. Conduta desconhecida NÃO é inventada: fica só no texto do parecer,
+   para quem revisa decidir. */
+const CONDUTA_INFECTO = [
+  [/concorda|de acordo|mantem|manter|adequad/, { Avaliacao: 'Correto', Recomendacao: 'Manter' }],
+  [/veta|suspend|interromp|contraindic/, { Avaliacao: 'Incorreto', Recomendacao: 'Suspender' }],
+  [/sugerenova|novamedicacao|troca|modific|substitu/, { Avaliacao: 'Parcialmente correto', Recomendacao: 'Modificar' }],
+  [/descalon/, { Avaliacao: 'Parcialmente correto', Recomendacao: 'Descalonar' }],
+  [/ajustadose|ajustardose|corrigirdose/, { Avaliacao: 'Parcialmente correto', Recomendacao: 'Ajustar dose' }]
+];
+function condutaDoInfectologista(texto) {
+  const n = normalizarTexto(texto);
+  if (!n) return null;
+  for (const [padrao, par] of CONDUTA_INFECTO) if (padrao.test(n)) return par;
+  return null;
+}
+
+/* Monta a linha da aba `avaliacoes` a partir de um registro de prescrição que trouxe o
+   parecer junto. Devolve null quando não há parecer nenhum — prescrição sem avaliação
+   não deve virar avaliação vazia. */
+function avaliacaoDaPrescricao(registro, idPrescricao, agora) {
+  const definicao = String((registro || {}).DefinicaoInfecto || '').trim();
+  const avaliador = String((registro || {}).Avaliador || '').trim();
+  const data = String((registro || {}).DataAvaliacao || '').trim();
+  const observacao = String((registro || {}).ObservacaoAvaliacao || '').trim();
+  if (!definicao && !avaliador && !data) return null;
+  const conduta = condutaDoInfectologista(definicao) || { Avaliacao: '', Recomendacao: '' };
+  return {
+    ID_Prescricao: idPrescricao,
+    Prontuario: normalizarProntuario(registro.Prontuario),
+    Antibiotico: registro.Antibiotico || '',
+    Indicacao: registro.Indicacao || '',
+    Topografia: registro.Topografia || '',
+    OrigemInfeccao: registro.OrigemInfeccao || '',
+    Avaliacao: conduta.Avaliacao,
+    Recomendacao: conduta.Recomendacao,
+    /* O texto original entra sempre: é ele que sustenta a conduta e permite conferir. */
+    ParecerTexto: [definicao, observacao].filter(Boolean).join(' — '),
+    Avaliador: avaliador,
+    DataDados: String(data).slice(0, 10),
+    CriadoEm: agora
+  };
+}
+
 /* O campo de mecanismo/gene também carrega o resultado NEGATIVO da pesquisa ("negativo",
    "não detectável", "NA"). Guardar isso como mecanismo faria a cultura contar como
    multirresistente no painel e nas pendências de isolamento — o oposto do que o laudo diz. */
@@ -1329,6 +1375,16 @@ function montarLinhaImportada(registro, tipo, id, usuario, agora, tempoCorte) {
     linha.ProcedimentoNHSN = registro.Procedimento;
     linha.Procedimento = (registro._originais && registro._originais.Procedimento) || registro.Procedimento;
     enriquecerCirurgia(linha, tempoCorte);
+  } else if (tipo === 'antibioticos') {
+    /* Os campos de parecer pertencem à aba de AVALIAÇÕES, não à de prescrições: aqui
+       viram só o resumo em ParecerInfecto, que é a coluna que a prescrição já tinha. */
+    const definicaoInfecto = String(registro.DefinicaoInfecto || '').trim();
+    const observacao = String(registro.ObservacaoAvaliacao || '').trim();
+    if (definicaoInfecto || observacao) {
+      linha.ParecerInfecto = [definicaoInfecto, observacao].filter(Boolean).join(' — ').slice(0, 250);
+    }
+    ['DataAvaliacao', 'Avaliador', 'DefinicaoInfecto', 'Topografia', 'OrigemInfeccao', 'ObservacaoAvaliacao']
+      .forEach(campo => { delete linha[campo]; });
   } else if (tipo === 'iras') {
     linha.DispositivoAssociado = normalizarDispositivo(registro.DispositivoAssociado);
   } else if (tipo === 'dispositivos') {
@@ -2105,7 +2161,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome,
     enriquecerCirurgia, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

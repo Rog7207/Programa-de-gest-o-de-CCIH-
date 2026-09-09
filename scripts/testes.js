@@ -1995,6 +1995,49 @@ console.log('\n== 51. Decisão ATB: protocolo empírico + dados locais ==');
       .includes('testados entre jun/2024 e jun/2026'));
 }
 
+console.log('\n== 57. Parecer do infectologista na mesma linha da prescrição ==');
+{
+  const conduta = imp.condutaDoInfectologista;
+  verificar('"Concorda com o prescrito" → Correto/Manter',
+    JSON.stringify(conduta('Concorda com o prescrito')) === JSON.stringify({ Avaliacao: 'Correto', Recomendacao: 'Manter' }));
+  verificar('"Veta medicação prescrita" → Incorreto/Suspender',
+    conduta('Veta medicação prescrita').Recomendacao === 'Suspender');
+  verificar('"Sugere nova medicação" → Parcialmente correto/Modificar',
+    conduta('Sugere nova medicação').Recomendacao === 'Modificar');
+  verificar('descalonamento e ajuste de dose reconhecidos',
+    conduta('Sugere descalonamento').Recomendacao === 'Descalonar'
+    && conduta('Ajustar dose para função renal').Recomendacao === 'Ajustar dose');
+  verificar('conduta desconhecida NÃO é inventada', conduta('parecer verbal na visita') === null);
+  verificar('texto vazio devolve null', conduta('') === null && conduta(null) === null);
+
+  const base = { Prontuario: '123', Antibiotico: 'Vancomicina', Indicacao: '',
+    Topografia: 'Aparelho respiratório', OrigemInfeccao: 'Hospitalar',
+    DefinicaoInfecto: 'Concorda com o prescrito', Avaliador: 'Dra. Eletania',
+    DataAvaliacao: '2026-01-15 19:58:21', ObservacaoAvaliacao: 'SEPSE PRECOCE' };
+  const a = imp.avaliacaoDaPrescricao(base, 'PRE-1', '2026-09-09 12:00');
+  verificar('avaliação sai completa e ligada à prescrição',
+    a.ID_Prescricao === 'PRE-1' && a.Avaliacao === 'Correto' && a.Recomendacao === 'Manter'
+    && a.Avaliador === 'Dra. Eletania' && a.Topografia === 'Aparelho respiratório'
+    && a.OrigemInfeccao === 'Hospitalar', JSON.stringify(a));
+  verificar('a data do parecer entra só com o dia', a.DataDados === '2026-01-15');
+  verificar('o texto original do parecer é preservado',
+    a.ParecerTexto === 'Concorda com o prescrito — SEPSE PRECOCE');
+  verificar('prescrição SEM parecer não vira avaliação vazia',
+    imp.avaliacaoDaPrescricao({ Prontuario: '1', Antibiotico: 'Cefepima' }, 'PRE-2', 'x') === null);
+  verificar('parecer com conduta desconhecida entra, mas sem inventar avaliação',
+    (() => {
+      const s = imp.avaliacaoDaPrescricao({ ...base, DefinicaoInfecto: 'discutido em visita' }, 'PRE-3', 'x');
+      return s && s.Avaliacao === '' && s.Recomendacao === '' && /discutido/.test(s.ParecerTexto);
+    })());
+
+  /* Os campos de parecer não podem sujar a tabela de prescrições. */
+  const linha = imp.montarLinhaImportada(base, 'antibioticos', 'PRE-9', 'Teste', '2026-09-09 12:00');
+  verificar('prescrição fica só com o resumo em ParecerInfecto',
+    linha.ParecerInfecto === 'Concorda com o prescrito — SEPSE PRECOCE'
+    && linha.DefinicaoInfecto === undefined && linha.Avaliador === undefined
+    && linha.OrigemInfeccao === undefined, JSON.stringify(linha));
+}
+
 console.log('\n== 56. Antibiograma em sequência contínua e gene negativo ==');
 {
   const ex = imp.extrairAntibiogramaTexto;

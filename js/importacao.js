@@ -479,7 +479,7 @@ function lerDispositivosDia(abas, opcoes) {
   const op = opcoes || {};
   const setor = String(op.setor || '').trim();
   const anoArquivo = Number(String(op.ano || '').slice(0, 4)) || 0;
-  const linhas = [], problemas = [], conferencia = [], abasIgnoradas = [];
+  const linhas = [], problemas = [], conferencia = [], cobertura = [], abasIgnoradas = [];
 
   for (const nomeAba of Object.keys(abas || {})) {
     const mes = mesDoNome(nomeAba);
@@ -535,7 +535,8 @@ function lerDispositivosDia(abas, opcoes) {
     if (!colunas.length) { problemas.push(`${nomeAba}: nenhuma coluna de dispositivo reconhecida`); continue; }
 
     const somaNossa = new Map(), competencia = `${ano}-${String(mes).padStart(2, '0')}`;
-    let totalDaPlanilha = null, diasLidos = 0;
+    const diasNoMes = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+    let totalDaPlanilha = null, diasLidos = 0, diasMedidos = 0;
     for (let i = iPrimeira; i < matriz.length; i++) {
       const linha = matriz[i] || [];
       const bruto = linha[colDia];
@@ -546,6 +547,14 @@ function lerDispositivosDia(abas, opcoes) {
       if (!dia) { problemas.push(`${nomeAba}: data fora do mês, linha ignorada ("${String(bruto).trim()}")`); continue; }
       const data = `${competencia}-${String(dia).padStart(2, '0')}`;
       diasLidos++;
+      /* Dia com a linha inteira em branco NÃO é dia de zero dispositivo: é dia que
+         ninguém contou. A contagem é feita passando de leito em leito, e em fim de semana
+         ou feriado às vezes não é feita. Tratar branco como zero encolheria o denominador
+         e inflaria a taxa de infecção por 1.000 dias de dispositivo — o erro apareceria
+         como piora do indicador, que é o pior jeito de errar. */
+      const medido = colunas.some(col => String(linha[col.c] == null ? '' : linha[col.c]).trim() !== '');
+      if (!medido) continue;
+      diasMedidos++;
       for (const col of colunas) {
         const n = Number(String(linha[col.c] == null ? '' : linha[col.c]).replace(',', '.').trim());
         if (!isFinite(n) || n < 0) continue;
@@ -562,8 +571,14 @@ function lerDispositivosDia(abas, opcoes) {
        branco (só o total foi digitado), ou as datas estão num formato que não sabemos ler.
        Nos dois casos é preciso DIZER — a primeira versão devolvia zero calado, e dois anos
        inteiros de neonatal teriam entrado no banco como se não existissem. */
-    if (!diasLidos) problemas.push(`${nomeAba}: cabeçalho reconhecido, mas nenhum dia com dado`
+    if (!diasMedidos) problemas.push(`${nomeAba}: cabeçalho reconhecido, mas nenhum dia com dado`
       + (totalDaPlanilha ? ' (a planilha só tem a linha de total preenchida)' : ''));
+
+    /* Quantos dias do mês foram efetivamente contados. Vai junto com o dado porque o
+       denominador só é interpretável com isso ao lado: 22 dias medidos num mês de 31 não
+       é "o mês", e o relatório precisa poder dizer isso em vez de fingir cobertura total. */
+    cobertura.push({ competencia, setor, diasNoMes, diasMedidos,
+      completo: diasMedidos >= diasNoMes });
 
     /* Prova dos nove: nossa soma do mês contra o TOTAL que a planilha já trazia. */
     for (const col of colunas) {
@@ -576,7 +591,7 @@ function lerDispositivosDia(abas, opcoes) {
         confere: isFinite(dela) ? Math.abs(dela - nosso) < 0.5 : null });
     }
   }
-  return { linhas, conferencia, problemas, abasIgnoradas };
+  return { linhas, conferencia, cobertura, problemas, abasIgnoradas };
 }
 
 /* Competência (AAAA-MM) a partir do NOME do arquivo. Relatório mensal agregado costuma

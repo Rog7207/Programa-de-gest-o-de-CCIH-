@@ -2332,6 +2332,35 @@ console.log('\n== 59. Dispositivos invasivos: prancheta diária, cabeçalho em d
   verificar('aba sem nome de mês é ignorada em silêncio (é aba de rascunho)',
     lixo.linhas.length === 0 && lixo.problemas.length === 0 && lixo.abasIgnoradas.length === 1);
 
+  /* Dia em branco NÃO é dia de zero dispositivo: é dia que ninguém contou. A contagem é
+     feita de leito em leito, e fim de semana e feriado às vezes ficam sem. Somar o branco
+     como zero encolheria o denominador e INFLARIA a taxa por 1.000 dias de dispositivo. */
+  const comFalha = imp.lerDispositivosDia({ 'Abril': [
+    ['Dia', 'Paciente dia', 'CVC'],
+    ['01/04/25', '10', '2'],
+    ['02/04/25', '', ''],          /* sábado sem contagem */
+    ['03/04/25', '8', '0'],        /* contado: havia 8 pacientes e nenhum CVC */
+    ['TOTAL', '18', '2']
+  ] }, { setor: 'UTI Adulto', ano: '2025' });
+  const cob = comFalha.cobertura[0];
+  verificar('dia em branco não entra como zero: 2 dias medidos de 30',
+    cob.diasMedidos === 2 && cob.diasNoMes === 30 && cob.completo === false, JSON.stringify(cob));
+  verificar('o dia contado COM zero continua sendo dia medido',
+    comFalha.linhas.filter(l => l.Dispositivo === 'Pacientes-dia').length === 2);
+  verificar('o branco não vira contagem nenhuma',
+    !comFalha.linhas.some(l => l.Data === '2025-04-02'));
+  verificar('a soma ignora o dia não medido e continua batendo com o TOTAL',
+    comFalha.conferencia.every(c => c.confere === true),
+    JSON.stringify(comFalha.conferencia));
+
+  const cheio = imp.lerDispositivosDia({ 'Fevereiro': [
+    ['Dia', 'Paciente dia'], ...Array.from({ length: 28 }, (_, i) => [`${i + 1}/02/25`, '1']),
+    ['TOTAL', '28']
+  ] }, { setor: 'X', ano: '2025' });
+  verificar('mês contado inteiro é marcado como completo',
+    cheio.cobertura[0].completo === true && cheio.cobertura[0].diasMedidos === 28,
+    JSON.stringify(cheio.cobertura[0]));
+
   verificar('mesDoNome tolera sujeira no nome da aba',
     imp.mesDoNome('Maio_2021_') === 5 && imp.mesDoNome(' Abril ') === 4
     && imp.mesDoNome('Março 2022') === 3 && imp.mesDoNome('Plan1') === 0);

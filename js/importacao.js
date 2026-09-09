@@ -549,8 +549,9 @@ function lerDispositivosDia(abas, opcoes) {
       for (const col of colunas) {
         const n = Number(String(linha[col.c] == null ? '' : linha[col.c]).replace(',', '.').trim());
         if (!isFinite(n) || n < 0) continue;
-        const chave = col.estrato + ' ' + col.dispositivo;
-        somaNossa.set(chave, (somaNossa.get(chave) || 0) + n);
+        /* Somado por COLUNA, não pelo nome: dois estratos com o mesmo dispositivo
+           teriam a mesma chave e as contagens se fundiriam, escondendo divergência. */
+        somaNossa.set(col.c, (somaNossa.get(col.c) || 0) + n);
         if (n === 0) continue;   /* zero é ausência de dispositivo: não vira linha */
         linhas.push({ Data: data, Competencia: competencia, Setor: setor,
           Estrato: col.estrato, Dispositivo: col.dispositivo, Contagem: n });
@@ -566,8 +567,7 @@ function lerDispositivosDia(abas, opcoes) {
 
     /* Prova dos nove: nossa soma do mês contra o TOTAL que a planilha já trazia. */
     for (const col of colunas) {
-      const chave = col.estrato + ' ' + col.dispositivo;
-      const nosso = somaNossa.get(chave) || 0;
+      const nosso = somaNossa.get(col.c) || 0;
       const dela = totalDaPlanilha
         ? Number(String(totalDaPlanilha[col.c] == null ? '' : totalDaPlanilha[col.c]).replace(',', '.').trim())
         : NaN;

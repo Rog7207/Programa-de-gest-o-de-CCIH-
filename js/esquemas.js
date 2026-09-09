@@ -85,7 +85,11 @@ const ESQUEMAS = {
     arquivo: 'denominadores.xlsx',
     abas: {
       censo_setor: ['ID_Censo', 'Competencia', 'Setor', 'Admitidos', 'Altas', 'Obitos',
-        'Internados', 'PacientesDia', 'MediaPermanencia', 'CriadoPor', 'CriadoEm']
+        'Internados', 'PacientesDia', 'MediaPermanencia', 'CriadoPor', 'CriadoEm'],
+      /* Contagem DIÁRIA de dispositivos, formato longo (um dia × estrato × dispositivo por
+         linha). É o denominador das taxas por 1.000 dias de dispositivo. */
+      dispositivos_dia: ['ID_Dispositivo', 'Data', 'Competencia', 'Setor', 'Estrato',
+        'Dispositivo', 'Contagem', 'CriadoPor', 'CriadoEm']
     }
   },
   dispositivos: {

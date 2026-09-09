@@ -340,6 +340,245 @@ function ehLinhaDeTotais(registro, definicao) {
   return MARCA_DE_TOTAL.test(normalizarTexto((registro || {})[campo]));
 }
 
+/* ---- Planilha de contagem DIÁRIA de dispositivos invasivos ----------------------------
+   Formato de prancheta: uma ABA POR MÊS, um dia por linha, e o cabeçalho em dois níveis
+   (grupo em cima com células mescladas, item embaixo). Não passa pelo mapeamento de
+   colunas normal — aqui a coluna não tem nome único, ela tem um caminho ("Central" +
+   "PICC", "Paciente 750 a 1000g" + "CVC").
+
+   Sai no formato longo: uma linha por dia × estrato × dispositivo. Guardar o diário (e não
+   o total do mês) é o que permite recortar qualquer período depois; e guardar o estrato de
+   peso separado é o que mantém a taxa neonatal com sentido — somada, ela não quer dizer
+   nada, porque o risco de um RN de 700g não é o de um de 3kg. */
+
+/* Rótulo legível para casar por palavra: tira acento e pontuação, MAS mantém os espaços
+   (normalizarTexto cola tudo e "Paciente dia" viraria "pacientedia"). */
+function rotuloSimples(s) {
+  return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+const MESES_PT = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho',
+  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+/* As planilhas antigas vieram de um Excel em inglês e gravaram "1/Dec". */
+const MESES_EN = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+/* Mês (1-12) escondido no nome da aba: "Janeiro", "janeiro ", "Maio_2021_", "Março 2022".
+   Aba que não nomeia mês (Plan1, Plan4...) devolve 0 e é simplesmente ignorada. */
+function mesDoNome(nome) {
+  const t = rotuloSimples(nome);
+  for (let i = 0; i < 12; i++) if (new RegExp('\\b' + MESES_PT[i] + '\\b').test(t)) return i + 1;
+  return 0;
+}
+
+/* Estrato de peso/idade da UTI neonatal. Devolve '' quando o rótulo não é estrato (aí ele
+   faz parte do NOME do dispositivo) e 'TOTAL' para a coluna de soma, que é descartada. */
+function estratoCanonico(rotulo) {
+  const bruto = String(rotulo == null ? '' : rotulo);
+  const t = rotuloSimples(bruto);
+  if (!t) return '';
+  /* "RN's" é o rótulo do grupo da SOMA; "RN" sozinho é a contagem de recém-nascidos
+     daquele estrato, ou seja, o pacientes-dia. Um s de diferença. */
+  if (/^rn s$/.test(t) || /\btotal\b/.test(t)) return 'TOTAL';
+  if (/pediatric/.test(t)) return 'Pediátricos';
+  if (!/paciente|peso/.test(t)) return '';
+  /* Os limites saem dos NÚMEROS do rótulo, não de uma lista fixa: a planilha escreve
+     "750 a 999g" num ano e "750 a 1000" noutro, e uma lista fixa perderia a faixa em
+     silêncio — que foi exatamente o que aconteceu na primeira leitura. */
+  const nums = (t.match(/\d+/g) || []).map(Number).filter(n => n >= 100);
+  if (!nums.length) return '';
+  if (nums.length >= 2) return nums[0] + '–' + nums[1] + 'g';
+  if (/maior|acima|>/.test(bruto)) return '>' + nums[0] + 'g';
+  return '≤' + nums[0] + 'g';
+}
+
+/* Nome canônico do dispositivo a partir do caminho da coluna (grupo + item). A ordem das
+   regras importa: "Central/Femural" é um CVC femoral, mas "Cateter de Hemodiálise/Femural
+   D" é outro dispositivo — se a regra do femoral viesse antes, os dois virariam a mesma
+   coisa e a taxa de infecção de cateter de hemodiálise sumiria dentro da de CVC. */
+function dispositivoCanonico(rotulos) {
+  const t = rotuloSimples((rotulos || []).filter(Boolean).join(' '));
+  if (!t || /^(dia|data)$/.test(t)) return '';
+  if (/hemodialis/.test(t)) {
+    const sitio = /femural|femoral/.test(t) ? 'femoral' : /jugular/.test(t) ? 'jugular'
+      : /subclavi/.test(t) ? 'subclávia' : '';
+    const lado = /\bd$|\bdireit/.test(t) ? ' D' : /\be$|\besquerd/.test(t) ? ' E' : '';
+    return 'Hemodiálise' + (sitio ? ' ' + sitio + lado : '');
+  }
+  if (/\bpicc\b/.test(t)) return 'PICC';
+  if ((/femural|femoral/.test(t)) && /central|cvc/.test(t)) return 'CVC femoral';
+  if (/\bcvc\b|cateter central|acesso central/.test(t)) return 'CVC';
+  if (/\bvm\b|ventila|\btot\b/.test(t)) return 'VM';
+  if (/\bsvd\b|sonda vesical|vesical de demora/.test(t)) return 'SVD';
+  if (/paciente dia|pacientes dia/.test(t) || /^rn$/.test(t)) return 'Pacientes-dia';
+  return '';
+}
+
+/* Caminho de cada coluna. Só as linhas de cima são preenchidas para a direita (célula
+   mesclada aparece apenas na primeira coluna do intervalo); a linha de baixo NÃO, porque
+   ali cada coluna tem o seu próprio rótulo — arrastar "Femural" para a direita colaria o
+   rótulo do cateter na coluna da ventilação mecânica. */
+function caminhosDasColunas(linhasCabecalho, largura) {
+  const niveis = linhasCabecalho.map((linha, i) => {
+    const ultima = i === linhasCabecalho.length - 1;
+    const saida = [];
+    let carregado = '';
+    for (let c = 0; c < largura; c++) {
+      const valor = String((linha || [])[c] == null ? '' : linha[c]).trim();
+      if (valor) carregado = valor;
+      saida.push(valor || (ultima ? '' : carregado));
+    }
+    return saida;
+  });
+  const caminhos = [];
+  for (let c = 0; c < largura; c++) {
+    const vistos = [];
+    for (const nivel of niveis) if (nivel[c] && !vistos.includes(nivel[c])) vistos.push(nivel[c]);
+    caminhos.push(vistos);
+  }
+  return caminhos;
+}
+
+/* Dia do mês a partir do que está na célula, sabendo QUE MÊS a aba é. As duas planilhas
+   da casa usam convenções opostas — a da UTI grava 28/02/25 e a da neonatal 2/28/25 — e
+   em janeiro ("1/1/25") as duas são idênticas. Em vez de configurar o formato e torcer,
+   deixamos o mês da aba desempatar: a leitura que bate com ele é a certa. Data que não
+   bate com o mês nenhum é devolvida como 0 e a linha é descartada com aviso. */
+function diaDaLinha(valor, mes, ano) {
+  if (valor instanceof Date && !isNaN(valor)) {
+    return valor.getUTCMonth() + 1 === mes ? valor.getUTCDate() : 0;
+  }
+  if (typeof valor === 'number' && valor > 700 && valor < 80000) {
+    const d = XLSX.SSF.parse_date_code(valor);
+    return d && d.m === mes ? d.d : 0;
+  }
+  const s = String(valor == null ? '' : valor).trim();
+  /* Terceiro formato da casa: "1/Jan", "12/Fev" — dia e mês POR EXTENSO abreviado. */
+  const porNome = /^(\d{1,2})\s*[\/. -]\s*([a-zA-Zçãáéíóêô]{3,})/.exec(s);
+  if (porNome) {
+    const t = rotuloSimples(porNome[2]);
+    const tres = t.slice(0, 3);
+    let achado = MESES_PT.findIndex(nome => nome.slice(0, 3) === tres);
+    if (achado < 0) achado = MESES_EN.indexOf(tres);
+    const dia = Number(porNome[1]);
+    return (achado + 1 === mes && dia >= 1 && dia <= 31) ? dia : 0;
+  }
+  const m = /^(\d{1,2})[\/.-](\d{1,2})(?:[\/.-](\d{2,4}))?/.exec(s);
+  if (!m) return 0;
+  const a = Number(m[1]), b = Number(m[2]);
+  const diasNoMes = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+  if (a === mes && b >= 1 && b <= diasNoMes) return b;   /* mês/dia (planilha neonatal) */
+  if (b === mes && a >= 1 && a <= diasNoMes) return a;   /* dia/mês (planilha da UTI) */
+  return 0;
+}
+
+/* Lê a planilha inteira (todas as abas do ano). `abas` é { nomeDaAba: matriz de linhas },
+   como sai de lerBruto com todasAsAbas. Devolve as linhas do formato longo, a conferência
+   contra a linha TOTAL que a própria planilha calcula, e os problemas encontrados. */
+function lerDispositivosDia(abas, opcoes) {
+  const op = opcoes || {};
+  const setor = String(op.setor || '').trim();
+  const anoArquivo = Number(String(op.ano || '').slice(0, 4)) || 0;
+  const linhas = [], problemas = [], conferencia = [], abasIgnoradas = [];
+
+  for (const nomeAba of Object.keys(abas || {})) {
+    const mes = mesDoNome(nomeAba);
+    const matriz = abas[nomeAba] || [];
+    if (!mes) { abasIgnoradas.push(nomeAba); continue; }
+    /* Ano: o da aba ("Janeiro 2022") manda; senão o do nome do arquivo. */
+    const doNome = /(20\d{2})/.exec(nomeAba);
+    const ano = doNome ? Number(doNome[1]) : anoArquivo;
+    if (!ano) { problemas.push(`${nomeAba}: não deu para saber o ano`); continue; }
+
+    /* O cabeçalho não fica sempre na mesma altura (linha 1 em 2018, 4 em 2022, 3 em 2025):
+       procuramos a linha que tem a palavra "Dia". */
+    const iDia = matriz.findIndex(l => (l || []).some(c => /^dias?$/.test(rotuloSimples(c))));
+    if (iDia < 0) { problemas.push(`${nomeAba}: não achei a coluna "Dia"`); continue; }
+    const colDia = (matriz[iDia] || []).findIndex(c => /^dias?$/.test(rotuloSimples(c)));
+
+    /* Depois da linha do "Dia" ainda pode vir uma linha de subcabeçalho (é o caso da UTI,
+       onde "Dia" está na linha do grupo). Sabemos qual é porque a linha de dados começa
+       com uma data — e a de cabeçalho, não. */
+    let iPrimeira = iDia + 1;
+    for (let n = 0; n < 2 && iPrimeira < matriz.length; n++) {
+      const celula = String((matriz[iPrimeira] || [])[colDia] == null ? '' : (matriz[iPrimeira] || [])[colDia]).trim();
+      /* Linha de subcabeçalho (ou espaçadora) tem a coluna do dia SEM nenhum algarismo.
+         Parar por aí é essencial: varrer até achar uma data faria as linhas de um mês com
+         a data errada serem engolidas como cabeçalho, e o mês inteiro sumiria calado. */
+      if (celula && (/\d/.test(celula) || MARCA_DE_TOTAL.test(normalizarTexto(celula)))) break;
+      iPrimeira++;
+    }
+    if (iPrimeira >= matriz.length) { problemas.push(`${nomeAba}: nenhuma linha de dados`); continue; }
+
+    const largura = Math.max(...matriz.slice(0, iPrimeira + 3).map(l => (l || []).length), 0);
+    /* Fora as linhas de TÍTULO antes do cabeçalho ("Controle de Utilização... FM-CCIH-26").
+       Elas têm uma célula só, mas essa célula é arrastada para a direita junto com as
+       mescladas de verdade e cola o título inteiro no nome de cada dispositivo — foi assim
+       que os pacientes-dia de quatro dos seis estratos sumiram na primeira leitura. Linha
+       de agrupamento real tem duas ou mais células preenchidas; a de baixo entra sempre. */
+    const cabecalho = matriz.slice(0, iPrimeira).filter((l, i, todas) =>
+      i === todas.length - 1 || (l || []).filter(c => String(c == null ? '' : c).trim()).length >= 2);
+    const caminhos = caminhosDasColunas(cabecalho, largura);
+
+    /* Que coluna é o quê. Coluna sem dispositivo reconhecido é ignorada em silêncio: a
+       planilha tem colunas de anotação e de soma que não são denominador de nada. */
+    const colunas = [];
+    for (let c = 0; c < largura; c++) {
+      if (c === colDia) continue;
+      const estratos = caminhos[c].map(estratoCanonico);
+      if (estratos.includes('TOTAL')) continue;
+      const estrato = estratos.find(e => e && e !== 'TOTAL') || '';
+      const restantes = caminhos[c].filter(r => !estratoCanonico(r));
+      const dispositivo = dispositivoCanonico(restantes);
+      if (dispositivo) colunas.push({ c, estrato, dispositivo });
+    }
+    if (!colunas.length) { problemas.push(`${nomeAba}: nenhuma coluna de dispositivo reconhecida`); continue; }
+
+    const somaNossa = new Map(), competencia = `${ano}-${String(mes).padStart(2, '0')}`;
+    let totalDaPlanilha = null, diasLidos = 0;
+    for (let i = iPrimeira; i < matriz.length; i++) {
+      const linha = matriz[i] || [];
+      const bruto = linha[colDia];
+      if (bruto == null || String(bruto).trim() === '') continue;
+      /* A linha TOTAL da própria planilha é a nossa conferência, não um dia. */
+      if (MARCA_DE_TOTAL.test(normalizarTexto(bruto))) { totalDaPlanilha = linha; continue; }
+      const dia = diaDaLinha(bruto, mes, ano);
+      if (!dia) { problemas.push(`${nomeAba}: data fora do mês, linha ignorada ("${String(bruto).trim()}")`); continue; }
+      const data = `${competencia}-${String(dia).padStart(2, '0')}`;
+      diasLidos++;
+      for (const col of colunas) {
+        const n = Number(String(linha[col.c] == null ? '' : linha[col.c]).replace(',', '.').trim());
+        if (!isFinite(n) || n < 0) continue;
+        const chave = col.estrato + ' ' + col.dispositivo;
+        somaNossa.set(chave, (somaNossa.get(chave) || 0) + n);
+        if (n === 0) continue;   /* zero é ausência de dispositivo: não vira linha */
+        linhas.push({ Data: data, Competencia: competencia, Setor: setor,
+          Estrato: col.estrato, Dispositivo: col.dispositivo, Contagem: n });
+      }
+    }
+
+    /* Aba montada, colunas reconhecidas e nenhum dia lido: ou a grade diária está em
+       branco (só o total foi digitado), ou as datas estão num formato que não sabemos ler.
+       Nos dois casos é preciso DIZER — a primeira versão devolvia zero calado, e dois anos
+       inteiros de neonatal teriam entrado no banco como se não existissem. */
+    if (!diasLidos) problemas.push(`${nomeAba}: cabeçalho reconhecido, mas nenhum dia com dado`
+      + (totalDaPlanilha ? ' (a planilha só tem a linha de total preenchida)' : ''));
+
+    /* Prova dos nove: nossa soma do mês contra o TOTAL que a planilha já trazia. */
+    for (const col of colunas) {
+      const chave = col.estrato + ' ' + col.dispositivo;
+      const nosso = somaNossa.get(chave) || 0;
+      const dela = totalDaPlanilha
+        ? Number(String(totalDaPlanilha[col.c] == null ? '' : totalDaPlanilha[col.c]).replace(',', '.').trim())
+        : NaN;
+      conferencia.push({ competencia, estrato: col.estrato, dispositivo: col.dispositivo,
+        nosso, planilha: isFinite(dela) ? dela : null,
+        confere: isFinite(dela) ? Math.abs(dela - nosso) < 0.5 : null });
+    }
+  }
+  return { linhas, conferencia, problemas, abasIgnoradas };
+}
+
 /* Competência (AAAA-MM) a partir do NOME do arquivo. Relatório mensal agregado costuma
    não trazer data nenhuma na tabela — o mês está só no nome ("Censo 012026.csv",
    "antibioticos 07-2026.xls", "Infecções 2026-03.xls"). Sem isso, dois meses diferentes
@@ -2190,7 +2429,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome,
     enriquecerCirurgia, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, lerDispositivosDia, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

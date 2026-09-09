@@ -2246,6 +2246,97 @@ console.log('\n== 58. Censo mensal agregado: competência, linha de totais e den
     && new Map(semCenso.secoes[0].itens).get('Densidade por 1.000 pacientes-dia') === '—');
 }
 
+console.log('\n== 59. Dispositivos invasivos: prancheta diária, cabeçalho em dois níveis ==');
+{
+  /* Layout da UTI adulto: título numa linha só, "Dia" na linha do GRUPO e os itens na
+     linha de baixo, datas em dia/mês, TOTAL no rodapé. */
+  const abasUTI = { 'Março 2025': [
+    ['', 'Controle de Utilização de Dispositivos Invasivos — FM-CCIH-26'],
+    [],
+    ['', 'Dia', 'Paciente dia', 'SVD', 'Central', '', '', 'VM', 'CATETER HEMODIALISE', ''],
+    ['', '', '', '', 'CVC', 'PICC', 'Femural', '', 'Femural D', 'Jugular E'],
+    ['', '01/03/25', '10', '4', '2', '1', '0', '3', '1', '0'],
+    ['', '02/03/25', '12', '5', '2', '0', '1', '3', '1', '1'],
+    ['', 'Total', '22', '9', '4', '1', '1', '6', '2', '1']
+  ] };
+  const uti = imp.lerDispositivosDia(abasUTI, { setor: 'UTI Adulto', ano: '2025' });
+  const chave = (e, d) => uti.linhas.filter(l => l.Estrato === e && l.Dispositivo === d)
+    .reduce((t, l) => t + l.Contagem, 0);
+  verificar('o caminho da coluna vira o dispositivo (Central+PICC = PICC)', chave('', 'PICC') === 1);
+  verificar('Central+Femural é CVC femoral, não o mesmo que o cateter de hemodiálise',
+    chave('', 'CVC femoral') === 1 && chave('', 'Hemodiálise femoral D') === 2);
+  verificar('a coluna VM não herda o rótulo da coluna vizinha', chave('', 'VM') === 6);
+  verificar('paciente-dia entra como denominador', chave('', 'Pacientes-dia') === 22);
+  verificar('a linha Total não vira um dia', uti.linhas.every(l => l.Data !== ''));
+  verificar('data dia/mês lida com o mês da aba', uti.linhas[0].Data === '2025-03-01', uti.linhas[0].Data);
+  verificar('zero não vira linha (ausência de dispositivo não é dado)',
+    !uti.linhas.some(l => l.Contagem === 0));
+  verificar('a conferência bate com o TOTAL da própria planilha',
+    uti.conferencia.length && uti.conferencia.every(c => c.confere === true),
+    JSON.stringify(uti.conferencia.filter(c => !c.confere)));
+
+  /* Layout neonatal: estratos de peso em cima, itens embaixo, datas em MÊS/dia — a
+     convenção OPOSTA, no mesmo hospital. Em janeiro as duas seriam idênticas; por isso o
+     teste usa fevereiro, onde 2/28 só faz sentido de um jeito. */
+  const abasNEO = { 'Fevereiro': [
+    ['', '', '', 'Controle de Utilização — UTI NEONATAL'],
+    [],
+    ['', 'Paciente < = 750g', '', '', 'Paciente 750 a 999g', '', '', "RN's"],
+    ['Dia', 'RN', 'CVC', 'VM', 'RN', 'CVC', 'VM', 'Total'],
+    ['2/27/25', '1', '1', '0', '2', '0', '1', '3'],
+    ['2/28/25', '1', '0', '0', '2', '1', '1', '3'],
+    ['TOTAL', '2', '1', '0', '4', '1', '2', '6']
+  ] };
+  const neo = imp.lerDispositivosDia(abasNEO, { setor: 'UTI Neonatal', ano: '2025' });
+  const neoChave = (e, d) => neo.linhas.filter(l => l.Estrato === e && l.Dispositivo === d)
+    .reduce((t, l) => t + l.Contagem, 0);
+  verificar('data mês/dia é desempatada pelo mês da aba (2/28 = 28 de fevereiro)',
+    neo.linhas.some(l => l.Data === '2025-02-28'), JSON.stringify(neo.linhas.map(l => l.Data)));
+  verificar('o estrato de peso é preservado, não somado',
+    neoChave('≤750g', 'CVC') === 1 && neoChave('750–999g', 'CVC') === 1);
+  verificar('"RN" do estrato é pacientes-dia; "RN\'s" é a coluna de soma e fica fora',
+    neoChave('≤750g', 'Pacientes-dia') === 2 && neoChave('750–999g', 'Pacientes-dia') === 4
+    && !neo.linhas.some(l => l.Estrato === 'TOTAL'));
+  verificar('o título da planilha não contamina o nome do dispositivo',
+    !neo.linhas.some(l => /Controle|NEONATAL/.test(l.Dispositivo)));
+  verificar('conferência da neonatal bate com o TOTAL da planilha',
+    neo.conferencia.every(c => c.confere === true),
+    JSON.stringify(neo.conferencia.filter(c => !c.confere)));
+
+  /* Terceiro formato de data encontrado: "1/Jan". */
+  const porNome = imp.lerDispositivosDia({ 'Janeiro': [
+    ['Dia', 'RN', 'CVC'], ['1/Jan', '2', '1'], ['2/Jan', '3', '0'], ['TOTAL', '5', '1']
+  ] }, { setor: 'X', ano: '2023' });
+  verificar('data por nome do mês ("1/Jan") é lida',
+    porNome.linhas.length && porNome.linhas[0].Data === '2023-01-01',
+    JSON.stringify(porNome.linhas.slice(0, 2)));
+
+  /* Aba com o mês errado nas datas: nada é atribuído ao mês da aba, e reclama. */
+  const mesTrocado = imp.lerDispositivosDia({ 'Agosto': [
+    ['Dia', 'RN'], ['2/1/26', '5'], ['2/2/26', '5'], ['TOTAL', '10']
+  ] }, { setor: 'X', ano: '2026' });
+  verificar('data de outro mês não é atribuída à aba — e vira problema declarado',
+    mesTrocado.linhas.length === 0 && mesTrocado.problemas.length >= 2,
+    JSON.stringify(mesTrocado.problemas));
+
+  /* O silêncio que quase passou: grade diária em branco, só o total digitado. */
+  const soTotal = imp.lerDispositivosDia({ 'Maio': [
+    ['Dia', 'RN', 'CVC'], ['', '', ''], ['TOTAL', '30', '12']
+  ] }, { setor: 'X', ano: '2022' });
+  verificar('mês só com a linha de total é DENUNCIADO, não devolvido como zero',
+    soTotal.linhas.length === 0
+    && soTotal.problemas.some(p => /nenhum dia com dado/.test(p)), JSON.stringify(soTotal.problemas));
+
+  /* Aba que não nomeia mês (Plan1, Plan4...) é ignorada sem virar problema. */
+  const lixo = imp.lerDispositivosDia({ 'Plan4': [['Dia', 'RN'], ['1/1/22', '1']] }, { setor: 'X', ano: '2022' });
+  verificar('aba sem nome de mês é ignorada em silêncio (é aba de rascunho)',
+    lixo.linhas.length === 0 && lixo.problemas.length === 0 && lixo.abasIgnoradas.length === 1);
+
+  verificar('mesDoNome tolera sujeira no nome da aba',
+    imp.mesDoNome('Maio_2021_') === 5 && imp.mesDoNome(' Abril ') === 4
+    && imp.mesDoNome('Março 2022') === 3 && imp.mesDoNome('Plan1') === 0);
+}
+
 /* == 52. Fumaça da tela da Pós-alta: montar SEM explodir (DOM falso) ==
    A tela é avaliada de verdade, com todos os status representados. Pega o que sintaxe e
    testes de motor não pegam: referência fora de ordem (TDZ), helper renomeado, campo

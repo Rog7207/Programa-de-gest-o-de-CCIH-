@@ -1995,6 +1995,43 @@ console.log('\n== 51. Decisão ATB: protocolo empírico + dados locais ==');
       .includes('testados entre jun/2024 e jun/2026'));
 }
 
+console.log('\n== 53. Decisões do miniapp: adesão ao protocolo e volta do CSV ==');
+{
+  const seguiu = imp.seguiuProtocoloEmpirico;
+  verificar('conduta em branco = seguiu a sugestão (o miniapp só pergunta se difere)',
+    seguiu({ EsquemaSugerido: 'Ceftriaxona 2 g IV 1x/dia', CondutaAdotada: '' }) === true);
+  verificar('conduta idêntica à sugestão = seguiu',
+    seguiu({ EsquemaSugerido: 'Ceftriaxona 2 g IV 1x/dia', CondutaAdotada: 'ceftriaxona 2 G iv 1x/dia' }) === true);
+  verificar('conduta diferente = não seguiu',
+    seguiu({ EsquemaSugerido: 'Ceftriaxona 2 g IV 1x/dia', CondutaAdotada: 'Meropenem 1 g IV 8/8h' }) === false);
+  verificar('decisão vazia não quebra', seguiu({}) === true && seguiu(null) === true);
+
+  /* O CSV abaixo é exatamente o que o miniapp montou no teste de navegador. */
+  const csvDoMiniapp = '##ccih-miniapp;tipo=decisao_atb;versao=1\n'
+    + '##decisoes\n'
+    + 'Data;Hora;Prontuario;Sindrome;Respostas;EsquemaSugerido;AvisosLocais;CondutaAdotada;AntibiogramaPeriodo;CriadoPor;CriadoEm\n'
+    + '2026-09-08;20:57;123456;Foco urinário;Paciente: Mulher | Apresentação: Pielonefrite;'
+    + 'Pielonefrite internada — Ceftriaxona 2 g IV 1x/dia;0;;;Dr. Assistente;2026-09-08 23:57\n'
+    + '2026-09-08;21:10;654321;Sepse de foco indeterminado;Risco MDR: sim;'
+    + 'Com risco de MDR/IRAS — Piperacilina + Tazobactam;0;Meropenem 1 g IV 8/8h;;Dr. Assistente;2026-09-08 23:58\n';
+  const linhas = csvDoMiniapp.split('\n');
+  verificar('cabeçalho identifica o pacote do miniapp de decisão',
+    linhas[0].startsWith('##ccih-miniapp') && linhas[0].includes('tipo=decisao_atb'));
+  /* Mesma leitura que o app faz (XLSX sobre o CSV da seção). */
+  const corpo = linhas.slice(2).filter(Boolean).join('\n');
+  const wbDec = XLSX.read(corpo, { type: 'string', raw: true });
+  const decisoes = XLSX.utils.sheet_to_json(wbDec.Sheets[wbDec.SheetNames[0]], { raw: false, defval: '' });
+  verificar('as duas decisões são lidas com todas as colunas',
+    decisoes.length === 2 && decisoes[0].Prontuario === '123456'
+    && decisoes[0].Sindrome === 'Foco urinário' && decisoes[1].CondutaAdotada === 'Meropenem 1 g IV 8/8h',
+    JSON.stringify(decisoes[0]));
+  verificar('a característica reportada da infecção viaja no CSV',
+    decisoes[0].Respostas.includes('Pielonefrite') && decisoes[1].Respostas.includes('Risco MDR'));
+  const adesao = decisoes.map(seguiu);
+  verificar('adesão calculada na importação: 1 seguiu, 1 divergiu',
+    adesao[0] === true && adesao[1] === false, JSON.stringify(adesao));
+}
+
 /* == 52. Fumaça da tela da Pós-alta: montar SEM explodir (DOM falso) ==
    A tela é avaliada de verdade, com todos os status representados. Pega o que sintaxe e
    testes de motor não pegam: referência fora de ordem (TDZ), helper renomeado, campo

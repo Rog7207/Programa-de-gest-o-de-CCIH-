@@ -873,6 +873,16 @@ function encerrarIsolamentosAusentes(existentes, importados, dataFoto) {
   return encerradas;
 }
 
+/* Uma decisão empírica do miniapp seguiu o protocolo? O miniapp só pede a conduta quando
+   ela DIFERE da sugestão, então campo em branco = seguiu; preenchido igual ao sugerido
+   também conta. Calculado na importação, uma vez, para os relatórios não dependerem de
+   comparar texto livre depois. */
+function seguiuProtocoloEmpirico(decisao) {
+  const conduta = String((decisao || {}).CondutaAdotada || '').trim();
+  if (!conduta) return true;
+  return normalizarTexto(conduta) === normalizarTexto((decisao || {}).EsquemaSugerido);
+}
+
 /* Precaução de quem saiu do hospital encerra sozinha: se o censo mostra ALTA na
    internação que cobria o início da precaução — ou ÓBITO em data igual/posterior — o
    isolamento acaba naquela data. Conservador de propósito: sem internação que case no
@@ -2025,7 +2035,7 @@ if (typeof module !== 'undefined' && module.exports) {
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,
     preClassificarCultura, culturaDoPainel, indiceSepse, culturaDeProtocoloSepse, JANELA_CULTURA_SEPSE,
-    prepararRelatorio, adesaoHigiene, tipoPrecaucao, encerrarIsolamentosAusentes, encerrarIsolamentosPorSaida, dataDoRelatorio, vincularAvaliacaoAPrescricao,
+    prepararRelatorio, adesaoHigiene, tipoPrecaucao, encerrarIsolamentosAusentes, encerrarIsolamentosPorSaida, seguiuProtocoloEmpirico, dataDoRelatorio, vincularAvaliacaoAPrescricao,
     momentoCanonico, categoriaProfissional, normalizarObservacaoHigiene, MOMENTOS_OMS,
     principioAtivo, aplicarObitos,
     classificarParaVigilancia, categoriaDeVigilancia, CATEGORIAS_VIGILANCIA, CATEGORIAS_VIGILANCIA_PADRAO,

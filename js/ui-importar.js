@@ -491,6 +491,37 @@ async function ingerirMiniapp(tipo, dadosPorAba, arquivo, silencioso) {
       }
       return { rotulo: 'Avaliação remota', novos, ignorados: linhas.length - novos, suspeitas: suspeitasNovas, culturas: culturasClassificadas, culturasIgnoradas };
     });
+  } else if (tipo === 'decisao_atb') {
+    /* Decisões empíricas dos médicos assistentes (miniapp). Só entram registros com
+       síndrome — o resto é linha inútil. A adesão ao protocolo é calculada aqui, uma vez,
+       para não depender de comparar texto livre toda vez que um relatório for gerado. */
+    const linhas = (dadosPorAba.decisoes || []).filter(d => String(d.Sindrome || '').trim());
+    resumo = await comTrava(['antibioticos'], async () => {
+      const banco = await lerBanco('antibioticos');
+      banco.decisoes_empiricas = banco.decisoes_empiricas || [];
+      const chaveDe = d => [normalizarProntuario(d.Prontuario), d.Data, d.Hora,
+        normalizarTexto(d.Sindrome), normalizarTexto(d.CriadoPor)].join('|');
+      const existentes = new Set(banco.decisoes_empiricas.map(chaveDe));
+      const proximo = proximoID(banco.decisoes_empiricas, 'ID_Decisao', 'DEC');
+      let novos = 0, foraDoProtocolo = 0;
+      for (const l of linhas) {
+        const chave = chaveDe(l);
+        if (existentes.has(chave)) continue;
+        existentes.add(chave);
+        const seguiu = seguiuProtocoloEmpirico(l);
+        if (!seguiu) foraDoProtocolo++;
+        banco.decisoes_empiricas.push({
+          ID_Decisao: proximo(), ...l,
+          Prontuario: normalizarProntuario(l.Prontuario),
+          SeguiuProtocolo: seguiu ? 'S' : 'N',
+          ImportadoPor: app.usuario, ImportadoEm: agora
+        });
+        novos++;
+      }
+      if (novos) await gravarBanco('antibioticos', banco);
+      return { rotulo: 'Decisões de ATB empírico (miniapp)', novos,
+        ignorados: linhas.length - novos, foraDoProtocolo };
+    });
   } else if (tipo === 'higiene_maos') {
     const linhas = (dadosPorAba.observacoes || []).filter(o => o.ID_Observacao);
     resumo = await comTrava(['higiene_maos'], async () => {
@@ -524,6 +555,7 @@ async function ingerirMiniapp(tipo, dadosPorAba, arquivo, silencioso) {
     + (resumo.suspeitas ? `, ${fmtInt(resumo.suspeitas)} suspeitas de IRAS abertas para investigação` : '')
     + (resumo.culturas ? `, ${fmtInt(resumo.culturas)} culturas classificadas` : '')
     + (resumo.culturasIgnoradas ? `, ${fmtInt(resumo.culturasIgnoradas)} culturas já revisadas ignoradas` : '')
+    + (resumo.foraDoProtocolo ? `, ${fmtInt(resumo.foraDoProtocolo)} com conduta diferente da sugerida` : '')
     + '. Original arquivado.';
   if (!silencioso) {
     imp.detalhes.replaceChildren(el('div', { class: 'cartao' },

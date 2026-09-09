@@ -850,7 +850,13 @@ const APPS_DISTRIBUICAO = [
     mensagem: 'CCIH HNSC — aplicativo de auditoria de higiene das mãos.\n\n1) Toque no link e BAIXE o arquivo.\n2) Abra-o pela pasta Downloads (ou ⋮ → Abrir com → Chrome).\n\nNão funciona na pré-visualização do Google Drive — precisa abrir no navegador. Depois de aberto funciona sem internet.' },
   { titulo: 'Avaliação de antimicrobianos (médicos)', arquivo: false,
     url: 'https://drive.google.com/drive/folders/1dZuoG2xjoRwTGNedTp2PQfciG8wyAE2Z',
-    mensagem: 'CCIH HNSC — pasta com a avaliação de antimicrobianos do dia. Baixe o arquivo mais recente e abra no navegador (a senha é fornecida pela CCIH):' }
+    mensagem: 'CCIH HNSC — pasta com a avaliação de antimicrobianos do dia. Baixe o arquivo mais recente e abra no navegador (a senha é fornecida pela CCIH):' },
+  /* Para os médicos ASSISTENTES: protocolo empírico no bolso, sem dado de paciente
+     embarcado. O ID do Drive entra quando o arquivo for publicado — até lá o cartão
+     explica como distribuir. */
+  { titulo: 'Decisão de ATB empírica (médicos assistentes)',
+    url: '',
+    mensagem: 'CCIH HNSC — apoio à decisão de antibioticoterapia empírica, conforme o protocolo institucional.\n\n1) Toque no link e BAIXE o arquivo.\n2) Abra-o pela pasta Downloads (ou ⋮ → Abrir com → Chrome).\n\nFunciona sem internet. Registre as decisões do dia e toque em "Enviar decisões registradas à CCIH" ao fim do plantão/semana — sai só o prontuário, nunca o nome do paciente.' }
 ];
 
 /* Endereço que o Android resolve abrindo o Chrome, e não o aplicativo do Drive — é o que
@@ -881,6 +887,16 @@ function montarDistribuicao() {
         + 'Depois de baixado (⋮ → Abrir com → Chrome, ou abrir pela pasta Downloads), funciona offline. O próprio miniapp avisa isso na tela se for aberto do jeito errado.')));
   const grade = el('div', { style: 'display:flex;flex-wrap:wrap;gap:16px' });
   for (const item of APPS_DISTRIBUICAO) {
+    /* Miniapp pronto mas ainda não publicado no Drive: sem link não há QR — o cartão
+       ensina o caminho em vez de mostrar um código quebrado. */
+    if (!item.url) {
+      grade.append(el('div', { style: 'text-align:center;max-width:220px' },
+        el('h3', { style: 'margin:4px 0' }, item.titulo),
+        el('p', { class: 'texto-suave' },
+          'Arquivo pronto em miniapps/decisao-atb.html. Suba-o na pasta do Drive da CCIH e cole o link '
+          + 'de download em APPS_DISTRIBUICAO (js/app.js) — o QR code aparece aqui.')));
+      continue;
+    }
     const aviso = el('span', { class: 'texto-suave' });
     const caixaQR = el('div', {}, qrDe(item.url, item.titulo));
     const legenda = el('p', { class: 'texto-suave', style: 'margin:2px 0' }, 'abre a página de download');

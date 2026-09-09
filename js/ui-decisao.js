@@ -138,4 +138,47 @@ async function montarDecisaoATB(conteudo) {
     areaContexto,
     areaPerguntas),
     areaResultado);
+
+  /* ---- Decisões recebidas dos médicos assistentes (miniapp) ----
+     Fecha o ciclo: o que foi perguntado, o que o protocolo sugeriu e o que foi prescrito.
+     A adesão por síndrome mostra onde o protocolo convence e onde precisa de conversa. */
+  const recebidas = (bancos.antibioticos.decisoes_empiricas || []).slice()
+    .sort((a, b) => String(b.Data + b.Hora).localeCompare(String(a.Data + a.Hora)));
+  if (recebidas.length) {
+    const seguiram = recebidas.filter(d => d.SeguiuProtocolo === 'S').length;
+    const porSindrome = new Map();
+    for (const d of recebidas) {
+      const s = String(d.Sindrome || '(sem síndrome)').trim();
+      if (!porSindrome.has(s)) porSindrome.set(s, { total: 0, seguiu: 0 });
+      const reg = porSindrome.get(s);
+      reg.total++;
+      if (d.SeguiuProtocolo === 'S') reg.seguiu++;
+    }
+    conteudo.append(el('div', { class: 'cartao' },
+      el('h2', {}, `Decisões recebidas dos assistentes (${fmtInt(recebidas.length)})`),
+      el('p', { class: 'texto-suave' },
+        `Adesão ao protocolo: ${Math.round(seguiram / recebidas.length * 100)}% `
+        + `(${fmtInt(seguiram)} de ${fmtInt(recebidas.length)}). Enviadas pelo miniapp e importadas na aba Importar.`),
+      el('table', { class: 'tabela' },
+        el('thead', {}, el('tr', {}, ['Síndrome', 'Decisões', 'Seguiram o protocolo'].map(c => el('th', {}, c)))),
+        el('tbody', {}, [...porSindrome.entries()].sort((a, b) => b[1].total - a[1].total)
+          .map(([s, r]) => el('tr', {},
+            el('td', {}, s), el('td', {}, fmtInt(r.total)),
+            el('td', {}, `${Math.round(r.seguiu / r.total * 100)}%`))))),
+      el('details', {},
+        el('summary', {}, 'Últimas decisões registradas'),
+        el('table', { class: 'tabela' },
+          el('thead', {}, el('tr', {}, ['Data', 'Prontuário', 'Síndrome', 'Sugerido', 'Conduta adotada', 'Quem decidiu'].map(c => el('th', {}, c)))),
+          el('tbody', {}, recebidas.slice(0, 100).map(d => el('tr', {
+            class: d.Prontuario ? 'linha-clicavel' : '',
+            onclick: d.Prontuario ? () => abrirPaciente(d.Prontuario) : null
+          },
+            el('td', {}, String(d.Data || '').split('-').reverse().join('/')),
+            el('td', {}, d.Prontuario || '—'),
+            el('td', {}, d.Sindrome),
+            el('td', {}, String(d.EsquemaSugerido || '').slice(0, 60)),
+            el('td', { style: d.SeguiuProtocolo === 'S' ? '' : 'color:#a33;font-weight:600' },
+              d.SeguiuProtocolo === 'S' ? 'seguiu a sugestão' : String(d.CondutaAdotada || '').slice(0, 60)),
+            el('td', {}, d.CriadoPor || ''))))))));
+  }
 }

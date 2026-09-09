@@ -309,7 +309,9 @@ function normalizarLinhas(linhas, linhaCabecalho, mapeamento, tipo, aliases) {
       if (registro.Antibiograma) temDado = true;
     }
 
-    if (temDado) registros.push(registro);
+    /* Relatório agregado termina com uma linha de totais ("Total:", "TOTAL GERAL"), que
+       somaria de novo tudo o que já entrou e dobraria o denominador. */
+    if (temDado && !ehLinhaDeTotais(registro, definicao)) registros.push(registro);
   }
 
   /* Observações de higiene não têm identificador: duas linhas iguais no mesmo dia são duas
@@ -327,6 +329,33 @@ function normalizarLinhas(linhas, linhaCabecalho, mapeamento, tipo, aliases) {
     }
   }
   return { registros, problemas };
+}
+
+/* Linha de totais do rodapé de relatório agregado. Só vale para os tipos que declaram
+   `campoDeTotais`: num relatório de pacientes, "Total" poderia ser sobrenome de alguém. */
+const MARCA_DE_TOTAL = /^(total|totais|totalgeral|somatotal|soma|geral|acumulado)$/;
+function ehLinhaDeTotais(registro, definicao) {
+  const campo = (definicao || {}).campoDeTotais;
+  if (!campo) return false;
+  return MARCA_DE_TOTAL.test(normalizarTexto((registro || {})[campo]));
+}
+
+/* Competência (AAAA-MM) a partir do NOME do arquivo. Relatório mensal agregado costuma
+   não trazer data nenhuma na tabela — o mês está só no nome ("Censo 012026.csv",
+   "antibioticos 07-2026.xls", "Infecções 2026-03.xls"). Sem isso, dois meses diferentes
+   entrariam como a mesma linha e um sobrescreveria o outro. */
+function competenciaDoNome(nomeArquivo) {
+  const nome = String(nomeArquivo == null ? '' : nomeArquivo).replace(/\.[^.]+$/, '');
+  const limite = new Date().getUTCFullYear() + 1;
+  const valida = (mes, ano) => (mes >= 1 && mes <= 12 && ano >= 2000 && ano <= limite)
+    ? `${ano}-${String(mes).padStart(2, '0')}` : '';
+  /* AAAA-MM / AAAA_MM / AAAAMM (ano na frente) */
+  let m = /(20\d{2})[-_.\s]?(0[1-9]|1[0-2])(?!\d)/.exec(nome);
+  if (m) { const r = valida(Number(m[2]), Number(m[1])); if (r) return r; }
+  /* MMAAAA colado, ou MM-AAAA / MM.AAAA / MM AAAA */
+  m = /(?<!\d)(0[1-9]|1[0-2])[-_.\s]?(20\d{2})(?!\d)/.exec(nome);
+  if (m) { const r = valida(Number(m[1]), Number(m[2])); if (r) return r; }
+  return '';
 }
 
 /* ---- Parecer do infectologista embutido no relatório de prescrições ----
@@ -2161,7 +2190,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome,
     enriquecerCirurgia, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

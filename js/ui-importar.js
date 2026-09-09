@@ -103,6 +103,9 @@ async function importarArquivoAutomatico(arquivo) {
   const tipo = perfil.Tipo;
   const definicao = TIPOS_RELATORIO[tipo];
   const { registros } = normalizarLinhas(bruto.linhas, linhaCab, mapeamento, tipo, config.aliases);
+  /* Relatório mensal agregado não traz data na tabela — o mês está no nome do arquivo.
+     Preenchido aqui, ANTES da validação e da deduplicação, que dependem dele. */
+  preencherCompetencia(registros, tipo, bruto.nomeArquivo);
   const validacao = validar(registros, tipo, config.vocabulario);
   const linhasComErro = new Set(validacao.erros.map(e => e.linha));
   let validos = registros.filter(r => !linhasComErro.has(r._linha));
@@ -285,6 +288,19 @@ async function processarArquivo(arquivo, codificacao, opcoesAba) {
     renderDetalhesArquivo();
   } catch (e) {
     imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Não foi possível ler o arquivo: ' + e.message));
+  }
+}
+
+/* Relatório mensal agregado (censo por setor) não traz a data em coluna nenhuma: a
+   competência sai do nome do arquivo. Só preenche o que estiver vazio — se o relatório
+   trouxer a coluna, ela manda. */
+function preencherCompetencia(registros, tipo, nomeArquivo) {
+  const definicao = TIPOS_RELATORIO[tipo];
+  if (!definicao || !definicao.campos.some(c => c.id === 'Competencia')) return;
+  const doNome = competenciaDoNome(nomeArquivo);
+  if (!doNome) return;
+  for (const registro of registros) {
+    if (!String(registro.Competencia || '').trim()) registro.Competencia = doNome;
   }
 }
 
@@ -755,6 +771,7 @@ function renderPasso2() {
 async function renderPasso3() {
   imp.area.append(el('p', { class: 'texto-suave' }, 'Processando…'));
   const resultado = normalizarLinhas(imp.bruto.linhas, imp.linhaCabecalho, imp.mapeamento, imp.tipo, config.aliases);
+  preencherCompetencia(resultado.registros, imp.tipo, imp.bruto.nomeArquivo);
   imp.normalizado = resultado;
   imp.validacao = validar(resultado.registros, imp.tipo, config.vocabulario);
   try {

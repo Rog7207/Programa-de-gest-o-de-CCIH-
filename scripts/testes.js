@@ -2185,6 +2185,67 @@ console.log('\n== 53. Decisões do miniapp: adesão ao protocolo e volta do CSV 
     adesao[0] === true && adesao[1] === false, JSON.stringify(adesao));
 }
 
+console.log('\n== 58. Censo mensal agregado: competência, linha de totais e denominador por setor ==');
+{
+  /* Competência tirada do nome do arquivo — o relatório do Tasy não traz a coluna. */
+  verificar('"Censo 012026.csv" → 2026-01', imp.competenciaDoNome('Censo 012026.csv') === '2026-01',
+    imp.competenciaDoNome('Censo 012026.csv'));
+  verificar('mês inválido é recusado', imp.competenciaDoNome('Censo 132026.csv') === '');
+  verificar('nome sem data não inventa competência', imp.competenciaDoNome('censo.xlsx') === '');
+
+  /* A linha "Total:" do relatório somava com os setores e virava um setor fantasma. */
+  const definicao = { campoDeTotais: 'Setor' };
+  verificar('linha "Total:" é reconhecida',
+    imp.ehLinhaDeTotais({ Setor: 'Total:', PacientesDia: 12625 }, definicao));
+  verificar('linha "TOTAL GERAL" também',
+    imp.ehLinhaDeTotais({ Setor: 'TOTAL GERAL', PacientesDia: 1 }, definicao));
+  verificar('setor de verdade passa',
+    !imp.ehLinhaDeTotais({ Setor: 'UTI Adulto', PacientesDia: 991 }, definicao));
+  verificar('sem campoDeTotais nada é descartado',
+    !imp.ehLinhaDeTotais({ Setor: 'Total:' }, {}));
+
+  const rel = require(path.join(__dirname, '..', 'js', 'relatorios.js'));
+  const bancos = {
+    denominadores: { censo_setor: [
+      { Competencia: '2026-08', Setor: 'CTI', PacientesDia: '300' },
+      { Competencia: '2026-08', Setor: 'Unidade 05', PacientesDia: '500' },
+      { Competencia: '2026-07', Setor: 'CTI', PacientesDia: '280' }
+    ] },
+    iras: { casos: [
+      { DataInfeccao: '2026-08-10', Setor: 'CTI', Topografia: 'PAV' },
+      { DataInfeccao: '2026-08-20', Setor: 'CTI', Topografia: 'ITU' },
+      { DataInfeccao: '2026-08-21', Setor: 'Unidade 05', Topografia: 'ITU' }
+    ] },
+    pacientes: { internacoes: [] }, culturas: {}, antibioticos: {}, isolamentos: {}
+  };
+  const soAgosto = rel.pacientesDiaDoCenso(bancos, '2026-08-01', '2026-08-31', null);
+  verificar('só a competência do período entra (300+500, sem julho)',
+    soAgosto.dias === 800 && soAgosto.meses === 1, JSON.stringify(soAgosto));
+  const soCTI = rel.pacientesDiaDoCenso(bancos, '2026-07-01', '2026-08-31', ['CTI']);
+  verificar('escopo de setor soma só o setor, nos dois meses',
+    soCTI.dias === 580 && soCTI.meses === 2, JSON.stringify(soCTI));
+  verificar('período sem censo devolve null',
+    rel.pacientesDiaDoCenso(bancos, '2025-01-01', '2025-12-31', null) === null);
+  verificar('banco sem censo devolve null',
+    rel.pacientesDiaDoCenso({ pacientes: {} }, '2026-08-01', '2026-08-31', null) === null);
+
+  /* O ponto da história: COM censo, o relatório de setor deixa de ser só contagem. */
+  const cti = rel.relatorioIRAS(bancos, ['CTI'], '2026-08-01', '2026-08-31');
+  const panorama = new Map(cti.secoes[0].itens);
+  verificar('densidade por setor sai do censo agregado (2 casos / 300 dias)',
+    panorama.get('Densidade por 1.000 pacientes-dia') === '6.67',
+    panorama.get('Densidade por 1.000 pacientes-dia'));
+  verificar('a fonte do denominador é declarada no papel',
+    /censo mensal por setor/.test(panorama.get('Fonte do denominador') || ''));
+  verificar('a nota "sem densidade por setor" some quando há censo',
+    !cti.secoes.some(s => s.titulo === 'Nota'));
+  /* Sem censo, o comportamento antigo continua: contagem e nota honesta. */
+  const semCenso = rel.relatorioIRAS({ ...bancos, denominadores: {} }, ['CTI'], '2026-08-01', '2026-08-31');
+  verificar('sem censo, escopo de setor volta a avisar que não há taxa',
+    semCenso.secoes.some(s => s.titulo === 'Nota')
+    && new Map(semCenso.secoes[0].itens).get('Densidade por 1.000 pacientes-dia') === '—');
+}
+
 /* == 52. Fumaça da tela da Pós-alta: montar SEM explodir (DOM falso) ==
    A tela é avaliada de verdade, com todos os status representados. Pega o que sintaxe e
    testes de motor não pegam: referência fora de ordem (TDZ), helper renomeado, campo

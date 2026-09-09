@@ -78,6 +78,16 @@ const ESQUEMAS = {
       casos: ['ID_IRAS', 'Prontuario', 'DataInfeccao', 'Topografia', 'CriterioDiagnostico', 'Setor', 'DispositivoAssociado', 'Microrganismo', 'Desfecho', 'StatusInvestigacao', 'NotificadoANVISA', 'Observacoes', 'ConfirmadoPor', 'ConfirmadoEm', 'CriadoPor', 'CriadoEm']
     }
   },
+  /* Censo mensal agregado por setor: os denominadores que o censo individual não dá.
+     É o que permite densidade de IRAS POR SETOR — no HNSC só há o total do hospital,
+     porque lá o censo registra o setor de entrada, não onde o paciente ficou. */
+  denominadores: {
+    arquivo: 'denominadores.xlsx',
+    abas: {
+      censo_setor: ['ID_Censo', 'Competencia', 'Setor', 'Admitidos', 'Altas', 'Obitos',
+        'Internados', 'PacientesDia', 'MediaPermanencia', 'CriadoPor', 'CriadoEm']
+    }
+  },
   dispositivos: {
     arquivo: 'dispositivos.xlsx',
     abas: {
@@ -513,6 +523,30 @@ const TIPOS_RELATORIO = {
       { id: 'Desfecho', rotulo: 'Desfecho', tipo: 'texto', sinonimos: ['desfecho', 'evolucao', 'resultado'] }
     ],
     fixos: { StatusInvestigacao: 'confirmado', NotificadoANVISA: '' }
+  },
+  censo_setor: {
+    rotulo: 'Censo mensal por setor (denominadores)',
+    destino: 'denominadores',
+    abaDestino: 'censo_setor',
+    prefixoID: 'CEN',
+    campoID: 'ID_Censo',
+    permiteAntibiograma: false,
+    /* Um setor por mês: reimportar o mesmo arquivo não duplica. A competência não vem
+       na tabela — sai do NOME do arquivo (ver competenciaDoNome). */
+    chaveNatural: ['Competencia', 'Setor'],
+    /* O rodapé traz "Total:" — somaria de novo todos os setores. */
+    campoDeTotais: 'Setor',
+    campos: [
+      { id: 'Competencia', rotulo: 'Competência (AAAA-MM)', tipo: 'texto', sinonimos: ['competencia', 'mes', 'mesreferencia', 'periodo', 'referencia'] },
+      { id: 'Setor', rotulo: 'Setor', obrigatorio: true, tipo: 'vocab', vocab: 'setores', sinonimos: ['setor', 'setoratendimento', 'unidade', 'clinica', 'localizacao'] },
+      { id: 'PacientesDia', rotulo: 'Pacientes-dia', obrigatorio: true, tipo: 'texto', sinonimos: ['pacdia', 'pacientesdia', 'pacientedia', 'paciendia', 'diasdeinternacao'] },
+      { id: 'Admitidos', rotulo: 'Admitidos', tipo: 'texto', sinonimos: ['admitidos', 'admissoes', 'entradas', 'internacoes'] },
+      { id: 'Altas', rotulo: 'Altas', tipo: 'texto', sinonimos: ['altas', 'saidas'] },
+      { id: 'Obitos', rotulo: 'Óbitos', tipo: 'texto', sinonimos: ['obitos', 'obito', 'falecimentos'] },
+      { id: 'Internados', rotulo: 'Internados', tipo: 'texto', sinonimos: ['internados', 'pacientesinternados'] },
+      { id: 'MediaPermanencia', rotulo: 'Média de permanência', tipo: 'texto', sinonimos: ['mediaperm', 'mediapermanencia', 'permanenciamedia', 'tempomedio'] }
+    ],
+    fixos: {}
   },
   obitos: {
     rotulo: 'Óbitos (desfecho das internações)',

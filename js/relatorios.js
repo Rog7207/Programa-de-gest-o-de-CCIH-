@@ -74,6 +74,28 @@ function pacientesDia(internacoes, de, ate) {
   return total;
 }
 
+/* Pacientes-dia vindos do CENSO MENSAL AGREGADO (banco `denominadores`), quando a
+   instituição o importa. É a única fonte que dá o denominador POR SETOR: o censo
+   individual registra o setor de entrada, não onde o paciente ficou. Conta o mês inteiro
+   quando a competência cai dentro do período — mês pela metade não é rateado, porque o
+   relatório não diz quanto de cada dia foi de quem. */
+function pacientesDiaDoCenso(bancos, inicio, fim, setoresEscopo) {
+  const linhas = ((bancos.denominadores || {}).censo_setor || []);
+  if (!linhas.length) return null;
+  const de = String(inicio).slice(0, 7), ate = String(fim).slice(0, 7);
+  let total = 0, meses = new Set();
+  for (const l of linhas) {
+    const competencia = String(l.Competencia || '').slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(competencia) || competencia < de || competencia > ate) continue;
+    if (!relEscopo(l.Setor, setoresEscopo)) continue;
+    const dias = Number(String(l.PacientesDia == null ? '' : l.PacientesDia).replace(',', '.'));
+    if (!isFinite(dias) || dias <= 0) continue;
+    total += dias;
+    meses.add(competencia);
+  }
+  return total > 0 ? { dias: total, meses: meses.size } : null;
+}
+
 /* ---- 1. IRAS do período ---- */
 function relatorioIRAS(bancos, setoresEscopo, inicio, fim) {
   const casos = ((bancos.iras || {}).casos || [])
@@ -81,8 +103,15 @@ function relatorioIRAS(bancos, setoresEscopo, inicio, fim) {
   const confirmadas = casos.filter(k => String(k.ConfirmadoPor || '').trim()
     || normalizarTexto(k.StatusInvestigacao) === 'confirmado');
   const comDispositivo = casos.filter(k => String(k.DispositivoAssociado || '').trim());
-  const pd = setoresEscopo ? 0 : pacientesDia((bancos.pacientes || {}).internacoes, inicio, fim);
+  /* O censo agregado dá o denominador POR SETOR; sem ele, só o total do hospital, a
+     partir do censo individual (ver pacientesDia). */
+  const doCenso = pacientesDiaDoCenso(bancos, inicio, fim, setoresEscopo);
+  const pd = doCenso ? doCenso.dias
+    : (setoresEscopo ? 0 : pacientesDia((bancos.pacientes || {}).internacoes, inicio, fim));
   const densidade = pd ? (casos.length / pd * 1000).toFixed(2) : null;
+  const fonteDenominador = doCenso
+    ? `censo mensal por setor (${doCenso.meses} mês(es) de competência)`
+    : 'censo individual — total do hospital';
 
   const secoes = [
     { titulo: 'Panorama', tipo: 'numeros', itens: [
@@ -91,7 +120,8 @@ function relatorioIRAS(bancos, setoresEscopo, inicio, fim) {
       ['Em investigação', casos.length - confirmadas.length],
       ['Associadas a dispositivo', `${comDispositivo.length} (${relPct(comDispositivo.length, casos.length)})`],
       ['Densidade por 1.000 pacientes-dia', densidade || '—'],
-      ...(densidade ? [['Pacientes-dia no período', Math.round(pd)]] : [])
+      ...(densidade ? [['Pacientes-dia no período', Math.round(pd)],
+        ['Fonte do denominador', fonteDenominador]] : [])
     ] },
     { titulo: 'Por topografia', tipo: 'tabela', colunas: ['Topografia', 'Casos'],
       linhas: relContar(casos, k => k.Topografia) },
@@ -100,7 +130,7 @@ function relatorioIRAS(bancos, setoresEscopo, inicio, fim) {
     { titulo: 'Microrganismos (top 10)', tipo: 'tabela', colunas: ['Microrganismo', 'Casos'],
       linhas: relContar(casos, k => k.Microrganismo).slice(0, 10) }
   ];
-  if (setoresEscopo) secoes.push({ titulo: 'Nota', tipo: 'texto', corpo: TEXTO_SEM_DENSIDADE_SETOR });
+  if (setoresEscopo && !doCenso) secoes.push({ titulo: 'Nota', tipo: 'texto', corpo: TEXTO_SEM_DENSIDADE_SETOR });
   return { titulo: 'IRAS do período', secoes,
     resumo: [['IRAS', casos.length], ['IRAS confirmadas', confirmadas.length],
       ['Densidade IRAS/1.000 pac-dia', densidade || '—']] };
@@ -190,7 +220,11 @@ function relatorioAntibioticos(bancos, setoresEscopo, inicio, fim) {
   }
   /* Mesmo corte de alertasDeAntibioticos: curso com 10+ dias é prolongado. */
   const prolongados = noPeriodo.filter(c => (relDiasEntre(c.inicio, c.fim) || 0) + 1 >= 10);
-  const pd = setoresEscopo ? 0 : pacientesDia((bancos.pacientes || {}).internacoes, inicio, fim);
+  /* Mesmo denominador do relatório de IRAS: censo agregado quando existe (único que
+     dá por setor), senão o censo individual, que só vale para o hospital inteiro. */
+  const doCenso = pacientesDiaDoCenso(bancos, inicio, fim, setoresEscopo);
+  const pd = doCenso ? doCenso.dias
+    : (setoresEscopo ? 0 : pacientesDia((bancos.pacientes || {}).internacoes, inicio, fim));
   const dotMil = pd ? (dot / pd * 1000).toFixed(0) : null;
   const avaliacoes = ((bancos.antibioticos || {}).avaliacoes || [])
     .filter(a => relPeriodo(a.DataDados || a.CriadoEm, inicio, fim));
@@ -204,7 +238,10 @@ function relatorioAntibioticos(bancos, setoresEscopo, inicio, fim) {
       ['Cursos prolongados (10+ dias)', `${prolongados.length} (${relPct(prolongados.length, noPeriodo.length)})`],
       ['Pacientes em antibiótico', pacientes.size],
       ['Avaliações de stewardship', avaliacoes.length],
-      ['Avaliadas como "Correto"', `${corretas.length} (${relPct(corretas.length, avaliacoes.length)})`]
+      ['Avaliadas como "Correto"', `${corretas.length} (${relPct(corretas.length, avaliacoes.length)})`],
+      ...(dotMil ? [['Fonte do denominador', doCenso
+        ? `censo mensal por setor (${doCenso.meses} mês(es) de competência)`
+        : 'censo individual — total do hospital']] : [])
     ] },
     { titulo: 'Antibióticos por DOT', tipo: 'tabela', colunas: ['Antibiótico', 'DOT', '% do total'],
       linhas: [...dotPorDroga.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12)
@@ -214,7 +251,7 @@ function relatorioAntibioticos(bancos, setoresEscopo, inicio, fim) {
     { titulo: 'Recomendações dadas', tipo: 'tabela', colunas: ['Recomendação', 'Quantidade'],
       linhas: relContar(avaliacoes, a => a.Recomendacao) }
   ];
-  if (setoresEscopo) secoes.push({ titulo: 'Nota', tipo: 'texto', corpo: TEXTO_SEM_DENSIDADE_SETOR });
+  if (setoresEscopo && !doCenso) secoes.push({ titulo: 'Nota', tipo: 'texto', corpo: TEXTO_SEM_DENSIDADE_SETOR });
   return { titulo: 'Antibióticos (stewardship)', secoes,
     resumo: [['DOT', dot], ['DOT/1.000 pac-dia', dotMil || '—'],
       ['Cursos prolongados', prolongados.length], ['Avaliações "Correto"', relPct(corretas.length, avaliacoes.length)]] };
@@ -665,13 +702,13 @@ const RELATORIOS_PADRAO = [
 ];
 
 /* Bancos que os relatórios leem — a UI carrega todos de uma vez. */
-const BANCOS_RELATORIOS = ['iras', 'culturas', 'higiene_maos', 'antibioticos', 'isolamentos',
+const BANCOS_RELATORIOS = ['iras', 'culturas', 'higiene_maos', 'antibioticos', 'isolamentos', 'denominadores',
   'sepse', 'cirurgias', 'pacientes'];
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { relatorioIRAS, relatorioMicrobiologico, relatorioHigiene,
     relatorioAntibioticos, relatorioIsolamentos, relatorioSepse, relatorioPosAlta,
-    relatorioResumoExecutivo, RELATORIOS_PADRAO, BANCOS_RELATORIOS, pacientesDia,
+    relatorioResumoExecutivo, RELATORIOS_PADRAO, BANCOS_RELATORIOS, pacientesDia, pacientesDiaDoCenso,
     relMediana, relDiasEntre, mesAnteriorIntervalo,
     perfilMicrobiologico, colunasDoPerfil, classificarGram, especieEnterobacteria,
     tabelaResistenciaEnterobacterias, corDeResistencia, indiceSensibilidade, mecanismoDaCultura };

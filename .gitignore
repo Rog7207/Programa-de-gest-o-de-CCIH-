@@ -14,6 +14,9 @@ miniapps/fonte/antibiograma-consolidado.json
 # com: node scripts/montar-miniapps.js
 miniapps/*.html
 miniapps.zip
+# Build --publico (para hospedar): sem segredo, mas leva o protocolo e os vocabulários
+# da casa. Publicar é decisão da CCIH — até lá não entra no repositório.
+miniapps/publico/
 
 # Subprojeto Unimed: só o README vai ao repositório. O resto é material da OUTRA
 # instituição (protocolo, planilhas, links do Drive dela) — não é nosso para publicar.

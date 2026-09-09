@@ -16,6 +16,22 @@ let configLocal = {};
 try { configLocal = JSON.parse(fs.readFileSync(path.join(pastaFonte, 'config-local.json'), 'utf-8')); }
 catch (e) { console.log('(sem config-local.json — miniapps saem com os placeholders)'); }
 
+/* --publico: build para ser SERVIDO por https, e não baixado. Existe porque no iPhone o
+   arquivo baixado não roda — nem no Chrome (que no iOS é o Safari por dentro), nem na
+   pré-visualização do app Arquivos. Página hospedada é a única forma de o miniapp
+   funcionar no iPhone.
+
+   Aqui o segredo de envio NÃO entra: uma página pública com ENVIO_SEGREDO dentro entrega a
+   chave a quem abrir o código-fonte. Sem ele o miniapp cai sozinho no outro caminho que já
+   existe — baixar o CSV e anexar num e-mail —, que é justamente o fluxo combinado com os
+   assistentes. O e-mail da CCIH também fica de fora: quem publicar preenche depois, para
+   não deixar endereço institucional num repositório público. */
+const publico = process.argv.includes('--publico');
+if (publico) {
+  for (const chave of ['ENVIO_URL', 'ENVIO_SEGREDO', 'EMAIL_DESTINO']) delete configLocal[chave];
+  console.log('modo --publico: sem ENVIO_URL, sem ENVIO_SEGREDO e sem e-mail — envio pelo CSV + e-mail manual');
+}
+
 /* Setores e antibióticos do PRÓPRIO hospital, lidos do config.xlsx da pasta de dados
    (chave PASTA_DADOS no config-local.json). Assim o que o miniapp oferece é exatamente o
    que os relatórios reconhecem — sem "Uti" digitado à mão que não casa com nada. */
@@ -81,6 +97,8 @@ for (const nome of fs.readdirSync(pastaFonte).filter(n => n.endsWith('.html'))) 
   if (montado.includes('<!--DATA-->')) {
     montado = montado.replace('<!--DATA-->', new Date().toISOString().slice(0, 10).split('-').reverse().join('/'));
   }
-  fs.writeFileSync(path.join(raiz, 'miniapps', nome), montado);
-  console.log('montado: miniapps/' + nome, `(${Math.round(montado.length / 1024)} KB)`);
+  const destino = publico ? path.join(raiz, 'miniapps', 'publico') : path.join(raiz, 'miniapps');
+  fs.mkdirSync(destino, { recursive: true });
+  fs.writeFileSync(path.join(destino, nome), montado);
+  console.log('montado: ' + path.relative(raiz, path.join(destino, nome)), `(${Math.round(montado.length / 1024)} KB)`);
 }

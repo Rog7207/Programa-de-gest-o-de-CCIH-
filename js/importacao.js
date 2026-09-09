@@ -329,13 +329,63 @@ function normalizarLinhas(linhas, linhaCabecalho, mapeamento, tipo, aliases) {
   return { registros, problemas };
 }
 
-/* Remonta o antibiograma a partir de um campo de texto único. Aceita os dois jeitos
+/* O campo de mecanismo/gene também carrega o resultado NEGATIVO da pesquisa ("negativo",
+   "não detectável", "NA"). Guardar isso como mecanismo faria a cultura contar como
+   multirresistente no painel e nas pendências de isolamento — o oposto do que o laudo diz. */
+const MECANISMO_AUSENTE = /^(na|nao|n|neg|negativo|negativa|naodetectavel|naodetectado|naodetectada|indetectavel|ausente|semmecanismo|semresistencia)$/;
+function mecanismoCanonico(valor) {
+  const bruto = String(valor == null ? '' : valor).trim();
+  if (!bruto) return '';
+  /* normalizarTexto tira pontuação: "?" e "---" chegam aqui como string vazia — são
+     marcas de "não informado", não mecanismo. */
+  const n = normalizarTexto(bruto);
+  if (!n) return '';
+  return MECANISMO_AUSENTE.test(n) ? '' : bruto;
+}
+
+/* Resultado por extenso, como o laboratório escreve na sequência contínua. */
+const RESULTADO_POR_EXTENSO = /(sens[ií]ve(l|is)|resistentes?|intermedi[áa]ri[oa]s?)/gi;
+/* Cabeçalho que alguns laboratórios repetem dentro do próprio campo. */
+const CABECALHO_ANTIBIOGRAMA = /^\s*antibiograma\b[^A-ZÀ-Ú]*(antimicrobianos?)?\s*(classifica[çc][ãa]o\s*\/?\s*categoria)?\s*(mic\b)?\s*/i;
+
+/* Remonta o antibiograma a partir de um campo de texto único. Aceita os três jeitos
    que os laboratórios escrevem:
      "Amicacina: S; Gentamicina - Resistente; Meropenem R"     (um par por trecho)
-     "Resistente: Amicacina, Cefepima | Sensível: Meropenem"   (um rótulo para uma lista) */
+     "Resistente: Amicacina, Cefepima | Sensível: Meropenem"   (um rótulo para uma lista)
+     "Ampicilina Sensível Ciprofloxacino Resistente ..."       (sequência contínua, sem
+       separador — o nome do antibiótico é o que vem ANTES de cada resultado; nomes de
+       várias palavras como "Estreptomicina de Alto Nível" saem inteiros) */
 function extrairAntibiogramaTexto(texto) {
-  const s = String(texto == null ? '' : texto).trim();
+  let s = String(texto == null ? '' : texto).trim();
   if (!s) return [];
+
+  /* Sequência contínua: dois ou mais resultados por extenso e nenhum separador forte.
+     Só ':' conta como separador — '=' aparece nas CIM ("<=8", ">=16") e não separa nada. */
+  const semSeparador = !/[;|\n:]/.test(s);
+  const ocorrencias = s.match(RESULTADO_POR_EXTENSO) || [];
+  if (semSeparador && ocorrencias.length >= 2) {
+    const itens = [];
+    const vistos = new Set();
+    let resto = s.replace(CABECALHO_ANTIBIOGRAMA, '');
+    let ultimo = 0;
+    RESULTADO_POR_EXTENSO.lastIndex = 0;
+    let m;
+    while ((m = RESULTADO_POR_EXTENSO.exec(resto)) !== null) {
+      /* Alguns laboratórios intercalam a CIM depois do resultado ("Amicacina Sensível <=8
+         Cefepime Resistente >16") — ela gruda no começo do PRÓXIMO nome e precisa sair. */
+      const nome = resto.slice(ultimo, m.index)
+        .replace(/^[\s\-–,;]+|[\s\-–,;.]+$/g, '')
+        .replace(/^(mic\b\s*)?([<>]=?\s*)?\d+([.,]\d+)?\s*/i, '')
+        .trim();
+      ultimo = m.index + m[0].length;
+      const resultado = normalizarValorAntibiograma(m[0]);
+      const chave = normalizarTexto(nome);
+      if (!chave || vistos.has(chave) || !['S', 'R', 'I'].includes(resultado)) continue;
+      vistos.add(chave);
+      itens.push({ Antibiotico: nome, Resultado: resultado });
+    }
+    if (itens.length) return itens;
+  }
   const itens = [];
   const vistos = new Set();
   const acrescentar = (nome, resultado) => {
@@ -1322,6 +1372,8 @@ function montarLinhaImportada(registro, tipo, id, usuario, agora, tempoCorte) {
       linha.AvaliacaoCCIH = triagem;
       linha.StatusRevisao = triagem ? 'triagem' : 'pendente';
     }
+    /* "negativo"/"não detectável" no campo de gene não é mecanismo — ver mecanismoCanonico. */
+    linha.MecanismoResistencia = mecanismoCanonico(linha.MecanismoResistencia);
     const separado = separarMecanismoDoNome(linha.Microrganismo);
     if (separado) {
       linha.Microrganismo = separado.nome;
@@ -2053,7 +2105,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome,
     enriquecerCirurgia, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

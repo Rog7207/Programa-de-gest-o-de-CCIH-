@@ -1995,6 +1995,43 @@ console.log('\n== 51. Decisão ATB: protocolo empírico + dados locais ==');
       .includes('testados entre jun/2024 e jun/2026'));
 }
 
+console.log('\n== 56. Antibiograma em sequência contínua e gene negativo ==');
+{
+  const ex = imp.extrairAntibiogramaTexto;
+  const pares = t => ex(t).map(i => i.Antibiotico + '=' + i.Resultado).join(' ');
+
+  /* Terceiro formato: sem separador nenhum, o nome é o que vem ANTES do resultado. */
+  verificar('sequência contínua vira pares',
+    pares('ANTIBIOGRAMA Antimicrobiano Classificação/Categoria Ampicilina Sensível Ciprofloxacino Resistente')
+      === 'Ampicilina=S Ciprofloxacino=R');
+  verificar('nome de várias palavras sai inteiro',
+    pares('Estreptomicina de Alto Nível Resistente Vancomicina Sensível')
+      === 'Estreptomicina de Alto Nível=R Vancomicina=S');
+  verificar('CIM intercalada não vira nome de antibiótico',
+    pares('ANTIBIOGRAMA Antimicrobiano Classificação/Categoria MIC Amicacina Sensível <=8 Cefepime Resistente >16 Meropenem Sensível <=0.25')
+      === 'Amicacina=S Cefepime=R Meropenem=S');
+  verificar('"Intermediário" é reconhecido',
+    pares('Amoxicilina/Ácido clavulânico Intermediário Ampicilina Sensível')
+      === 'Amoxicilina/Ácido clavulânico=I Ampicilina=S');
+
+  /* Os dois formatos antigos continuam valendo — é o mesmo campo do banco do HNSC. */
+  verificar('formato "par por trecho" intacto',
+    pares('Amicacina: S; Gentamicina - Resistente; Meropenem R') === 'Amicacina=S Gentamicina=R Meropenem=R');
+  verificar('formato "rótulo para lista" intacto',
+    pares('Resistente: Amicacina, Cefepima | Sensível: Meropenem') === 'Amicacina=R Cefepima=R Meropenem=S');
+  verificar('texto vazio devolve vazio', ex('').length === 0 && ex(null).length === 0);
+  verificar('um resultado só não aciona o modo contínuo (evita falso par)',
+    ex('Amostra Sensível').length <= 1);
+
+  /* Gene NEGATIVO não é mecanismo: guardá-lo faria a cultura contar como MDR. */
+  const mc = imp.mecanismoCanonico;
+  verificar('gene de verdade é mantido', mc('KPC') === 'KPC' && mc('NDM') === 'NDM' && mc('OXA -23') === 'OXA -23');
+  verificar('resultado negativo da pesquisa NÃO vira mecanismo',
+    ['negativo', 'NEGATIVO', 'não detectavel', 'Não detectável', 'NA', '?', 'ausente', '-']
+      .every(v => mc(v) === ''), 'algum negativo passou');
+  verificar('vazio continua vazio', mc('') === '' && mc(null) === '');
+}
+
 console.log('\n== 55. Classificação por padrão: coluna que traz o MOTIVO, não a classe ==');
 {
   const c = imp.classificacaoCanonica;

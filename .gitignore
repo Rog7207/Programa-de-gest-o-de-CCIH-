@@ -15,6 +15,12 @@ miniapps/fonte/antibiograma-consolidado.json
 miniapps/*.html
 miniapps.zip
 
+# Subprojeto Unimed: só o README vai ao repositório. O resto é material da OUTRA
+# instituição (protocolo, planilhas, links do Drive dela) — não é nosso para publicar.
+# Código genérico deve ser promovido para a raiz, não morar aqui.
+unimed/*
+!unimed/README.md
+
 # Diversos
 node_modules/
 *.trava.json

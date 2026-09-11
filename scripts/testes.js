@@ -2527,6 +2527,68 @@ console.log('\n== 62. PDF de cirurgias: recorte por coluna, página a página ==
     imp.agruparLinhasProximas([linha(96.4, it(1, 'a')), linha(99, it(2, 'b')), linha(105.5, it(3, 'c'))], 4).length === 2);
 }
 
+console.log('\n== 63. PDF do censo individual: registro multi-linha por atendimento ==');
+{
+  const it = (x, str) => ({ x, largura: String(str).length * 5, str });
+  const linha = (y, ...itens) => ({ y, itens });
+  /* Cabeçalho + dois registros, cada um em 3 linhas físicas (nome/datas em cima,
+     atendimento+prontuário no meio, continuação embaixo), com um cabeçalho de setor. */
+  const pagina = [
+    linha(24, it(333, 'Hospital'), it(400, 'Exemplo')),
+    linha(110, it(22, 'Paciente'), it(294, 'Data'), it(314, 'nasc'), it(356, 'Data'), it(375, 'entrada'),
+      it(421, 'Prontuário'), it(473, 'Médico'), it(535, 'Convênio'), it(684, 'Nº'), it(695, 'Docto'), it(721, 'Data'), it(741, 'alta')),
+    linha(120, it(22, 'Setor'), it(60, 'atendimento'), it(120, 'Unidade A')),
+    /* registro 1 */
+    linha(135, it(22, 'Ana Souza'), it(292, '01/02/1980'), it(342, '10/01/2026'), it(384, '08:00'),
+      it(473, 'Dr. X'), it(535, 'Convenio A'), it(684, '50111'), it(721, '12/01/2026')),
+    linha(139, it(120, '500.100'), it(209, 'S'), it(242, 'UA-1'), it(437, '12.345'), it(801, '0')),
+    linha(144, it(473, 'cont'), it(721, '09:00')),
+    linha(158, it(240, 'Diagnóstico'), it(290, ':'), it(324, 'J45')),
+    /* registro 2: nome longo cola no atendimento (merge do pdf.js) */
+    linha(189, it(22, 'Bento Rocha Pereira 500.200'), it(292, '03/03/1975'), it(342, '11/01/2026'), it(384, '07:30'),
+      it(473, 'Dr. Y'), it(535, 'Convenio B'), it(627, '010299'), it(684, '50222 11/01/2026')),
+    linha(193, it(209, 'N'), it(242, 'UA-2'), it(437, '67.890'), it(801, '0')),
+    linha(212, it(240, 'Diagnóstico'), it(290, ':'), it(324, 'K35')),
+    /* rodapé com um "1" na faixa do prontuário — não pode virar o prontuário do últ. reg. */
+    linha(300, it(430, '1'), it(700, 'Página 1'))
+  ];
+  const r = imp.analisarPDFInternacoes([pagina]);
+  verificar('extrai um registro por atendimento (2)', r.internacoes.length === 2, JSON.stringify(r.internacoes.map(x => x.Atendimento)));
+  verificar('o setor vem do cabeçalho "Setor atendimento"', r.setores.length === 1 && r.setores[0] === 'Unidade A');
+  const a = imp.internacaoDoPDF(r.internacoes[0]);
+  verificar('registro 1: atendimento, prontuário, entrada e alta certos',
+    a.Atendimento === '500100' && a.Prontuario === '12345' && a.DataInternacao === '2026-01-10' && a.DataAlta === '2026-01-12',
+    JSON.stringify(a));
+  verificar('registro 1: nome e nascimento', a.NomePaciente === 'Ana Souza' && a.DataNascimento === '1980-02-01');
+  const b = imp.internacaoDoPDF(r.internacoes[1]);
+  verificar('registro 2: atendimento colado ao nome é resgatado e some do nome',
+    b.Atendimento === '500200' && b.NomePaciente === 'Bento Rocha Pereira', JSON.stringify(b));
+  verificar('registro 2: alta grudada no Nº Docto é recuperada',
+    b.DataAlta === '2026-01-11', b.DataAlta);
+  verificar('registro 2 (último da página): rodapé "1" NÃO vira o prontuário',
+    b.Prontuario === '67890', b.Prontuario);
+
+  /* Sem cabeçalho de setor não é o censo — não deve reconhecer (evita falso positivo). */
+  const semSetor = imp.analisarPDFInternacoes([[
+    linha(135, it(22, 'Fulano'), it(342, '10/01/2026')),
+    linha(139, it(120, '500.100'), it(437, '12.345'))
+  ]]);
+  verificar('sem "Setor atendimento" não há setor para ancorar o tipo',
+    semSetor.setores.length === 0);
+
+  /* Dedup entre setores: mesmo atendimento em dois setores = uma internação. */
+  const doisSetores = imp.analisarPDFInternacoes([[
+    linha(120, it(22, 'Setor'), it(60, 'atendimento'), it(120, 'Unidade A')),
+    linha(135, it(22, 'Ana Souza'), it(342, '10/01/2026'), it(721, '12/01/2026')),
+    linha(139, it(120, '500.100'), it(437, '12.345')),
+    linha(160, it(22, 'Setor'), it(60, 'atendimento'), it(120, 'UTI Adulto')),
+    linha(175, it(22, 'Ana Souza'), it(342, '10/01/2026'), it(721, '12/01/2026')),
+    linha(179, it(120, '500.100'), it(437, '12.345'))
+  ]]);
+  verificar('mesmo atendimento em dois setores vira UMA internação',
+    doisSetores.internacoes.length === 1 && doisSetores.linhasBrutas === 2, JSON.stringify(doisSetores.internacoes));
+}
+
 /* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==
    A tela é avaliada de verdade, com DOM falso. Pega o que sintaxe e teste de motor não
    pegam: helper que não existe (era `config.usuario`, que nunca existiu no projeto),

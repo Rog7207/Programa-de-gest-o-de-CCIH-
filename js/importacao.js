@@ -560,6 +560,134 @@ function cirurgiaDoPDF(c) {
   };
 }
 
+/* ---- PDF "todos atendimentos" (censo individual) --------------------------------------
+   Relatório do Tasy com um registro por atendimento, agrupado por setor. Cada registro
+   ocupa VÁRIAS linhas físicas (o nome quebra, o médico e o convênio continuam embaixo, e há
+   uma linha de "Diagnóstico:"). O recorte é por coluna, como nas cirurgias, mas aqui o
+   registro é delimitado pela ÂNCORA do número de atendimento (NNN.NNN na coluna própria) —
+   a linha do nome fica logo acima dela, as continuações logo abaixo.
+
+   As fronteiras de coluna são calibradas pelos VALORES, não pelos rótulos: neste layout o
+   valor começa alguns pontos à esquerda do cabeçalho (a data de entrada sai 14px à esquerda
+   de "Data entrada"), e usar o x do rótulo jogava a entrada na coluna do nascimento. */
+const COLUNAS_CENSO = [
+  { campo: 'Paciente', x: 0 }, { campo: 'Atendimento', x: 100 }, { campo: 'VFamiliar', x: 200 },
+  { campo: 'Unid', x: 235 }, { campo: 'DataNasc', x: 285 }, { campo: 'DataEntrada', x: 330 },
+  { campo: 'Prontuario', x: 415 }, { campo: 'Medico', x: 465 }, { campo: 'Convenio', x: 528 },
+  { campo: 'CodigoUsuario', x: 620 }, { campo: 'NumDocto', x: 678 }, { campo: 'DataAlta', x: 715 },
+  { campo: 'QtdLongaPerm', x: 780 }
+];
+const TOKEN_ATENDIMENTO_CENSO = /^\d{1,3}\.\d{3}$/;
+
+function colunaDoCenso(x) {
+  let escolhida = COLUNAS_CENSO[0];
+  for (const c of COLUNAS_CENSO) if (x >= c.x) escolhida = c;
+  return escolhida.campo;
+}
+
+function ehLinhaDeSetorCenso(itens) {
+  return /setor\s+atendimento/i.test((itens || []).map(i => i.str).join(' '));
+}
+
+/* Âncora do registro: o número de atendimento (NNN.NNN) na coluna de atendimento. É o que
+   distingue este relatório do de cirurgias, onde o número fica bem à esquerda (x < 100).
+
+   Caso traiçoeiro: quando o nome é longo, o pdf.js às vezes cola nome e atendimento num
+   item só na coluna do paciente ("Fulano de Tal 560.123"@22) — o pdftotext os mantém
+   separados. Sem tratar isso, o registro desaparecia (1 em ~6.500). Por isso a âncora
+   também aceita o token no FIM de um item da coluna do nome. */
+function ancoraDeAtendimento(itens) {
+  return (itens || []).find(i =>
+    (i.x >= 100 && i.x < 202 && TOKEN_ATENDIMENTO_CENSO.test(String(i.str).trim()))
+    || (i.x < 100 && /\b\d{1,3}\.\d{3}\s*$/.test(String(i.str))));
+}
+
+function analisarPDFInternacoes(paginasBrutas) {
+  const porAtendimento = new Map();   /* dedup: mesmo atendimento aparece 1x por setor tocado */
+  let linhasBrutas = 0, paginasSemAncora = 0;
+  let setorEntrePaginas = '';
+  for (const pagina of (paginasBrutas || [])) {
+    /* Sem uma âncora de atendimento a página é capa/cabeçalho — mas ainda pode trazer um
+       cabeçalho "Setor atendimento" que vale para a próxima. */
+    const trocas = [];
+    for (const l of pagina) if (ehLinhaDeSetorCenso(l.itens)) {
+      const m = /setor\s+atendimento\s+(.+)/i.exec(l.itens.map(i => i.str).join(' '));
+      trocas.push({ y: l.y, setor: m ? m[1].replace(/\s+/g, ' ').trim() : '' });
+    }
+    const setorEm = y => { let s = setorEntrePaginas; for (const t of trocas) if (t.y <= y) s = t.setor; return s; };
+
+    const anchors = pagina.filter(l => ancoraDeAtendimento(l.itens)).sort((a, b) => a.y - b.y);
+    if (!anchors.length) { if (pagina.length > 3) paginasSemAncora++; }
+
+    for (let k = 0; k < anchors.length; k++) {
+      const yA = anchors[k].y;
+      /* A janela do registro é limitada em altura, e não só pela próxima âncora: o ÚLTIMO
+         registro de cada página teria yFim infinito e engoliria o RODAPÉ (que traz um "1"
+         na faixa da coluna do prontuário, lido antes do prontuário real). Nome, atendimento,
+         prontuário e datas ficam todos a ~12px da âncora; 18 dá folga sem alcançar o rodapé. */
+      const proximo = k + 1 < anchors.length ? anchors[k + 1].y - 8 : Infinity;
+      const yFim = Math.min(proximo, yA + 18);
+      const doReg = pagina.filter(l => l.y >= yA - 8 && l.y < yFim && !ehLinhaDeSetorCenso(l.itens));
+      /* A linha "Diagnóstico:" atravessa as colunas do meio e as poluiria — separada. */
+      const ehDiag = l => /^diagn/i.test(((l.itens[0] || {}).str || '').trim());
+      const itens = doReg.filter(l => !ehDiag(l)).flatMap(l => l.itens);
+
+      const col = {}; COLUNAS_CENSO.forEach(c => { col[c.campo] = []; });
+      for (const it of itens) col[colunaDoCenso(it.x)].push(it);
+      const junta = campo => col[campo].sort((a, b) => a.x - b.x).map(i => i.str).join(' ').replace(/\s+/g, ' ').trim();
+      const data = campo => (junta(campo).match(/\d{2}\/\d{2}\/\d{4}/) || [''])[0];
+      /* Fallback para o pdf.js colar células vizinhas numa string só. A data de alta às
+         vezes gruda no fim do "Nº Docto", e às vezes em Código+NºDocto+alta tudo junto —
+         como o atendimento gruda no nome. O pdftotext separa, o pdf.js não. Nenhuma das
+         colunas Convênio/Código/NºDocto tem data legítima (são texto e dígitos sem barra),
+         então uma data ali é a alta deslocada. Sem isso, 760 de 6.500 altas sumiam no
+         navegador (0 em Node). */
+      const dataAlta = data('DataAlta')
+        || ([junta('Convenio'), junta('CodigoUsuario'), junta('NumDocto')].join(' ')
+            .match(/\d{2}\/\d{2}\/\d{4}/) || [''])[0];
+
+      /* Atendimento vem da coluna própria; se veio colado ao nome, é resgatado de lá e
+         removido do nome para não sujar a identificação do paciente. */
+      const nomeBruto = junta('Paciente');
+      let atendToken = (junta('Atendimento').match(/\d{1,3}\.\d{3}/) || [''])[0];
+      if (!atendToken) atendToken = (nomeBruto.match(/\b\d{1,3}\.\d{3}\b/) || [''])[0];
+      const atendimento = atendToken.replace(/\./g, '');
+      const nome = (atendToken ? nomeBruto.replace(atendToken, '') : nomeBruto).replace(/\s+/g, ' ').trim();
+      linhasBrutas++;
+      if (!atendimento) continue;
+      /* Uma linha por atendimento: as demais são o mesmo paciente em outro setor, com a
+         MESMA entrada/alta (são datas do hospital, não do setor). A primeira ocorrência
+         manda; movimento por setor com datas vem do relatório de transferências. */
+      if (porAtendimento.has(atendimento)) continue;
+      porAtendimento.set(atendimento, {
+        Setor: setorEm(yA),
+        Atendimento: atendimento,
+        Prontuario: (junta('Prontuario').match(/[\d.]+/) || [''])[0].replace(/\./g, ''),
+        Nome: nome,
+        DataNasc: data('DataNasc'),
+        DataEntrada: data('DataEntrada'),
+        DataAlta: dataAlta
+      });
+    }
+    if (trocas.length) setorEntrePaginas = trocas[trocas.length - 1].setor;
+  }
+  return { internacoes: [...porAtendimento.values()], linhasBrutas, paginasSemAncora,
+    setores: [...new Set([...porAtendimento.values()].map(r => r.Setor))].filter(Boolean) };
+}
+
+/* Do formato do censo para as colunas do banco de internações. */
+function internacaoDoPDF(r) {
+  return {
+    Prontuario: String(r.Prontuario || '').trim(),
+    NomePaciente: r.Nome || '',
+    DataNascimento: normalizarData(r.DataNasc) || '',
+    Atendimento: String(r.Atendimento || '').trim(),
+    DataInternacao: normalizarData(r.DataEntrada) || '',
+    DataAlta: normalizarData(r.DataAlta) || '',
+    SetorAtual: r.Setor || ''
+  };
+}
+
 const MESES_PT = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho',
   'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 /* As planilhas antigas vieram de um Excel em inglês e gravaram "1/Dec". */
@@ -2646,7 +2774,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome,
     enriquecerCirurgia, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

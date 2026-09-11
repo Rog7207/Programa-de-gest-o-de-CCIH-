@@ -53,6 +53,26 @@ importado e já alimenta as taxas por 1.000 dias no **relatório de IRAS**. Falt
   troca: Atendimento quando existir, caindo para a chave composta só quando faltar — mas
   só decidir com o arquivo novo em mãos (saber se ele traz prontuário muda o desenho).
 
+## Formatos de agosto/2026 recebidos, aguardando versão com texto (11/09/2026)
+
+Só de agosto em diante — não haverá retrospectiva.
+
+- **Busca fonada = "Relação das Cirurgias" COM telefone + endereço.** É o mesmo relatório
+  de cirurgias que o leitor já entende, mais uma linha de continuação com `Celular:`/`Fone:`
+  e endereço sob cada paciente. É a "cirurgias com telefone" que faltava para a pós-alta.
+  Veio separada por especialidade (CIRURGIAS LIMPAS, GINECOLOGIA, OFTALMOLÓGICAS) + ÓBITOS
+  à parte (formato "Atendimentos", são as altas por óbito, para EXCLUIR da ligação).
+  - **Bloqueio**: os arquivos vieram como IMAGEM escaneada (0 fontes, 0 texto) — OCR num
+    relatório girado é inseguro. O usuário vai pedir a versão **impressa para PDF** (com
+    texto) e, se possível, **uma lista única** do mês em vez de três por especialidade.
+  - **Quando chegar com texto**: estender `analisarPDFCirurgias` para capturar a linha de
+    telefone/endereço (hoje ignorada). Isso liga a vigilância pós-alta na Unimed.
+- **"atendimentos MMAAAA" = transferências ("Passagem de Setor"), formato NOVO.** NÃO é o
+  "todos atendimentos" que o leitor de censo já lê. Estrutura: por paciente (prontuário +
+  nome), uma linha por setor com ENTRADA e SAÍDA datadas e duração. É o que dá pacientes-dia
+  e densidade POR SETOR de verdade (o censo agregado só tem o setor de entrada). Precisa de
+  leitor próprio; construir quando o usuário confirmar que é o formato padrão.
+
 ## Miniapps
 
 - **Decisão ATB no iPhone**: só funciona hospedado por `https` (arquivo baixado não roda no

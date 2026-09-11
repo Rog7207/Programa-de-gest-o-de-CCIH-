@@ -42,6 +42,16 @@ importado e já alimenta as taxas por 1.000 dias no **relatório de IRAS**. Falt
   doze estruturas em doze abas (UTIs criadas e fundidas na pandemia). Se for necessário,
   merece script próprio, aba por aba — não importador genérico.
 - **22 nomes crus de procedimento do Tasy** aguardam o de-para para as categorias NHSN.
+- **Cirurgias: não ingerir o PDF sem telefone ainda.** O leitor de PDF está pronto e
+  validado, mas o PDF não traz prontuário, e a dedup de cirurgia é por
+  `Prontuario+DataCirurgia+Procedimento` (js/esquemas.js). Ingerir o PDF agora (prontuário
+  vazio) e depois o relatório novo — mesmas cirurgias, com telefone e talvez prontuário —
+  daria chaves diferentes e DUPLICARIA as 4.193. Decisão (09/09/2026): esperar os dois
+  relatórios novos da Unimed (transferências + cirurgias com telefone) e ingerir só eles.
+- **Rever a chave de dedup de cirurgia depois de ver o relatório novo.** O identificador
+  estável entre formatos (PDF sem prontuário × Excel com) é o **Atendimento**. Provável
+  troca: Atendimento quando existir, caindo para a chave composta só quando faltar — mas
+  só decidir com o arquivo novo em mãos (saber se ele traz prontuário muda o desenho).
 
 ## Miniapps
 

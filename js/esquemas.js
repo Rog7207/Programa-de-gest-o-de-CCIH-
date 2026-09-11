@@ -79,7 +79,7 @@ const ESQUEMAS = {
     }
   },
   /* Censo mensal agregado por setor: os denominadores que o censo individual não dá.
-     É o que permite densidade de IRAS POR SETOR — no HNSC só há o total do hospital,
+     É o que permite densidade de IRAS POR SETOR — sem ele só há o total do hospital,
      porque lá o censo registra o setor de entrada, não onde o paciente ficou. */
   denominadores: {
     arquivo: 'denominadores.xlsx',

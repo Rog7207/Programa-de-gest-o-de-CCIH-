@@ -15,6 +15,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const raiz = path.join(__dirname, '..');
 const XLSX = require(path.join(raiz, 'lib', 'xlsx.full.min.js'));
 global.XLSX = XLSX;
@@ -23,7 +24,7 @@ global.normalizarTexto = normalizarTexto;
 const { ESQUEMAS, VOCAB_APLICACAO } = require(path.join(raiz, 'js', 'esquemas.js'));
 
 /* PASTA_CCIH permite ensaiar numa cópia antes de tocar no banco de verdade. */
-const PASTA = process.env.PASTA_CCIH || '/home/rogerio/Documentos/Dados CCIH HNSC';
+const PASTA = process.env.PASTA_CCIH || path.join(os.homedir(), 'Documentos', 'Dados CCIH HNSC');
 const APLICAR = process.argv.includes('--aplicar');
 
 /* de → para. Só pares em que os dois lados são inequivocamente o mesmo setor. */

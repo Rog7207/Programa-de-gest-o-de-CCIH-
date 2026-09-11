@@ -17,6 +17,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const raiz = path.join(__dirname, '..');
 const XLSX = require(path.join(raiz, 'lib', 'xlsx.full.min.js'));
 global.XLSX = XLSX;
@@ -24,7 +25,7 @@ const { normalizarTexto } = require(path.join(raiz, 'js', 'leitura.js'));
 global.normalizarTexto = normalizarTexto;
 const { ESQUEMAS } = require(path.join(raiz, 'js', 'esquemas.js'));
 
-const PASTA = process.env.PASTA_CCIH || '/home/rogerio/Documentos/Dados CCIH HNSC';
+const PASTA = process.env.PASTA_CCIH || path.join(os.homedir(), 'Documentos', 'Dados CCIH HNSC');
 const APLICAR = process.argv.includes('--aplicar');
 
 /* Erros de digitação e plurais — os dois lados são a mesma categoria, sem dúvida.

@@ -16,7 +16,7 @@ separada para a Unimed.
 - equipe e funções, grupos de setores, perfis de importação, sinônimos (aliases)
 - e-mail da CCIH (aba `meta`)
 
-## O que hoje está preso ao HNSC e precisa de versão Unimed
+## O que hoje está preso à instituição original e precisa de versão Unimed
 
 | Item | Onde está | Como resolver |
 |---|---|---|
@@ -27,7 +27,7 @@ separada para a Unimed.
 ## Regra inviolável
 
 **Dados de pacientes da Unimed nunca entram no repositório** — a pasta de dados dela vive
-fora do projeto, como a do HNSC. Esta pasta é gitignorada por padrão, exceto este README:
+fora do projeto, como a da instituição original. Esta pasta é gitignorada por padrão, exceto este README:
 o que for código genérico deve ser promovido para a raiz, não ficar aqui.
 
 ## Estado

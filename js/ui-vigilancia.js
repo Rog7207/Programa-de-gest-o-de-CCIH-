@@ -8,7 +8,7 @@
      janela vencida sem resposta → encerrada sem contato
    Toda transição é reversível — abortar no meio não pode deixar rastro errado. */
 
-const MODELO_PADRAO_VIGILANCIA = 'Olá, {nome}! Aqui é da CCIH do HNSC. Você operou ({procedimento}) '
+const MODELO_PADRAO_VIGILANCIA = 'Olá, {nome}! Aqui é da CCIH do hospital. Você operou ({procedimento}) '
   + 'em {data} e estamos acompanhando sua recuperação. Como está o local da cirurgia? '
   + 'Notou vermelhidão, dor que piora, secreção, febre ou abertura de pontos? '
   + 'Pode responder por aqui mesmo — obrigado!';

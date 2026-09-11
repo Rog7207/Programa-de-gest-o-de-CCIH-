@@ -13,6 +13,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 global.XLSX = require(path.join(__dirname, '..', 'lib', 'xlsx.full.min.js'));
 const esquemas = require(path.join(__dirname, '..', 'js', 'esquemas.js'));
@@ -25,7 +26,7 @@ global.normalizarTexto = leitura.normalizarTexto;
 const imp = require(path.join(__dirname, '..', 'js', 'importacao.js'));
 global.normalizarProntuario = imp.normalizarProntuario;
 
-const PASTA = '/home/rogerio/Documentos/Dados CCIH HNSC';
+const PASTA = process.env.PASTA_CCIH || path.join(os.homedir(), 'Documentos', 'Dados CCIH HNSC');
 const APLICAR = process.argv.includes('--aplicar');
 const ESQUEMAS = esquemas.ESQUEMAS;
 const arquivo = path.join(PASTA, ESQUEMAS.culturas.arquivo);

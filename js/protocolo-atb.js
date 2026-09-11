@@ -1,6 +1,6 @@
 /* Decisão de antibioticoterapia empírica — núcleo puro (roda em Node, testável).
-   As regras vêm do "Protocolo de Tratamento Empírico de Infecções na Emergência" do HNSC
-   (validado pela CCIH); o motor cruza a resposta do protocolo com os dados LOCAIS do
+   As regras vêm do "Protocolo de Tratamento Empírico de Infecções na Emergência" da
+   instituição (validado pela CCIH); o motor cruza a resposta do protocolo com os dados LOCAIS do
    banco: histórico do paciente (MDR, antibióticos e internações recentes) e o
    antibiograma acumulado do hospital. TUDO é apoio à decisão: a sugestão sai com a
    justificativa visível e nunca substitui o julgamento do médico assistente.
@@ -28,7 +28,7 @@ const riscoMRSA = (id, reforcos) => ({ id, rotulo: 'Risco de MRSA', tipo: 'sim_n
   ajuda: ['Marcar "sim" se qualquer um:', ...RISCO_MRSA_BASE, ...reforcos.map(r => r + ' (neste sítio)')] });
 
 const PROTOCOLO_ATB = {
-  fonte: 'Protocolo de Tratamento Empírico de Infecções na Emergência — HNSC/SCIH',
+  fonte: 'Protocolo de Tratamento Empírico de Infecções na Emergência — SCIH',
   /* Alterações de conduta validadas pela CCIH depois do documento original. Cada uma é
      uma decisão registrada aqui até ser incorporada ao texto do protocolo. */
   adendos: [

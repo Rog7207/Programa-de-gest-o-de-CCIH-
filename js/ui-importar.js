@@ -480,6 +480,16 @@ async function tabelaDePDF(buffer) {
         + '(o mesmo atendimento aparece uma vez por setor tocado).' };
   }
 
+  /* Passagem de setor (transferências): paciente com atendimento à esquerda + linhas de
+     setor com entrada/saída datadas. Não colide com o censo (lá o atendimento fica no meio
+     da linha, não em x<45) nem com cirurgias. */
+  const tr = analisarPDFTransferencias(paginas);
+  if (tr.passagens.length && tr.setores.length) {
+    const colunas = ['Atendimento', 'Setor', 'EntradaSetor', 'SaidaSetor'];
+    return { linhas: tabela(colunas, tr.passagens.map(passagemDoPDF)), formato: 'pdf (transferências)',
+      aviso: `${tr.passagens.length} passagens de setor de ${tr.atendimentos} atendimentos.` };
+  }
+
   const achatadas = [];
   for (const pagina of paginas) for (const grupo of pagina) achatadas.push(linhaDeItens(grupo.itens));
   const cul = analisarPDFCulturas(achatadas);

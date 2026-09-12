@@ -89,7 +89,12 @@ const ESQUEMAS = {
       /* Contagem DIÁRIA de dispositivos, formato longo (um dia × estrato × dispositivo por
          linha). É o denominador das taxas por 1.000 dias de dispositivo. */
       dispositivos_dia: ['ID_Dispositivo', 'Data', 'Competencia', 'Setor', 'Estrato',
-        'Dispositivo', 'Contagem', 'CriadoPor', 'CriadoEm']
+        'Dispositivo', 'Contagem', 'CriadoPor', 'CriadoEm'],
+      /* Passagem de setor (transferências): uma linha por estada em setor, com entrada e
+         saída datadas. Dá pacientes-dia POR SETOR de verdade — o único que sabe ONDE o
+         paciente ficou, não só por onde entrou. */
+      passagem_setor: ['ID_Passagem', 'Atendimento', 'Setor', 'EntradaSetor', 'SaidaSetor',
+        'CriadoPor', 'CriadoEm']
     }
   },
   dispositivos: {
@@ -549,6 +554,23 @@ const TIPOS_RELATORIO = {
       { id: 'Obitos', rotulo: 'Óbitos', tipo: 'texto', sinonimos: ['obitos', 'obito', 'falecimentos'] },
       { id: 'Internados', rotulo: 'Internados', tipo: 'texto', sinonimos: ['internados', 'pacientesinternados'] },
       { id: 'MediaPermanencia', rotulo: 'Média de permanência', tipo: 'texto', sinonimos: ['mediaperm', 'mediapermanencia', 'permanenciamedia', 'tempomedio'] }
+    ],
+    fixos: {}
+  },
+  passagem_setor: {
+    rotulo: 'Transferências (passagem de setor)',
+    destino: 'denominadores',
+    abaDestino: 'passagem_setor',
+    prefixoID: 'PSS',
+    campoID: 'ID_Passagem',
+    permiteAntibiograma: false,
+    /* Uma estada em setor é única pelo atendimento + entrada no setor. */
+    chaveNatural: ['Atendimento', 'Setor', 'EntradaSetor'],
+    campos: [
+      { id: 'Atendimento', rotulo: 'Atendimento', obrigatorio: true, tipo: 'texto', sinonimos: ['atendimento', 'atend', 'nratendimento', 'numeroatendimento'] },
+      { id: 'Setor', rotulo: 'Setor', obrigatorio: true, tipo: 'vocab', vocab: 'setores', sinonimos: ['setor', 'unidade', 'clinica', 'localizacao'] },
+      { id: 'EntradaSetor', rotulo: 'Entrada no setor', obrigatorio: true, tipo: 'texto', sinonimos: ['entradasetor', 'entrada', 'datahoraentrada', 'inicio'] },
+      { id: 'SaidaSetor', rotulo: 'Saída do setor', tipo: 'texto', sinonimos: ['saidasetor', 'saida', 'datahorasaida', 'fim'] }
     ],
     fixos: {}
   },

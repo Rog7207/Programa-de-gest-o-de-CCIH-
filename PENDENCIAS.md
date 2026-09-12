@@ -3,6 +3,21 @@
 Lista curta do que está consciente e deliberadamente por fazer. Não é backlog de ideias:
 só entra aqui o que já foi analisado e teve a decisão adiada, com o motivo.
 
+## Relatórios — pacientes-dia POR SETOR (passagem de setor)
+
+O leitor de transferências (banco `denominadores`, aba `passagem_setor`) já importa as
+estadas por setor com entrada/saída datadas — a fonte correta de pacientes-dia por setor
+(o censo agregado só sabe o setor de ENTRADA). Falta a integração nos relatórios:
+
+- Somar os intervalos (saída − entrada) ∩ período, por setor, como denominador POR SETOR de
+  IRAS e dispositivos — substituindo/complementando `pacientesDiaDoCenso`, que hoje é o único
+  caminho por setor e depende do censo mensal agregado. Isso destrava densidade por setor de
+  verdade, com o denominador vindo de onde o paciente REALMENTE ficou.
+- Os horários de origem têm ~10% de inconsistências (setor N+1 entra antes de o setor N sair)
+  — dado da Unimed, não da leitura. Ao somar intervalos, decidir se sobreposições são
+  aparadas ou somadas como estão (provável: aparar ao período e não deixar intervalo
+  negativo).
+
 ## Relatórios — dispositivos invasivos
 
 O denominador de dias de dispositivo (banco `denominadores`, aba `dispositivos_dia`) já é

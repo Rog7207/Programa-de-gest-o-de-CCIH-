@@ -688,6 +688,77 @@ function internacaoDoPDF(r) {
   };
 }
 
+/* ---- PDF "Relação Atendimentos – Passagem de Setor" (transferências) -------------------
+   Cada paciente (atendimento à esquerda, x<45; nome ao lado) traz uma ou mais linhas de
+   setor NUMERADAS (a seq em x~50), com o setor, a ENTRADA e a SAÍDA do setor datadas
+   (data+hora). É a única fonte de pacientes-dia POR SETOR de verdade — o censo agregado só
+   sabe o setor de entrada. Recorte por faixa de x, como nos outros relatórios do Tasy.
+
+   As inconsistências de horário do sistema de origem (setor 2 entrando antes de o setor 1
+   sair, ~10% dos elos) são PRESERVADAS: são dado da casa, não erro de leitura — e nenhuma
+   linha é perdida (todo atendimento mantém a seq 1). */
+function textoNaFaixa(itens, x0, x1) {
+  return itens.filter(i => i.x >= x0 && i.x < x1).sort((a, b) => a.x - b.x)
+    .map(i => i.str).join(' ').replace(/\s+/g, ' ').trim();
+}
+
+/* Data (+ hora, se houver) de uma faixa, por regex sobre o texto — não por itens separados:
+   o pdftotext entrega "31/01/2026" e "00:02:36" em itens distintos, mas o pdf.js os funde
+   num "31/01/2026 00:02:36" só. Casar o token exato falhava no navegador. */
+function dataHoraNaFaixa(itens, x0, x1) {
+  const m = textoNaFaixa(itens, x0, x1).match(/(\d{2}\/\d{2}\/\d{4})(?:\s+(\d{2}:\d{2}:\d{2}))?/);
+  return m ? (m[1] + (m[2] ? ' ' + m[2] : '')) : '';
+}
+
+function analisarPDFTransferencias(paginas) {
+  const passagens = [];
+  let paciente = null;   /* persiste entre páginas: linhas de setor no topo da página
+                            seguinte pertencem ao paciente que vinha da página anterior */
+  for (const pagina of (paginas || [])) {
+    for (const g of pagina) {
+      const itens = g.itens || [];
+      if (!itens.length) continue;
+      const p = itens[0];
+      const primeiro = String(p.str).trim();
+      const ehPaciente = p.x < 45 && /^\d{5,7}$/.test(primeiro);
+      const ehSetor = p.x >= 45 && p.x < 70 && /^\d{1,2}$/.test(primeiro)
+        && itens.some(i => i.x >= 240 && i.x < 355)
+        && /\d{2}\/\d{2}\/\d{4}/.test(textoNaFaixa(itens, 355, 600));
+      if (ehPaciente) {
+        paciente = { atendimento: primeiro, nome: textoNaFaixa(itens, 90, 240) };
+      } else if (ehSetor && paciente) {
+        passagens.push({
+          Atendimento: paciente.atendimento,
+          Setor: textoNaFaixa(itens, 240, 355),
+          EntradaSetor: dataHoraNaFaixa(itens, 355, 475),
+          SaidaSetor: dataHoraNaFaixa(itens, 475, 600)
+        });
+      }
+    }
+  }
+  return { passagens, atendimentos: new Set(passagens.map(p => p.Atendimento)).size,
+    setores: [...new Set(passagens.map(p => p.Setor))].filter(Boolean) };
+}
+
+/* "DD/MM/AAAA HH:MM:SS" → "AAAA-MM-DD HH:MM:SS" (mantém a hora, que o intervalo por setor
+   precisa). Sem hora, devolve só a data ISO. */
+function dataHoraISO(valor) {
+  const s = String(valor == null ? '' : valor).trim();
+  const data = normalizarData(s.slice(0, 10));
+  if (!data) return '';
+  const hora = (s.match(/\b\d{2}:\d{2}:\d{2}\b/) || [''])[0];
+  return hora ? data + ' ' + hora : data;
+}
+
+function passagemDoPDF(p) {
+  return {
+    Atendimento: String(p.Atendimento || '').trim(),
+    Setor: p.Setor || '',
+    EntradaSetor: dataHoraISO(p.EntradaSetor),
+    SaidaSetor: dataHoraISO(p.SaidaSetor)
+  };
+}
+
 const MESES_PT = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho',
   'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 /* As planilhas antigas vieram de um Excel em inglês e gravaram "1/Dec". */
@@ -2774,7 +2845,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome,
     enriquecerCirurgia, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

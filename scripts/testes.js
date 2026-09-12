@@ -2589,6 +2589,53 @@ console.log('\n== 63. PDF do censo individual: registro multi-linha por atendime
     doisSetores.internacoes.length === 1 && doisSetores.linhasBrutas === 2, JSON.stringify(doisSetores.internacoes));
 }
 
+console.log('\n== 64. PDF de transferências (passagem de setor): estada por setor com datas ==');
+{
+  const it = (x, str) => ({ x, largura: String(str).length * 5, str });
+  const linha = (y, ...itens) => ({ y, itens });
+  /* Um paciente (atendimento@31 + nome) com três estadas em setor. Datas ora como itens
+     separados (pdftotext), ora coladas num item só (pdf.js) — os dois têm de sair iguais. */
+  const pagina = [
+    linha(63, it(272, 'UT'), it(303, 'Relação'), it(441, 'Passagem'), it(534, 'Setor')),
+    linha(94, it(31, '511732'), it(103, 'Ana'), it(131, 'Souza')),
+    /* estada 1: data e hora SEPARADAS (como o pdftotext entrega) */
+    linha(107, it(50, '1'), it(259, 'Unidade'), it(288, 'Z'), it(359, '31/01/2026'), it(396, '00:02:36'),
+      it(479, '31/01/2026'), it(516, '02:03:16'), it(607, '2h'), it(703, '02/02/2026'), it(740, '13:11:36')),
+    /* estada 2: data+hora COLADAS num item só (como o pdf.js entrega) */
+    linha(120, it(50, '2'), it(258, 'Unidade A'), it(359, '31/01/2026 02:03:16'), it(479, '02/02/2026 13:11:36'), it(607, '2 dias')),
+    /* estada 3: setor com nome de duas palavras */
+    linha(133, it(50, '3'), it(254, 'UTI'), it(267, 'Neonatal'), it(359, '02/02/2026 13:11:36'), it(479, '03/02/2026 08:00:00'), it(607, '18h'))
+  ];
+  const r = imp.analisarPDFTransferencias([pagina]);
+  verificar('extrai uma linha por estada em setor (3)', r.passagens.length === 3, JSON.stringify(r.passagens.length));
+  verificar('atendimento e setores lidos', r.atendimentos === 1 && r.setores.length === 3, JSON.stringify(r.setores));
+  const l = r.passagens.map(imp.passagemDoPDF);
+  verificar('data+hora SEPARADAS viram ISO com hora',
+    l[0].EntradaSetor === '2026-01-31 00:02:36' && l[0].SaidaSetor === '2026-01-31 02:03:16', JSON.stringify(l[0]));
+  verificar('data+hora COLADAS (pdf.js) também viram ISO com hora',
+    l[1].EntradaSetor === '2026-01-31 02:03:16' && l[1].SaidaSetor === '2026-02-02 13:11:36', JSON.stringify(l[1]));
+  verificar('setor de duas palavras é preservado', l[2].Setor === 'UTI Neonatal', l[2].Setor);
+  verificar('a alta hospitalar (x>700) não é confundida com saída do setor',
+    l[0].SaidaSetor === '2026-01-31 02:03:16');
+
+  /* Estada no topo da página seguinte pertence ao paciente da página anterior. */
+  const duasPaginas = imp.analisarPDFTransferencias([
+    [linha(94, it(31, '600001'), it(103, 'Beto')), linha(107, it(50, '1'), it(259, 'Unidade C'), it(359, '05/01/2026 10:00:00'), it(479, '06/01/2026 10:00:00'))],
+    [linha(86, it(50, '2'), it(259, 'Unidade D'), it(359, '06/01/2026 10:00:00'), it(479, '07/01/2026 10:00:00'))]
+  ]);
+  verificar('estada órfã no topo da página seguinte fica com o paciente anterior',
+    duasPaginas.passagens.length === 2 && duasPaginas.passagens.every(p => p.Atendimento === '600001'),
+    JSON.stringify(duasPaginas.passagens.map(p => p.Atendimento)));
+
+  /* Sem hora, guarda só a data (não inventa hora). */
+  const semHora = imp.analisarPDFTransferencias([[
+    linha(94, it(31, '700001'), it(103, 'Ciclano')),
+    linha(107, it(50, '1'), it(259, 'Unidade A'), it(359, '10/01/2026'), it(479, '12/01/2026'))
+  ]]);
+  verificar('sem hora, entrada fica só com a data', imp.passagemDoPDF(semHora.passagens[0]).EntradaSetor === '2026-01-10',
+    JSON.stringify(semHora.passagens[0]));
+}
+
 /* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==
    A tela é avaliada de verdade, com DOM falso. Pega o que sintaxe e teste de motor não
    pegam: helper que não existe (era `config.usuario`, que nunca existiu no projeto),

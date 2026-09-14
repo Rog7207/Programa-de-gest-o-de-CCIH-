@@ -738,6 +738,26 @@ async function montarConfiguracoes(conteudo) {
   };
   const resultadoAuditoria = el('div');
   const msgAuditoria = el('p', { class: 'texto-suave' });
+  /* Botão de desfazer a última unificação (aparece só quando há um backup). */
+  const areaDesfazer = el('div', { class: 'cartao', style: 'display:none' });
+  const atualizarDesfazer = async () => {
+    const man = await lerManifestoBackup('ultima-unificacao').catch(() => null);
+    if (!man || man.operacao !== 'unificar') { areaDesfazer.style.display = 'none'; areaDesfazer.replaceChildren(); return; }
+    areaDesfazer.style.display = '';
+    areaDesfazer.replaceChildren(el('h2', {}, 'Desfazer'),
+      el('div', { class: 'linha-campos' },
+        el('button', { class: 'botao-secundario', onclick: async ev => {
+          ev.target.disabled = true;
+          try {
+            await desfazerUltimaUnificacao();
+            msgAuditoria.textContent = `Desfeito: "${man.de}" → "${man.para}" — os dados voltaram ao estado anterior.`;
+            navegar('configuracoes');
+          } catch (e) { ev.target.disabled = false; msgAuditoria.textContent = e.message; }
+        } }, '↩ Desfazer última unificação'),
+        el('p', { class: 'texto-suave', style: 'margin:0;flex:1' },
+          `Última unificação: "${man.de}" → "${man.para}" (${VOCAB_ROTULOS[man.vocab] || man.vocab}). `
+          + 'Restaura os arquivos do backup feito antes da operação. É um nível só.')));
+  };
   const rodarAuditoria = async () => {
     botaoAuditar.disabled = true;
     botaoAuditar.textContent = 'Auditando…';
@@ -777,6 +797,7 @@ async function montarConfiguracoes(conteudo) {
                 const n = await unificarVocabulario(vocab, p.de, p.para);
                 msgAuditoria.textContent = `Unificado: "${p.de}" → "${p.para}" (${fmtInt(n)} registros atualizados).`;
                 await rodarAuditoria();
+                await atualizarDesfazer();
               } catch (e) { ev.target.disabled = false; msgAuditoria.textContent = e.message; }
             } }, 'Unificar'),
             el('button', { class: 'botao-secundario', title: 'O par não aparece mais nas próximas auditorias',
@@ -799,6 +820,8 @@ async function montarConfiguracoes(conteudo) {
         + 'Nada é alterado sozinho: cada par encontrado tem um botão para unificar (corrige todos os registros '
         + 'e memoriza o sinônimo para as próximas importações) ou para marcar que são coisas diferentes.')),
     resultadoAuditoria, msgAuditoria));
+  conteudo.append(areaDesfazer);
+  atualizarDesfazer();
 
   const vocabDiv = el('div', { class: 'cartao' }, el('h2', {}, 'Vocabulários'),
     el('p', { class: 'texto-suave' }, 'Unificar termo: o termo de origem é substituído em todos os dados, removido da lista e memorizado como sinônimo — importações futuras já normalizam.'));

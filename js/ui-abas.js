@@ -191,6 +191,10 @@ async function unificarVocabulario(vocab, de, para) {
   const esquemasAfetados = [...new Set(aplicacoes.map(([esq]) => esq))].concat(['config']);
   let linhasAlteradas = 0;
   await comTrava(esquemasAfetados, async () => {
+    /* Rede de segurança + base do desfazer: copia os arquivos afetados para
+       backups/ultima-unificacao/ ANTES de reescrever. Guarda a última operação. */
+    await salvarBackup(esquemasAfetados, 'ultima-unificacao',
+      { operacao: 'unificar', vocab, de, para, esquemas: esquemasAfetados, quando: new Date().toISOString() });
     for (const esquemaNome of new Set(aplicacoes.map(([esq]) => esq))) {
       const banco = await lerBanco(esquemaNome);
       let mudou = false;
@@ -220,6 +224,18 @@ async function unificarVocabulario(vocab, de, para) {
     await config.salvar();
   });
   return linhasAlteradas;
+}
+
+/* Desfaz a última unificação: restaura os arquivos do backup e recarrega o config em
+   memória. Um nível só — o manifesto é consumido no restauro. */
+async function desfazerUltimaUnificacao() {
+  const man = await lerManifestoBackup('ultima-unificacao');
+  if (!man) throw new Error('Não há unificação recente para desfazer.');
+  await comTrava(man.esquemas && man.esquemas.length ? man.esquemas : ['config'], async () => {
+    await restaurarBackup('ultima-unificacao');
+    await config.carregar();
+  });
+  return man;
 }
 
 /* Abre o cartão de detalhe/validação logo ABAIXO da linha clicada, como uma linha nova

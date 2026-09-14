@@ -246,6 +246,55 @@ async function gravarBanco(nomeEsquema, abas) {
   _cacheBancos.set(nomeEsquema, { assinatura, dados: structuredClone(dados), abasExtras: extrasGuardadas });
 }
 
+/* ---- Backup + desfazer de uma operação (usado pela unificação de vocabulário) ----
+   Copia os arquivos afetados para backups/<rotulo>/ ANTES de reescrevê-los, junto de um
+   manifesto que descreve a operação. Serve de rede de segurança e de base para o desfazer:
+   restaurar é só copiar de volta. Guarda só a ÚLTIMA operação por rótulo (sobrescreve). */
+async function salvarBackup(nomesEsquemas, rotulo, manifesto) {
+  const dir = await pasta.subpasta('backups/' + rotulo);
+  const arquivos = [];
+  for (const nome of nomesEsquemas) {
+    const arq = ESQUEMAS[nome].arquivo;
+    let bytes;
+    try { bytes = await pasta.lerArquivo(arq); } catch (e) { continue; }   /* ainda não existe */
+    const fh = await dir.getFileHandle(arq, { create: true });
+    const escrita = await fh.createWritable();
+    await escrita.write(bytes);
+    await escrita.close();
+    arquivos.push(arq);
+  }
+  const fhM = await dir.getFileHandle('_manifesto.json', { create: true });
+  const escrita = await fhM.createWritable();
+  await escrita.write(JSON.stringify({ ...manifesto, arquivos }));
+  await escrita.close();
+  return arquivos;
+}
+
+async function lerManifestoBackup(rotulo) {
+  try {
+    const dir = await pasta.subpasta('backups/' + rotulo);
+    const fh = await dir.getFileHandle('_manifesto.json');
+    return JSON.parse(await (await fh.getFile()).text());
+  } catch (e) { return null; }
+}
+
+/* Restaura os arquivos do backup por cima dos atuais e apaga o manifesto (o desfazer é de um
+   nível só — não se desfaz duas vezes). Quem chama deve recarregar o que tiver em memória
+   (ex.: config.carregar()). */
+async function restaurarBackup(rotulo) {
+  const man = await lerManifestoBackup(rotulo);
+  if (!man) throw new Error('Não há operação para desfazer.');
+  const dir = await pasta.subpasta('backups/' + rotulo);
+  for (const arq of man.arquivos || []) {
+    const fh = await dir.getFileHandle(arq);
+    const bytes = new Uint8Array(await (await fh.getFile()).arrayBuffer());
+    await pasta.gravarArquivo(arq, bytes);
+  }
+  _cacheBancos.clear();
+  try { await dir.removeEntry('_manifesto.json'); } catch (e) { /* já foi */ }
+  return man;
+}
+
 function abasIniciais(nomeEsquema) {
   const abas = {};
   if (nomeEsquema === 'config') {

@@ -537,6 +537,14 @@ console.log('\n== 21. Marcador "não é cultura" (bacterioscopias) ==');
   const existente = [{ Prontuario: '1', DataColeta: '2026-08-10', Material: 'Escarro', Microrganismo: 'Positivo (++)', StatusRevisao: 'descartada' }];
   const d = imp.deduplicar([registros[0]], existente, 'culturas');
   verificar('reimportação da descartada não duplica', d.novos.length === 0 && d.duplicados.length === 1, d);
+  /* O efeito final que a opção "não é cultura (descartar)" da tela de importação dispara:
+     a linha entra no banco como descartada e classificada "Não é cultura", com o valor
+     original preservado — não conta como positiva. */
+  const linha = imp.montarLinhaImportada(registros[0], 'culturas', 'CUL-1', 'Enf', '2026-08-20 10:00', null);
+  verificar('microrganismo marcado NAO_CULTURA vira linha descartada',
+    linha.StatusRevisao === 'descartada' && linha.AvaliacaoCCIH === 'Não é cultura', JSON.stringify(linha));
+  verificar('o valor original volta ao campo (não fica o marcador interno)',
+    linha.Microrganismo === 'Positivo (++)', linha.Microrganismo);
 }
 
 

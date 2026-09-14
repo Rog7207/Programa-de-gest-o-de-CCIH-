@@ -972,6 +972,11 @@ async function renderPasso3() {
       for (const termo of v.termosNovos[vocab]) {
         const chave = normalizarTexto(termo);
         const ehProcedimento = vocab === 'procedimentos_nhsn';
+        /* Microrganismo também pode "não ser cultura": às vezes o que veio na coluna não é
+           germe nem negativa, é uma linha que nem é exame de cultura. Mesma ideia do "não é
+           cirurgia" dos procedimentos — o núcleo já sabe descartar (ver NAO_CULTURA). */
+        const ehMicrorganismo = vocab === 'microrganismos';
+        const podeExcluir = ehProcedimento || ehMicrorganismo;
         const sugestao = sugerirEquivalente(termo, config.vocabulario[vocab], vocab);
         const suspeitaNaoCirurgia = ehProcedimento && !sugestao && pareceNaoCirurgia(termo);
         imp.decisoes[vocab][chave] = sugestao ? { acao: 'alias', termo, para: sugestao }
@@ -985,7 +990,7 @@ async function renderPasso3() {
           ? el('input', { type: 'text', placeholder: 'ex.: Colocação de duplo J', disabled: '' }) : null;
         const radioNovo = radio(!sugestao && !suspeitaNaoCirurgia);
         const radioAlias = radio(!!sugestao);
-        const radioExcluir = ehProcedimento ? radio(suspeitaNaoCirurgia) : null;
+        const radioExcluir = podeExcluir ? radio(suspeitaNaoCirurgia) : null;
         const radioRenomear = ehProcedimento ? radio(false) : null;
         const aplicarEscolha = () => {
           seletorExistente.disabled = !radioAlias.checked;
@@ -1002,7 +1007,8 @@ async function renderPasso3() {
           el('strong', {}, termo),
           el('label', {}, radioNovo, ' termo novo'),
           el('label', {}, radioAlias, ' é o mesmo que: ', seletorExistente),
-          radioExcluir ? el('label', { class: 'aviso-erro-texto' }, radioExcluir, ' não é cirurgia (excluir)') : null,
+          radioExcluir ? el('label', { class: 'aviso-erro-texto' }, radioExcluir,
+            ehMicrorganismo ? ' não é cultura (descartar)' : ' não é cirurgia (excluir)') : null,
           radioRenomear ? el('label', {}, radioRenomear, ' dar nome padrão: ', campoNovoNome) : null));
       }
       cartaoTermos.append(secao);
@@ -1034,7 +1040,7 @@ function aplicarDecisoes(linhasComErro) {
     aliasPorVocab[vocab] = {};
     for (const decisao of Object.values(imp.decisoes[vocab])) {
       if (decisao.acao === 'alias' || decisao.acao === 'renomear') aliasPorVocab[vocab][normalizarTexto(decisao.termo)] = decisao.para;
-      else if (decisao.acao === 'excluir') aliasPorVocab[vocab][normalizarTexto(decisao.termo)] = NAO_CIRURGIA;
+      else if (decisao.acao === 'excluir') aliasPorVocab[vocab][normalizarTexto(decisao.termo)] = vocab === 'microrganismos' ? NAO_CULTURA : NAO_CIRURGIA;
     }
   }
   const registros = imp.normalizado.registros.filter(r => !linhasComErro.has(r._linha));
@@ -1296,7 +1302,7 @@ async function renderPasso5() {
     for (const vocab of Object.keys(imp.decisoes || {})) {
       for (const decisao of Object.values(imp.decisoes[vocab])) {
         if (decisao.acao === 'novo') config.acrescentarVocabulario(vocab, decisao.termo);
-        else if (decisao.acao === 'excluir') config.registrarAlias(vocab, decisao.termo, NAO_CIRURGIA);
+        else if (decisao.acao === 'excluir') config.registrarAlias(vocab, decisao.termo, vocab === 'microrganismos' ? NAO_CULTURA : NAO_CIRURGIA);
         else if (decisao.acao === 'renomear') {
           config.acrescentarVocabulario(vocab, decisao.para);
           config.registrarAlias(vocab, decisao.termo, decisao.para);

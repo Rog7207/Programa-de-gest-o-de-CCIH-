@@ -2636,6 +2636,36 @@ console.log('\n== 64. PDF de transferências (passagem de setor): estada por set
     JSON.stringify(semHora.passagens[0]));
 }
 
+console.log('\n== 65. Cultura negativa digitada como "na" não conta como positiva ==');
+{
+  /* Faltava opção de "negativa" no relatório de origem; digitaram "na" no microrganismo, e
+     o app lia como bactéria (positiva). "na"/"nao"/"-"/"negativo" são ausência de germe. */
+  verificar('"na" não é germe', imp.germeDaCultura('na') === '' && imp.germeDaCultura('NA') === '');
+  verificar('variantes de ausência caem para vazio',
+    ['n/a', 'N/A', '-', '?', 'nao', 'negativo', 'Negativa', 'ausente', 'nenhum'].every(v => imp.germeDaCultura(v) === ''));
+  verificar('germe de verdade é preservado',
+    imp.germeDaCultura('Klebsiella pneumoniae') === 'Klebsiella pneumoniae'
+    && imp.germeDaCultura('Escherichia coli') === 'Escherichia coli');
+  verificar('nome curto real não é confundido (ex.: sigla não listada)',
+    imp.germeDaCultura('EGB') === 'EGB' && imp.germeDaCultura('BGN') === 'BGN');
+
+  /* No painel: "na" fica FORA mesmo com classificação positiva colada pela importação. */
+  const naComoAdmissao = { StatusRevisao: 'avaliada', AvaliacaoCCIH: 'Presente na admissão', Microrganismo: 'na' };
+  verificar('"na" classificada como "Presente na admissão" NÃO entra no painel',
+    imp.culturaDoPainel(naComoAdmissao) === false);
+  const naComoIras = { StatusRevisao: 'avaliada', AvaliacaoCCIH: 'IRAS', Microrganismo: 'na' };
+  verificar('"na" classificada como IRAS também fica fora do painel',
+    imp.culturaDoPainel(naComoIras) === false);
+  const positiva = { StatusRevisao: 'avaliada', AvaliacaoCCIH: 'IRAS', Microrganismo: 'Klebsiella pneumoniae' };
+  verificar('cultura positiva de verdade continua no painel', imp.culturaDoPainel(positiva) === true);
+
+  /* Na triagem: "na" sem resultado positivo vira Negativa (auto). */
+  verificar('preClassificarCultura marca "na" (sem resultado) como Negativa',
+    imp.preClassificarCultura({ Material: 'Hemocultura', Microrganismo: 'na', Resultado: '' }) === 'Negativa');
+  verificar('cultura com germe real não é marcada Negativa',
+    imp.preClassificarCultura({ Material: 'Hemocultura', Microrganismo: 'Staphylococcus aureus', Resultado: '' }) !== 'Negativa');
+}
+
 /* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==
    A tela é avaliada de verdade, com DOM falso. Pega o que sintaxe e teste de motor não
    pegam: helper que não existe (era `config.usuario`, que nunca existiu no projeto),

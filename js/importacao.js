@@ -1217,6 +1217,17 @@ const MATERIAIS_LEITE = /leite|lactario/;
 /* Testado contra normalizarTexto, que tira os espaços — as alternativas têm de vir sem eles. */
 const RESULTADO_NEGATIVO = /^(negativ|semcrescimento|ausenciadecrescimento|naohouvecrescimento)/;
 
+/* "na", "n/a", "nao", "-", "?", "negativo"… no campo do microrganismo NÃO são bactéria: são
+   "nada identificado" (cultura negativa) digitado à mão porque faltava a opção de negativa.
+   Sem reconhecer isso, "na" contava como positiva no perfil. Mesmo espírito do
+   MECANISMO_AUSENTE. Ancorado (^…$) para nunca engolir um nome de germe de verdade. */
+const MICRORGANISMO_AUSENTE = /^(na|nao|n|neg|negativo|negativa|semcrescimento|ausente|nenhum|naoidentificado|semgerme|indeterminado)$/;
+function germeDaCultura(valor) {
+  const bruto = String(valor == null ? '' : valor).trim();
+  const n = normalizarTexto(bruto);   /* tira acento/pontuação: "N/A" → "na", "-" → "" */
+  return (!n || MICRORGANISMO_AUSENTE.test(n)) ? '' : bruto;
+}
+
 /* Devolve a classificação de triagem, ou '' quando a cultura precisa de olho humano.
    A ordem importa: água e leite valem mesmo quando cresce algo (um leite contaminado
    continua não sendo infecção de paciente), e negativa vale antes da colonização
@@ -1225,7 +1236,7 @@ function preClassificarCultura(cultura) {
   const material = normalizarTexto(cultura.Material) + ' ' + normalizarTexto(cultura.Sitio);
   if (MATERIAIS_AGUA.test(material)) return 'Água';
   if (MATERIAIS_LEITE.test(material)) return 'Leite';
-  const germe = String(cultura.Microrganismo || '').trim();
+  const germe = germeDaCultura(cultura.Microrganismo);
   const resultado = normalizarTexto(cultura.Resultado);
   if (!germe && (!resultado || RESULTADO_NEGATIVO.test(resultado))) return 'Negativa';
   if (!germe) return '';
@@ -1241,7 +1252,10 @@ function culturaDoPainel(cultura) {
   if (cultura.StatusRevisao === 'descartada') return false;
   const classe = String(cultura.AvaliacaoCCIH || '').trim();
   if (cultura.StatusRevisao === 'triagem' || CLASSES_TRIAGEM.includes(classe)) return false;
-  return !!String(cultura.Microrganismo || '').trim();
+  /* "na"/"nao"/"-" no campo do microrganismo é cultura negativa digitada à mão, não germe:
+     não entra no painel nem no perfil por mais que tenha uma classificação positiva colada
+     pela importação. */
+  return !!germeDaCultura(cultura.Microrganismo);
 }
 
 /* Índice prontuário → datas de abertura de protocolo de sepse. */
@@ -2849,7 +2863,7 @@ if (typeof module !== 'undefined' && module.exports) {
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,
-    preClassificarCultura, culturaDoPainel, indiceSepse, culturaDeProtocoloSepse, JANELA_CULTURA_SEPSE,
+    preClassificarCultura, culturaDoPainel, germeDaCultura, indiceSepse, culturaDeProtocoloSepse, JANELA_CULTURA_SEPSE,
     prepararRelatorio, adesaoHigiene, tipoPrecaucao, encerrarIsolamentosAusentes, encerrarIsolamentosPorSaida, seguiuProtocoloEmpirico, dataDoRelatorio, vincularAvaliacaoAPrescricao,
     momentoCanonico, categoriaProfissional, normalizarObservacaoHigiene, MOMENTOS_OMS,
     principioAtivo, aplicarObitos,

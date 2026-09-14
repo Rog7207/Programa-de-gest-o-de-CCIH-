@@ -2674,6 +2674,31 @@ console.log('\n== 65. Cultura negativa digitada como "na" não conta como positi
     imp.preClassificarCultura({ Material: 'Hemocultura', Microrganismo: 'Staphylococcus aureus', Resultado: '' }) !== 'Negativa');
 }
 
+console.log('\n== 66. Unificar setor cobre TODA aba com coluna de setor (não deixa banco de fora) ==');
+{
+  /* A tela de correção (Auditoria/Vocabulários) reescreve os registros pelo VOCAB_APLICACAO.
+     Se um banco novo com coluna de setor ficar de fora daqui, unificar um setor deixa o
+     nome antigo para trás nele — foi o que aconteceu com os denominadores. Este teste varre
+     os esquemas e exige que toda aba com 'Setor'/'SetorAtual' esteja coberta. */
+  const cobertas = new Set((esquemas.VOCAB_APLICACAO.setores || []).map(([e, a, c]) => e + '.' + a + '.' + c));
+  /* Grupos de setores não passam pelo VOCAB_APLICACAO (o config.salvar reescreveria a aba):
+     são atualizados à parte em unificarVocabulario, no bloco `if (vocab === 'setores')`. */
+  cobertas.add('config.grupos_setores.Setor');
+  const faltando = [];
+  for (const [nomeEsq, esq] of Object.entries(esquemas.ESQUEMAS)) {
+    for (const [aba, colunas] of Object.entries(esq.abas || {})) {
+      for (const col of colunas) {
+        if (col === 'Setor' || col === 'SetorAtual') {
+          const chave = nomeEsq + '.' + aba + '.' + col;
+          if (!cobertas.has(chave)) faltando.push(chave);
+        }
+      }
+    }
+  }
+  verificar('nenhuma aba com coluna de setor fica fora do merge de setores',
+    faltando.length === 0, 'faltando: ' + faltando.join(', '));
+}
+
 /* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==
    A tela é avaliada de verdade, com DOM falso. Pega o que sintaxe e teste de motor não
    pegam: helper que não existe (era `config.usuario`, que nunca existiu no projeto),

@@ -210,6 +210,12 @@ async function unificarVocabulario(vocab, de, para) {
       config.procedimentosNHSN = config.procedimentosNHSN.filter(pr => pr.Nome !== de);
     }
     config.aliases.forEach(a => { if (a.Campo === vocab && a.Para === de) a.Para = para; });
+    /* Grupos de setores vivem no objeto config (config.salvar reescreve a aba inteira), então
+       não dá para reescrevê-los pelo caminho genérico de banco — a atualização é aqui, na
+       memória, antes de salvar. Sem isto, um setor unificado sumia dos grupos. */
+    if (vocab === 'setores') {
+      (config.gruposSetores || []).forEach(g => { if (String(g.Setor || '').trim() === de) g.Setor = para; });
+    }
     config.registrarAlias(vocab, de, para);
     await config.salvar();
   });

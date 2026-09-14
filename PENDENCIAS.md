@@ -10,12 +10,12 @@ O "Desfazer última unificação" hoje é de UM nível só (backups/ultima-unifi
 de backups (ex.: backups/unificacoes/<timestamp>/ com manifesto cada), e uma lista em
 Configurações para desfazer qualquer uma das últimas N — não só a mais recente.
 
-## Perfil microbiológico — ligar cada IRAS à sua cultura (topografia↔material)
+## Perfil microbiológico — ligar cada IRAS à sua cultura (topografia↔material) — FEITO (12/09/2026)
 
-Hoje o perfil usa duas fontes que não conversam: o agente gravado no próprio caso de IRAS, e,
-à parte, as culturas marcadas "IRAS" na revisão. Falta ligar CADA IRAS à cultura que a define
-(IPCS↔hemocultura, PAV↔secreção traqueal/escarro/lavado, ITU↔urocultura), pelo prontuário +
-janela de datas, para trazer agente/antibiograma POR infecção e conferir divergências.
+Implementado: cruzarIRAScomCulturas em relatorios.js (seções 4b/4c/4d do perfil). Liga cada
+IRAS às culturas do mesmo paciente em ±3 dias por material do sítio + hemocultura universal;
+cobra ausência só de IPCS/pneumonia; ISC/ITU = cultura externa esperada. Registro abaixo do
+que a exploração no HNSC mostrou (mantido como referência).
 
 Exploração no banco do HNSC (12/09/2026), 950 IRAS × 38.724 culturas:
 - 66% das IRAS têm agente no caso; ligar NÃO preenche as que faltam (das 324 sem agente, só 8

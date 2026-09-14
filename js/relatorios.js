@@ -615,6 +615,99 @@ function tabelaResistenciaEnterobacterias(culturas, sensPorCultura) {
   return { colunas: ['Espécie', 'n', ...ATB_PERFIL.map(([rotulo]) => rotulo)], linhas };
 }
 
+/* ---- Cruzamento IRAS × cultura (por sítio) --------------------------------------------
+   Liga cada IRAS às culturas que a documentam: material do sítio + HEMOCULTURA, que vale para
+   qualquer infecção (bacteremia secundária de pneumonia, pielonefrite etc.). Janela de datas
+   em torno da data da infecção. Sítios cuja cultura é tipicamente EXTERNA — ISC (centro
+   cirúrgico) e ITU (urocultura ambulatorial) — são ligados quando a cultura existe, mas a
+   AUSÊNCIA não é cobrada; só IPCS e pneumonia, coletadas no hospital, têm ausência tratada
+   como falha a investigar. Regras clínicas validadas com a CCIH (12/09/2026); ver o achado
+   no HNSC em PENDENCIAS. */
+const HEMOCULTURA_UNIVERSAL = /hemocultura/;
+const SITIOS_IRAS = [
+  { chave: 'IPCS', topo: /ipcs|correntesanguinea|bacteremia/, materiais: /(?!)/, cobraAusencia: true },
+  { chave: 'Respiratória', topo: /pav|pneumonia|traqueo|pulmonar/,
+    materiais: /secrecaotraqueal|aspiradotraqueal|escarro|lavadobroncoalveolar|liquidopleural/, cobraAusencia: true },
+  { chave: 'ITU', topo: /itu|urinar/, materiais: /urocultura|urina/, cobraAusencia: false },
+  { chave: 'ISC', topo: /isc|sitiocirurgico/,
+    materiais: /liquor|liquidoarticular|liquidoascitico|liquidopleural|urocultura|urina|fragmentodetecido|partesmoles|feridaoperatoria/, cobraAusencia: false },
+  { chave: 'Intra-abdominal', topo: /abdominal|ascitic|periton/, materiais: /liquidoascitico|fragmentodetecido/, cobraAusencia: false }
+];
+const JANELA_IRAS_CULTURA = 3;
+
+function sitioDaIRAS(topografia) {
+  const n = normalizarTexto(topografia);
+  return SITIOS_IRAS.find(s => s.topo.test(n)) || null;
+}
+
+/* Uma cultura documenta a IRAS se for hemocultura (universal) ou material do próprio sítio. */
+function materialCasaSitio(material, sitio) {
+  const m = normalizarTexto(material);
+  return HEMOCULTURA_UNIVERSAL.test(m) || (!!sitio && sitio.materiais.test(m));
+}
+
+function _diasEntreDatas(a, b) {
+  const da = Date.parse(String(a || '').slice(0, 10) + 'T00:00:00Z');
+  const db = Date.parse(String(b || '').slice(0, 10) + 'T00:00:00Z');
+  return (isFinite(da) && isFinite(db)) ? Math.abs(da - db) / 864e5 : Infinity;
+}
+
+/* Índice prontuário → culturas COM germe (não varre 38 mil linhas por caso). */
+function indiceCulturasPorProntuario(culturas) {
+  const idx = new Map();
+  for (const c of (culturas || [])) {
+    if (!germeDaCultura(c.Microrganismo)) continue;
+    const p = normalizarProntuario(c.Prontuario);
+    if (!p) continue;
+    if (!idx.has(p)) idx.set(p, []);
+    idx.get(p).push(c);
+  }
+  return idx;
+}
+
+/* Culturas ligadas a UMA IRAS, ordenadas pela proximidade de data. */
+function culturasDaIRAS(caso, indice, janela) {
+  const sitio = sitioDaIRAS(caso.Topografia);
+  const p = normalizarProntuario(caso.Prontuario);
+  if (!p) return [];
+  return (indice.get(p) || [])
+    .filter(c => _diasEntreDatas(c.DataColeta, caso.DataInfeccao) <= janela && materialCasaSitio(c.Material, sitio))
+    .sort((a, b) => _diasEntreDatas(a.DataColeta, caso.DataInfeccao) - _diasEntreDatas(b.DataColeta, caso.DataInfeccao));
+}
+
+const _generoDe = s => normalizarTexto(String(s || '').trim().split(/\s+/)[0]);
+
+/* Agrega o cruzamento no período: cobertura por sítio, divergências (agente do caso × cultura
+   ligada) e ausências reais (IPCS/pneumonia sem cultura). Núcleo puro, testável. */
+function cruzarIRAScomCulturas(bancos, inicio, fim, janela) {
+  janela = janela == null ? JANELA_IRAS_CULTURA : janela;
+  const casos = ((bancos.iras || {}).casos || []).filter(k => relPeriodo(k.DataInfeccao, inicio, fim));
+  const indice = indiceCulturasPorProntuario((bancos.culturas || {}).culturas || []);
+  const porSitio = new Map();
+  const divergencias = [], ausencias = [];
+  for (const k of casos) {
+    const sitio = sitioDaIRAS(k.Topografia);
+    const chave = sitio ? sitio.chave : 'Outro';
+    const acc = porSitio.get(chave) || { sitio: chave, casos: 0, ligados: 0, cobraAusencia: sitio ? sitio.cobraAusencia : false };
+    acc.casos++;
+    const ligadas = culturasDaIRAS(k, indice, janela);
+    if (ligadas.length) acc.ligados++;
+    porSitio.set(chave, acc);
+    const agenteCaso = String(k.Microrganismo || '').trim();
+    if (agenteCaso && ligadas.length) {
+      const generosCultura = new Set(ligadas.map(c => _generoDe(c.Microrganismo)));
+      if (!generosCultura.has(_generoDe(agenteCaso))) {
+        divergencias.push({ Prontuario: k.Prontuario, DataInfeccao: k.DataInfeccao, Topografia: k.Topografia,
+          agenteCaso, agentesCultura: [...new Set(ligadas.map(c => c.Microrganismo))].join(' / ') });
+      }
+    }
+    if (sitio && sitio.cobraAusencia && !ligadas.length) {
+      ausencias.push({ Prontuario: k.Prontuario, DataInfeccao: k.DataInfeccao, Topografia: k.Topografia, agenteCaso: agenteCaso || '(sem agente)' });
+    }
+  }
+  return { janela, porSitio: [...porSitio.values()], divergencias, ausencias, totalCasos: casos.length };
+}
+
 function perfilMicrobiologico(bancos, anoInicial, anoFinal, porSemestre) {
   const colunas = colunasDoPerfil(anoInicial, anoFinal, porSemestre);
   const inicio = colunas[0].inicio, fim = colunas[colunas.length - 1].fim;
@@ -715,6 +808,16 @@ function perfilMicrobiologico(bancos, anoInicial, anoFinal, porSemestre) {
     + 'Cores: verde <20%, laranja 20–49%, vermelho ≥50% de resistência. '
     + 'Linhas com n<10 são exploratórias — amostra pequena.';
 
+  /* Cruzamento IRAS × cultura: cobertura por sítio + conferência (divergências e ausências). */
+  const cruz = cruzarIRAScomCulturas(bancos, inicio, fim);
+  const linhasCobertura = cruz.porSitio.sort((a, b) => b.casos - a.casos).map(s =>
+    [s.sitio, s.casos, `${s.ligados} (${relPct(s.ligados, s.casos)})`,
+      s.cobraAusencia ? 'coletada no hospital — ausência é falha' : 'externa esperada']);
+  const linhasDiverg = cruz.divergencias.map(d =>
+    [String(d.DataInfeccao).slice(0, 10), d.Prontuario, d.Topografia, d.agenteCaso, d.agentesCultura]);
+  const linhasAusencia = cruz.ausencias.slice(0, 50).map(a =>
+    [String(a.DataInfeccao).slice(0, 10), a.Prontuario, a.Topografia, a.agenteCaso]);
+
   const rotuloPeriodo = anoInicial === anoFinal ? String(anoInicial) : `${anoInicial}–${anoFinal}`;
   return {
     titulo: `Perfil microbiológico das IRAS — ${rotuloPeriodo}`,
@@ -729,6 +832,22 @@ function perfilMicrobiologico(bancos, anoInicial, anoFinal, porSemestre) {
       { titulo: 'Distribuição por Gram', tipo: 'texto', corpo: textoGram },
       { titulo: '4. Agentes por sítio de infecção', tipo: 'tabela',
         colunas: ['Sítio (topografia)', 'Casos', 'Agentes principais'], linhas: porSitio },
+      { titulo: '4b. Cobertura microbiológica por sítio (cultura vinculada)', tipo: 'tabela',
+        colunas: ['Sítio', 'IRAS', 'Com cultura vinculada', 'Cultura'], linhas: linhasCobertura },
+      { titulo: 'Como o cruzamento funciona', tipo: 'texto',
+        corpo: `Cada IRAS é ligada às culturas com germe do MESMO paciente dentro de ±${cruz.janela} dias, cujo `
+          + 'material corresponde ao sítio — e a hemocultura vale para qualquer infecção (bacteremia secundária). '
+          + 'IPCS e pneumonia são coletadas no hospital: a ausência de cultura é uma falha a investigar. ISC e ITU '
+          + 'têm cultura tipicamente externa (centro cirúrgico, ambulatorial), então a ausência é esperada.' },
+      ...(linhasDiverg.length ? [{ titulo: '4c. Conferência — agente do caso diverge da cultura vinculada', tipo: 'tabela',
+        colunas: ['Data', 'Prontuário', 'Sítio', 'Agente no caso', 'Agente(s) na cultura'], linhas: linhasDiverg }] : []),
+      (linhasAusencia.length
+        ? { titulo: '4d. IPCS/pneumonia sem cultura vinculada (a investigar)', tipo: 'tabela',
+            colunas: ['Data', 'Prontuário', 'Sítio', 'Agente no caso'], linhas: linhasAusencia }
+        : { titulo: '4d. Cobertura de cultura em IPCS/pneumonia', tipo: 'texto',
+            corpo: 'Todas as IPCS e pneumonias do período têm cultura vinculada.' }),
+      ...(cruz.ausencias.length > 50 ? [{ titulo: 'Nota', tipo: 'texto',
+        corpo: `Mostrando 50 de ${cruz.ausencias.length} IPCS/pneumonias sem cultura vinculada.` }] : []),
       { titulo: '5. Cepas multirresistentes nas IRAS', tipo: 'tabela',
         colunas: ['Período', 'Microrganismo', 'Critério', 'Setor', 'Resistência'], linhas: linhasMDR },
       ...(mdrIRAS.length > 40 ? [{ titulo: 'Nota', tipo: 'texto',
@@ -780,6 +899,6 @@ if (typeof module !== 'undefined' && module.exports) {
     relatorioResumoExecutivo, RELATORIOS_PADRAO, BANCOS_RELATORIOS, pacientesDia, pacientesDiaDoCenso,
     relMediana, relDiasEntre, mesAnteriorIntervalo,
     diasDeDispositivo, taxasPorDispositivo, grupoDoDispositivo,
-    perfilMicrobiologico, colunasDoPerfil, classificarGram, especieEnterobacteria,
+    perfilMicrobiologico, cruzarIRAScomCulturas, culturasDaIRAS, sitioDaIRAS, materialCasaSitio, colunasDoPerfil, classificarGram, especieEnterobacteria,
     tabelaResistenciaEnterobacterias, corDeResistencia, indiceSensibilidade, mecanismoDaCultura };
 }

@@ -14,6 +14,7 @@ global.normalizarTexto = leitura.normalizarTexto;
 global.linhaDeItens = leitura.linhaDeItens;
 const imp = require(path.join(__dirname, '..', 'js', 'importacao.js'));
 global.normalizarProntuario = imp.normalizarProntuario;
+global.germeDaCultura = imp.germeDaCultura;
 global.prescricaoAtiva = imp.prescricaoAtiva;
 
 const pastaAmostras = path.join(__dirname, '..', 'amostras');
@@ -2697,6 +2698,59 @@ console.log('\n== 66. Unificar setor cobre TODA aba com coluna de setor (não de
   }
   verificar('nenhuma aba com coluna de setor fica fora do merge de setores',
     faltando.length === 0, 'faltando: ' + faltando.join(', '));
+}
+
+console.log('\n== 67. Cruzamento IRAS × cultura por sítio (perfil microbiológico) ==');
+{
+  global.culturaDoPainel = imp.culturaDoPainel;
+  global.inferirMecanismo = require(path.join(__dirname, '..', 'js', 'alertas.js')).inferirMecanismo;
+  const rel = require(path.join(__dirname, '..', 'js', 'relatorios.js'));
+  const bancos = {
+    iras: { casos: [
+      { Prontuario: '1', DataInfeccao: '2026-03-10', Topografia: 'IPCS com confirmação laboratorial', Microrganismo: 'Klebsiella pneumoniae' },
+      { Prontuario: '2', DataInfeccao: '2026-03-10', Topografia: 'Pneumonia associada à ventilação mecânica (PAV)', Microrganismo: 'Pseudomonas aeruginosa' },
+      { Prontuario: '3', DataInfeccao: '2026-03-10', Topografia: 'ITU associada a cateter vesical', Microrganismo: 'Escherichia coli' },
+      { Prontuario: '4', DataInfeccao: '2026-03-10', Topografia: 'ISC de órgão/espaço', Microrganismo: 'Staphylococcus aureus' },
+      { Prontuario: '5', DataInfeccao: '2026-03-10', Topografia: 'IPCS clínica', Microrganismo: 'Enterococcus faecalis' },
+      { Prontuario: '6', DataInfeccao: '2026-03-10', Topografia: 'Pneumonia não associada à VM', Microrganismo: '' }
+    ] },
+    culturas: { culturas: [
+      /* 1: IPCS ↔ hemocultura mesma data — liga e concorda */
+      { ID_Cultura: 'C1', Prontuario: '1', DataColeta: '2026-03-10', Material: 'Hemocultura', Microrganismo: 'Klebsiella pneumoniae' },
+      /* 2: PAV ↔ secreção traqueal (+ hemocultura de outro germe, universal) */
+      { ID_Cultura: 'C2', Prontuario: '2', DataColeta: '2026-03-11', Material: 'Secreção traqueal', Microrganismo: 'Pseudomonas aeruginosa' },
+      /* 3: ITU ↔ urocultura — externa, mas liga se existir */
+      { ID_Cultura: 'C3', Prontuario: '3', DataColeta: '2026-03-10', Material: 'Urocultura', Microrganismo: 'Escherichia coli' },
+      /* 5: IPCS clínica ↔ hemocultura de germe DIFERENTE do caso → divergência */
+      { ID_Cultura: 'C5', Prontuario: '5', DataColeta: '2026-03-09', Material: 'Hemocultura', Microrganismo: 'Candida albicans' },
+      /* cultura fora da janela (não deve ligar) */
+      { ID_Cultura: 'C6', Prontuario: '6', DataColeta: '2026-03-20', Material: 'Secreção traqueal', Microrganismo: 'Acinetobacter baumannii' }
+    ] }
+  };
+  const r = rel.cruzarIRAScomCulturas(bancos, '2026-01-01', '2026-12-31', 3);
+  const sit = ch => r.porSitio.find(s => s.sitio === ch) || { casos: 0, ligados: 0 };
+  verificar('IPCS liga por hemocultura (caso 1 concordante e caso 5 divergente, ambos ligam)',
+    sit('IPCS').ligados === 2 && sit('IPCS').casos === 2, JSON.stringify(sit('IPCS')));
+  verificar('Respiratória liga por secreção traqueal (caso 2), e caso 6 fora da janela não liga',
+    sit('Respiratória').ligados === 1 && sit('Respiratória').casos === 2, JSON.stringify(sit('Respiratória')));
+  verificar('IPCS e Respiratória cobram ausência; ITU e ISC não',
+    sit('IPCS').cobraAusencia && sit('Respiratória').cobraAusencia && !sit('ITU').cobraAusencia && !sit('ISC').cobraAusencia);
+  verificar('ITU liga a urocultura mas é marcada externa', sit('ITU').ligados === 1);
+  verificar('ISC sem cultura no feed = 0 ligados (externa)', sit('ISC').ligados === 0);
+  verificar('divergência detectada (IPCS clínica: caso Enterococcus × cultura Candida)',
+    r.divergencias.length === 1 && r.divergencias[0].Prontuario === '5', JSON.stringify(r.divergencias));
+  verificar('ausência real: caso 6 (pneumonia, cultura fora da janela) entra; ISC/ITU não',
+    r.ausencias.some(a => a.Prontuario === '6') && !r.ausencias.some(a => a.Topografia.includes('ISC') || a.Topografia.includes('ITU')),
+    JSON.stringify(r.ausencias.map(a => a.Prontuario)));
+  verificar('caso 1 (IPCS concordante) NÃO é divergência nem ausência',
+    !r.divergencias.some(d => d.Prontuario === '1') && !r.ausencias.some(a => a.Prontuario === '1'));
+
+  /* Hemocultura é universal: uma pneumonia sem secreção mas com hemocultura liga. */
+  const soHemo = rel.cruzarIRAScomCulturas({
+    iras: { casos: [{ Prontuario: '9', DataInfeccao: '2026-03-10', Topografia: 'Pneumonia associada à ventilação mecânica (PAV)', Microrganismo: 'Klebsiella pneumoniae' }] },
+    culturas: { culturas: [{ ID_Cultura: 'H', Prontuario: '9', DataColeta: '2026-03-10', Material: 'Hemocultura', Microrganismo: 'Klebsiella pneumoniae' }] }
+  }, '2026-01-01', '2026-12-31', 3);
+  verificar('hemocultura vale para pneumonia (universal)', soHemo.porSitio[0].ligados === 1 && soHemo.ausencias.length === 0);
 }
 
 /* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==

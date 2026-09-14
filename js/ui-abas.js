@@ -65,7 +65,7 @@ async function montarCulturas(conteudo) {
   const sensPorCultura = {};
   banco.sensibilidade.forEach(s => { (sensPorCultura[s.ID_Cultura] = sensPorCultura[s.ID_Cultura] || []).push(s); });
 
-  const filtro = Object.assign({ status: 'pendente', setor: '', busca: '' }, app.filtroCulturas || {});
+  const filtro = Object.assign({ status: 'pendente', setor: '', busca: '', de: '', ate: '' }, app.filtroCulturas || {});
   app.filtroCulturas = null;
   const setores = [...new Set(banco.culturas.map(c => c.Setor).filter(Boolean))].sort();
 
@@ -75,20 +75,27 @@ async function montarCulturas(conteudo) {
   const selSetor = el('select', {}, el('option', { value: '' }, 'todos os setores'),
     setores.map(s => el('option', { value: s, selected: filtro.setor === s ? '' : null }, s)));
   const campoBusca = el('input', { type: 'text', placeholder: 'prontuário, nome ou germe', value: filtro.busca });
+  /* Filtro por data de coleta (DataColeta é ISO AAAA-MM-DD, igual ao value do input date). */
+  const campoDe = el('input', { type: 'date', value: filtro.de });
+  const campoAte = el('input', { type: 'date', value: filtro.ate });
   const areaTabela = el('div', {});
-  [selStatus, selSetor].forEach(s => s.addEventListener('change', aplicar));
+  [selStatus, selSetor, campoDe, campoAte].forEach(s => s.addEventListener('change', aplicar));
   campoBusca.addEventListener('input', aoPararDeDigitar(aplicar));
   conteudo.append(el('div', { class: 'cartao' },
     el('div', { class: 'linha-campos' },
       el('label', {}, 'Status: ', selStatus), el('label', {}, 'Setor: ', selSetor),
+      el('label', {}, 'Coleta de: ', campoDe), el('label', {}, ' até: ', campoAte),
       el('label', {}, 'Buscar: ', campoBusca)),
     areaTabela));
 
   function aplicar() {
     const b = normalizarTexto(campoBusca.value);
+    const de = campoDe.value, ate = campoAte.value;
     const linhas = banco.culturas.filter(c =>
       (selStatus.value === 'todas' || c.StatusRevisao === selStatus.value)
       && (!selSetor.value || c.Setor === selSetor.value)
+      && (!de || String(c.DataColeta).slice(0, 10) >= de)
+      && (!ate || String(c.DataColeta).slice(0, 10) <= ate)
       && (!b || [c.Prontuario, nomes.get(normalizarProntuario(c.Prontuario)), c.Microrganismo].some(v => normalizarTexto(v).includes(b))))
       .sort((x, y) => String(y.DataColeta).localeCompare(String(x.DataColeta)));
     const mostradas = linhas.slice(0, 200);
@@ -147,7 +154,8 @@ async function montarCulturas(conteudo) {
             await salvarAvaliacao(c, selAval.value, selTopo.value, selDisp.value);
             /* Preserva onde a pessoa estava: sem isto, cada avaliação salva jogava o
                revisor de volta ao filtro padrão, perdendo setor e busca. */
-            app.filtroCulturas = { status: selStatus.value, setor: selSetor.value, busca: campoBusca.value };
+            app.filtroCulturas = { status: selStatus.value, setor: selSetor.value, busca: campoBusca.value,
+              de: campoDe.value, ate: campoAte.value };
             navegar('culturas');
           } catch (e) { msg.textContent = e.message; }
         } }, 'Salvar avaliação')), msg);

@@ -3,6 +3,13 @@
 Lista curta do que está consciente e deliberadamente por fazer. Não é backlog de ideias:
 só entra aqui o que já foi analisado e teve a decisão adiada, com o motivo.
 
+## Unificação de vocabulário — histórico de desfazer maior
+
+O "Desfazer última unificação" hoje é de UM nível só (backups/ultima-unificacao/, o manifesto
+é consumido no restauro). Decisão (12/09/2026): suficiente por ora. Futuro: manter uma PILHA
+de backups (ex.: backups/unificacoes/<timestamp>/ com manifesto cada), e uma lista em
+Configurações para desfazer qualquer uma das últimas N — não só a mais recente.
+
 ## Relatórios — pacientes-dia POR SETOR (passagem de setor)
 
 O leitor de transferências (banco `denominadores`, aba `passagem_setor`) já importa as

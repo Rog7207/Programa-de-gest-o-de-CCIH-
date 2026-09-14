@@ -10,6 +10,31 @@ O "Desfazer última unificação" hoje é de UM nível só (backups/ultima-unifi
 de backups (ex.: backups/unificacoes/<timestamp>/ com manifesto cada), e uma lista em
 Configurações para desfazer qualquer uma das últimas N — não só a mais recente.
 
+## Perfil microbiológico — ligar cada IRAS à sua cultura (topografia↔material)
+
+Hoje o perfil usa duas fontes que não conversam: o agente gravado no próprio caso de IRAS, e,
+à parte, as culturas marcadas "IRAS" na revisão. Falta ligar CADA IRAS à cultura que a define
+(IPCS↔hemocultura, PAV↔secreção traqueal/escarro/lavado, ITU↔urocultura), pelo prontuário +
+janela de datas, para trazer agente/antibiograma POR infecção e conferir divergências.
+
+Exploração no banco do HNSC (12/09/2026), 950 IRAS × 38.724 culturas:
+- 66% das IRAS têm agente no caso; ligar NÃO preenche as que faltam (das 324 sem agente, só 8
+  têm cultura compatível por perto — o resto é diagnóstico clínico/cultura negativa).
+- Ligação por material+prontuário+±3d cobre ~311 IRAS. Datas: quase tudo no MESMO dia (±3 é
+  folgado); janela padrão ±3 basta.
+- Por sítio (uniforme no tempo — NÃO é falha de época; o feed do lab é contínuo):
+  - IPCS e respiratória ligam bem e de forma estável (culturas in-hospital).
+  - **ISC (~375 casos): ~0 cultura no feed em todo mês → cultura externa (centro cirúrgico).**
+  - **ITU: liga só em parte → urocultura externa/ambulatorial em boa parte.**
+- Decisão (12/09/2026): tratar **ISC e ITU como "cultura externa esperada"** — o relatório não
+  cobra cultura desses sítios; só cobra ausência real de IPCS e pneumonia.
+- Achado a investigar: IPCS diverge em 62 de 119 (agente do caso ≠ gênero da hemocultura mais
+  próxima) — provável porque o paciente tem várias hemoculturas; a ligação precisa escolher a
+  melhor, e/ou é sinal de qualidade de dado.
+
+Aberto antes de construir: mapa final topografia→material (o usuário quer ajustar); como usar
+no relatório (anexar agente/resistência por IRAS + conferência de divergências/ausências).
+
 ## Relatórios — pacientes-dia POR SETOR (passagem de setor)
 
 O leitor de transferências (banco `denominadores`, aba `passagem_setor`) já importa as

@@ -2878,6 +2878,56 @@ console.log('\n== 68. Melhor cultura da IRAS, antibiograma por grupos e correç�
     && decidirCorrecao('', 'Bacilo Gram negativo (não identificado)').regra === 'sem agente → preenchido');
 }
 
+console.log('\n== 69. Pacientes duplicados pelo atendimento no lugar do prontuário ==');
+{
+  const internacoes = [
+    { Prontuario: '532171', Atendimento: '1050636' },
+    { Prontuario: '532171', Atendimento: '1090376' },
+    { Prontuario: '600001', Atendimento: '1200000' },
+    { Prontuario: '700001', Atendimento: '1300000' }
+  ];
+  const pacientes = [
+    { Prontuario: '532171', Nome: 'Amanda de Souza', CriadoEm: '2026-08-23 10:00' },
+    /* mesma pessoa, criada de novo pelo atendimento (nome truncado pelo relatório) */
+    { Prontuario: '1050636', Nome: 'Amanda de Sou', CriadoEm: '2026-08-24 09:00' },
+    { Prontuario: '1090376', Nome: 'Amanda de Souza', CriadoEm: '2026-08-24 09:01' },
+    /* atendimento cujo nome NÃO bate com o dono do prontuário → conflito */
+    { Prontuario: '600001', Nome: 'Pedro Alves', CriadoEm: '2026-08-01' },
+    { Prontuario: '1200000', Nome: 'Joana Prado', CriadoEm: '2026-08-24' },
+    /* número que é prontuário REAL de internação: não é atendimento, não mexe */
+    { Prontuario: '700001', Nome: 'Carlos Lima', CriadoEm: '2026-08-01' }
+  ];
+  const r = imp.paresAtendimentoProntuario(pacientes, internacoes);
+  verificar('2 pares determinísticos (inclui nome truncado)', r.pares.length === 2
+    && r.pares.every(p => p.para === '532171') && r.pares.some(p => p.de === '1050636'),
+    JSON.stringify(r.pares));
+  verificar('nome que não bate vira conflito, não par',
+    r.conflitos.length === 1 && r.conflitos[0].de === '1200000', JSON.stringify(r.conflitos));
+  verificar('prontuário real nunca é tratado como atendimento',
+    !r.pares.some(p => p.de === '700001') && !r.conflitos.some(c => c.de === '700001'));
+
+  /* Correção na importação: só registro SEM coluna própria de atendimento. */
+  const registros = [
+    { Prontuario: '1050636', DataColeta: '2026-08-01' },              /* atendimento → corrige */
+    { Prontuario: '532171', DataColeta: '2026-08-01' },               /* prontuário real → não mexe */
+    { Prontuario: '1300000', Atendimento: '1300000' },                /* tem coluna própria → não mexe */
+    { Prontuario: '9999999', DataColeta: '2026-08-01' }               /* desconhecido → não mexe */
+  ];
+  const corrigidos = imp.corrigirProntuarioAtendimento(registros, internacoes);
+  verificar('importação corrige só o prontuário-que-é-atendimento', corrigidos === 1
+    && registros[0].Prontuario === '532171' && registros[2].Prontuario === '1300000'
+    && registros[3].Prontuario === '9999999', JSON.stringify(registros));
+
+  /* sugerirUnificacoes soma os pares por atendimento aos pseudo-registros. */
+  const comPseudo = pacientes.concat([{ Prontuario: '19800101-CL', Nome: 'Carlos Lima' }]);
+  const sug = imp.sugerirUnificacoes(comPseudo, internacoes);
+  verificar('sugestões: pseudo do laboratório + pacientes-atendimento juntos',
+    sug.some(s => s.de === '19800101-CL') && sug.some(s => s.de === '1050636') && sug.some(s => s.de === '1090376'),
+    JSON.stringify(sug));
+  verificar('sem internações, comportamento antigo preservado',
+    imp.sugerirUnificacoes(comPseudo).length === 1);
+}
+
 /* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==
    A tela é avaliada de verdade, com DOM falso. Pega o que sintaxe e teste de motor não
    pegam: helper que não existe (era `config.usuario`, que nunca existiu no projeto),

@@ -344,7 +344,7 @@ async function montarPacientes(conteudo) {
   catch (e) { conteudo.append(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message)); return; }
   const pseudos = banco.pacientes.filter(p => ehPseudoProntuario(p.Prontuario) && p.Descartado !== 'S');
   const descartados = banco.pacientes.filter(p => ehPseudoProntuario(p.Prontuario) && p.Descartado === 'S');
-  const sugestoes = sugerirUnificacoes(banco.pacientes);
+  const sugestoes = sugerirUnificacoes(banco.pacientes, banco.internacoes || []);
   const msg = el('p', { class: 'aviso-erro-texto' });
 
   /* "Não é paciente internado": descarte reversível do registro provisório — o cadastro

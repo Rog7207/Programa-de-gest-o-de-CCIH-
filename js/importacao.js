@@ -2508,7 +2508,65 @@ function ehPseudoProntuario(prontuario) {
   return /^\d{8}-[A-ZÀ-Ú]+$/.test(s) || /^AT-\d+$/.test(s);
 }
 
-function sugerirUnificacoes(pacientes) {
+/* Nomes compatíveis para a unificação por atendimento: iguais, um vazio (fonte sem nome)
+   ou um truncado do outro (relatórios cortam nomes longos em larguras diferentes). */
+function _nomesCompativeis(a, b) {
+  return !a || !b || a === b || a.startsWith(b) || b.startsWith(a);
+}
+
+/* Pacientes cujo "prontuário" é na verdade um ATENDIMENTO: relatórios de origem que só
+   trazem o nº do atendimento (leva de culturas de ago/2026) criaram um paciente novo por
+   internação. Quando a internação correspondente é conhecida, a troca pelo prontuário real
+   é determinística — o nome só serve de trava de segurança: se divergir de verdade (não
+   for truncamento), o par vai para `conflitos` e fica para revisão humana. */
+function paresAtendimentoProntuario(pacientes, internacoes) {
+  const pronDoAt = new Map(), pronReais = new Set();
+  for (const i of (internacoes || [])) {
+    const a = normalizarProntuario(i.Atendimento), p = normalizarProntuario(i.Prontuario);
+    if (p) pronReais.add(p);
+    if (a && p) pronDoAt.set(a, p);
+  }
+  const nomeDoPron = new Map();
+  for (const p of (pacientes || [])) {
+    const k = normalizarProntuario(p.Prontuario);
+    if (k && !nomeDoPron.has(k) && String(p.Nome || '').trim()) nomeDoPron.set(k, normalizarTexto(p.Nome));
+  }
+  const pares = [], conflitos = [];
+  for (const p of (pacientes || [])) {
+    const k = normalizarProntuario(p.Prontuario);
+    if (!k || pronReais.has(k)) continue;          /* prontuário de verdade: não é atendimento */
+    const alvo = pronDoAt.get(k);
+    if (!alvo || alvo === k) continue;
+    const par = { de: p.Prontuario, para: alvo, nome: p.Nome || '' };
+    if (_nomesCompativeis(normalizarTexto(p.Nome), nomeDoPron.get(alvo))) pares.push(par);
+    else conflitos.push(par);
+  }
+  return { pares, conflitos };
+}
+
+/* Conserta NA IMPORTAÇÃO registros cujo campo de prontuário traz um atendimento conhecido.
+   Só mexe quando (a) o registro não tem coluna própria de atendimento (quem tem as duas já
+   distingue), (b) o valor NÃO é um prontuário real conhecido e (c) casa com o atendimento
+   de uma internação importada. Evita que cada leva dessas crie pacientes duplicados. */
+function corrigirProntuarioAtendimento(registros, internacoes) {
+  const pronDoAt = new Map(), pronReais = new Set();
+  for (const i of (internacoes || [])) {
+    const a = normalizarProntuario(i.Atendimento), p = normalizarProntuario(i.Prontuario);
+    if (p) pronReais.add(p);
+    if (a && p) pronDoAt.set(a, p);
+  }
+  let corrigidos = 0;
+  for (const r of (registros || [])) {
+    if (String(r.Atendimento || '').trim()) continue;
+    const k = normalizarProntuario(r.Prontuario);
+    if (!k || pronReais.has(k)) continue;
+    const alvo = pronDoAt.get(k);
+    if (alvo) { r.Prontuario = alvo; corrigidos++; }
+  }
+  return corrigidos;
+}
+
+function sugerirUnificacoes(pacientes, internacoes) {
   const pseudos = pacientes.filter(p => ehPseudoProntuario(p.Prontuario) && String(p.Nome || '').trim()
     && p.Descartado !== 'S');
   const reais = pacientes.filter(p => !ehPseudoProntuario(p.Prontuario) && String(p.Nome || '').trim());
@@ -2523,6 +2581,13 @@ function sugerirUnificacoes(pacientes) {
     const candidatos = porNome.get(normalizarTexto(pseudo.Nome)) || [];
     if (candidatos.length === 1) {
       sugestoes.push({ de: pseudo.Prontuario, para: candidatos[0].Prontuario, nome: pseudo.Nome });
+    }
+  }
+  /* Com as internações em mãos, os pacientes-atendimento também entram como sugestão. */
+  if (internacoes && internacoes.length) {
+    const vistos = new Set(sugestoes.map(s => normalizarProntuario(s.de)));
+    for (const par of paresAtendimentoProntuario(pacientes, internacoes).pares) {
+      if (!vistos.has(normalizarProntuario(par.de))) sugestoes.push(par);
     }
   }
   return sugestoes;
@@ -2854,7 +2919,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     normalizarData, normalizarProntuario, normalizarValorAntibiograma,
     sugerirMapeamento, normalizarLinhas, validar, deduplicar, chaveNaturalDe, proximoID,
-    analisarPDFCulturas, ehPseudoProntuario, sugerirUnificacoes, sugerirUnificacoesVocabulario, auditarVocabulario, distanciaEdicao,
+    analisarPDFCulturas, ehPseudoProntuario, sugerirUnificacoes, paresAtendimentoProntuario, corrigirProntuarioAtendimento, sugerirUnificacoesVocabulario, auditarVocabulario, distanciaEdicao,
     indiceDeObitos, faleceuAposCirurgia, acrescentarObservacao,
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome,

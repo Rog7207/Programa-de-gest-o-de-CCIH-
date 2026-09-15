@@ -119,9 +119,12 @@ async function importarArquivoAutomatico(arquivo) {
     termos.forEach(t => config.acrescentarVocabulario(vocab, t)));
   const agora = new Date().toISOString().slice(0, 16).replace('T', ' ');
 
-  let semIdentificacao = 0;
-  if (tipo === 'cirurgias' || tipo === 'dispositivos') {
+  let semIdentificacao = 0, prontuariosCorrigidos = 0;
+  {
     const bancoPac = await lerBanco('pacientes');
+    /* Relatório que traz o ATENDIMENTO no campo de prontuário (ex.: leva de culturas de
+       ago/2026) criaria um paciente novo por internação — corrige antes de tudo. */
+    prontuariosCorrigidos = corrigirProntuarioAtendimento(validos, bancoPac.internacoes || []);
     if (tipo === 'cirurgias') {
       resolverProntuarioPorAtendimento(validos, bancoPac.internacoes || []);
       resolverProntuarioPorNome(validos, bancoPac.pacientes || []);
@@ -134,7 +137,7 @@ async function importarArquivoAutomatico(arquivo) {
       const antes = validos.length;
       validos = validos.filter(r => String(r.Prontuario || '').trim());
       semIdentificacao = antes - validos.length;
-    } else {
+    } else if (tipo === 'dispositivos') {
       resolverProntuarioPorNome(validos, bancoPac.pacientes || []);
     }
   }
@@ -214,6 +217,7 @@ async function importarArquivoAutomatico(arquivo) {
         + (internacoesAtualizadas ? `, ${fmtInt(internacoesAtualizadas)} internações atualizadas` : '')
         + (naoCirurgias ? `, ${fmtInt(naoCirurgias)} não-cirurgias excluídas` : '')
         + (semIdentificacao ? `, ${fmtInt(semIdentificacao)} sem identificação excluídas` : '')
+        + (prontuariosCorrigidos ? `, ${fmtInt(prontuariosCorrigidos)} prontuários corrigidos pelo atendimento` : '')
         + (reparadasAntigas ? `, ${fmtInt(reparadasAntigas)} registros antigos reparados` : '')
         + (casaveis ? `, ${fmtInt(casaveis)} registros do laboratório passíveis de unificação` : '')
     };
@@ -226,7 +230,7 @@ async function importarArquivoAutomatico(arquivo) {
    chega dias depois da cultura — sem esta conferência, o órfão só apareceria se alguém
    abrisse a aba Pacientes por acaso. */
 function novasUnificacoesPossiveis(bancoPacientes) {
-  try { return sugerirUnificacoes(bancoPacientes.pacientes || []).length; }
+  try { return sugerirUnificacoes(bancoPacientes.pacientes || [], bancoPacientes.internacoes || []).length; }
   catch (e) { return 0; }
 }
 
@@ -941,9 +945,9 @@ async function renderPasso3() {
   imp.validacao = validar(resultado.registros, imp.tipo, config.vocabulario);
   try {
     imp.bancoDestino = await lerBanco(TIPOS_RELATORIO[imp.tipo].destino);
-    if (imp.tipo === 'cirurgias' || imp.tipo === 'dispositivos') {
-      imp.bancoPacientes = await lerBanco('pacientes');
-    }
+    /* Sempre com o cadastro em mãos: além de cirurgias/dispositivos, a correção de
+       prontuário-que-é-atendimento vale para qualquer tipo com prontuário. */
+    imp.bancoPacientes = await lerBanco('pacientes');
   } catch (e) {
     imp.area.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco de destino: ' + e.message));
     return;
@@ -1083,6 +1087,10 @@ function aplicarDecisoes(linhasComErro) {
       return true;
     });
   }
+  /* Prontuário que é na verdade um atendimento conhecido → prontuário real, ANTES da
+     deduplicação (senão a mesma linha entraria com duas identidades diferentes). */
+  imp.prontuariosCorrigidos = imp.bancoPacientes
+    ? corrigirProntuarioAtendimento(registrosFinais, imp.bancoPacientes.internacoes || []) : 0;
   const existentes = imp.bancoDestino[definicao.abaDestino] || [];
   imp.dedup = deduplicar(registrosFinais, existentes, imp.tipo);
   imp.excluidosPorErro = linhasComErro.size;
@@ -1101,6 +1109,7 @@ async function renderPasso4() {
     ['Duplicados no próprio arquivo', d.duplicadosInternos.length],
     ['Excluídos por erro', imp.excluidosPorErro]
   ];
+  if (imp.prontuariosCorrigidos) cartoes.push(['Prontuário corrigido pelo atendimento', imp.prontuariosCorrigidos]);
   if (definicao.permiteAntibiograma) cartoes.push(['Linhas de antibiograma', totalAntibiograma]);
   if (imp.tipo === 'cirurgias' && imp.excluidasNaoCirurgia) cartoes.push(['Não é cirurgia (excluídas)', imp.excluidasNaoCirurgia]);
   if (imp.tipo === 'cirurgias' && imp.identificadasProvisorias) cartoes.push(['Sem internação — registro provisório pelo nome', imp.identificadasProvisorias]);

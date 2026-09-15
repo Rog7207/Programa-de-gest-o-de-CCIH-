@@ -134,6 +134,23 @@ Só de agosto em diante — não haverá retrospectiva.
   e densidade POR SETOR de verdade (o censo agregado só tem o setor de entrada). Precisa de
   leitor próprio; construir quando o usuário confirmar que é o formato padrão.
 
+## Pacientes duplicados (HNSC) — atendimento no lugar do prontuário
+
+Diagnóstico (15/09/2026): a leva de culturas importada em 25/08 trazia o Nº DO ATENDIMENTO
+no campo de prontuário (7.553 culturas) — cada internação virou um "paciente" novo. Também
+contaminou iras, antibióticos, sepse, uti e isolamentos. Feito:
+- `corrigirProntuarioAtendimento` roda em TODA importação (os dois caminhos) — não acontece
+  de novo quando a internação é conhecida.
+- Aba Pacientes/alerta do painel agora sugerem também esses pares (não só os pseudos).
+- `scripts/unificar-pacientes-atendimento.js` limpa o legado (dry-run: 2.306 unificáveis;
+  7 conflitos de nome ficam listados para revisão manual). **Aguardando --aplicar.**
+Resto ainda em aberto:
+- ~1.786 nomes com >1 prontuário NÃO explicados pelas internações importadas — a maioria
+  são atendimentos de períodos sem censo importado (o "todos atendimentos" só cobre parte).
+  Importar os censos dos períodos anteriores resolve por si (a sugestão passa a cobrir).
+- DataNascimento vazia no cadastro inteiro: nenhum relatório importado traz nascimento —
+  sem ela, homônimos não podem ser fundidos com segurança.
+
 ## Miniapps
 
 - **Decisão ATB no iPhone**: só funciona hospedado por `https` (arquivo baixado não roda no

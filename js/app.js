@@ -405,12 +405,12 @@ async function montarPainel(conteudo) {
   /* Registros provisórios do laboratório que já casam com um paciente real: aparecem aqui
      porque o relatório de internações costuma chegar dias depois da cultura, e sem um aviso
      o vínculo só seria notado por acaso. */
-  const casaveis = sugerirUnificacoes(pacientes.pacientes || []);
+  const casaveis = sugerirUnificacoes(pacientes.pacientes || [], pacientes.internacoes || []);
   if (casaveis.length) {
     areaAlertas.append(el('div', { class: 'aviso-alerta' },
-      el('div', { class: 'alerta-titulo' }, `${fmtInt(casaveis.length)} registro(s) do laboratório podem ser unificados`),
-      el('div', { class: 'texto-suave' }, 'Culturas que entraram sem prontuário (registro provisório por nascimento + iniciais) '
-        + 'e agora têm um paciente real com o mesmo nome.'),
+      el('div', { class: 'alerta-titulo' }, `${fmtInt(casaveis.length)} registro(s) de paciente podem ser unificados`),
+      el('div', { class: 'texto-suave' }, 'Registros provisórios (nascimento + iniciais) que agora casam com um paciente real, '
+        + 'ou registros criados com o nº do ATENDIMENTO no lugar do prontuário.'),
       el('div', { class: 'linha-botoes' },
         el('button', { class: 'botao-secundario', onclick: () => navegar('pacientes') }, 'Revisar e unificar'))));
   }

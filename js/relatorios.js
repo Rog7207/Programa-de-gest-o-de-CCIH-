@@ -562,6 +562,60 @@ const ATB_PERFIL = [
   ['Pip/Tazo', ['piperacilinatazobactam', 'piperacilinaacidotazobactam']],
   ['Meropenem', ['meropenem']]
 ];
+const _SULFA = ['sulfametoxazoltrimetoprima', 'trimetoprimasulfametoxazol', 'sulfametoxazolacidotrimetoprima'];
+
+/* Espécies canônicas dos demais grupos do antibiograma cumulativo. */
+function especieNaoFermentador(microrganismo) {
+  const n = normalizarTexto(microrganismo);
+  if (!n) return null;
+  if (n.includes('pseudomonas')) return n.includes('aeruginosa') ? 'Pseudomonas aeruginosa' : 'Pseudomonas spp';
+  if (n.includes('acinetobacter')) return n.includes('baumannii') ? 'Acinetobacter baumannii' : 'Acinetobacter spp';
+  if (n.includes('stenotrophomonas')) return 'Stenotrophomonas maltophilia';
+  if (n.includes('burkholderia')) return 'Burkholderia spp';
+  return null;
+}
+function especieStaphAureus(microrganismo) {
+  const n = normalizarTexto(microrganismo);
+  return n.includes('aureus') ? 'Staphylococcus aureus' : null;
+}
+function especieEnterococo(microrganismo) {
+  const n = normalizarTexto(microrganismo);
+  if (!n.includes('enterococcus') && !n.includes('enterococo')) return null;
+  if (n.includes('faecalis')) return 'Enterococcus faecalis';
+  if (n.includes('faecium')) return 'Enterococcus faecium';
+  return 'Enterococcus spp';
+}
+
+/* Grupos do antibiograma cumulativo: cada um com classificador de espécie e painel de
+   antibióticos próprio. A ordem é a de exibição no perfil. */
+const GRUPOS_ANTIBIOGRAMA = [
+  { chave: 'Enterobactérias', classificar: especieEnterobacteria, rotuloTotal: 'TODAS as enterobactérias',
+    atbs: [...ATB_PERFIL,
+      ['Cefepime', ['cefepime', 'cefepima']],
+      ['Ertapenem', ['ertapenem']],
+      ['Gentamicina', ['gentamicina']]] },
+  { chave: 'Não fermentadores', classificar: especieNaoFermentador, rotuloTotal: 'TODOS os não fermentadores',
+    atbs: [
+      ['Cefepime', ['cefepime', 'cefepima']],
+      ['Ceftazidima', ['ceftazidima']],
+      ['Pip/Tazo', ['piperacilinatazobactam', 'piperacilinaacidotazobactam']],
+      ['Meropenem', ['meropenem']],
+      ['Ciprofloxacino', ['ciprofloxacino', 'ciprofloxacina']],
+      ['Amicacina', ['amicacina']],
+      ['Polimixina B', ['polimixinab', 'polimixina', 'colistina']]] },
+  { chave: 'Staphylococcus aureus', classificar: especieStaphAureus, rotuloTotal: null,
+    atbs: [
+      ['Oxacilina', ['oxacilina']],
+      ['Vancomicina', ['vancomicina']],
+      ['Clindamicina', ['clindamicina']],
+      ['Sulfa/TMP', _SULFA]] },
+  { chave: 'Enterococcus', classificar: especieEnterococo, rotuloTotal: 'TODOS os enterococos',
+    atbs: [
+      ['Ampicilina', ['ampicilina']],
+      ['Vancomicina', ['vancomicina']],
+      ['Teicoplanina', ['teicoplanina']],
+      ['Linezolida', ['linezolida']]] }
+];
 
 function corDeResistencia(pct) {
   return pct < 20 ? 'verde' : pct < 50 ? 'laranja' : 'vermelho';
@@ -581,19 +635,19 @@ function mecanismoDaCultura(cultura, sensPorCultura) {
     || inferirMecanismo(cultura.Microrganismo, sensPorCultura.get(cultura.ID_Cultura) || []);
 }
 
-/* Tabela %R: espécies de enterobactérias × antibióticos-chave. Cada célula é
+/* Tabela %R de UM grupo: espécies × antibióticos do painel do grupo. Cada célula é
    { t: '38% (n=16)', cor } — verde <20%, laranja 20–49%, vermelho ≥50%. */
-function tabelaResistenciaEnterobacterias(culturas, sensPorCultura) {
+function tabelaResistencia(culturas, sensPorCultura, grupo) {
   const porEspecie = new Map();
   for (const c of culturas) {
-    const especie = especieEnterobacteria(c.Microrganismo);
+    const especie = grupo.classificar(c.Microrganismo);
     if (!especie) continue;
     if (!porEspecie.has(especie)) porEspecie.set(especie, []);
     porEspecie.get(especie).push(c);
   }
   const linhaDe = (rotulo, lista) => {
     const linha = [rotulo, lista.length];
-    for (const [, sinonimos] of ATB_PERFIL) {
+    for (const [, sinonimos] of grupo.atbs) {
       let testados = 0, resistentes = 0;
       for (const c of lista) {
         const itens = (sensPorCultura.get(c.ID_Cultura) || [])
@@ -611,8 +665,14 @@ function tabelaResistenciaEnterobacterias(culturas, sensPorCultura) {
   const linhas = [...porEspecie.entries()].sort((a, b) => b[1].length - a[1].length)
     .map(([especie, lista]) => linhaDe(especie, lista));
   const todas = [...porEspecie.values()].flat();
-  if (todas.length) linhas.push(linhaDe('TODAS as enterobactérias', todas));
-  return { colunas: ['Espécie', 'n', ...ATB_PERFIL.map(([rotulo]) => rotulo)], linhas };
+  if (grupo.rotuloTotal && todas.length) linhas.push(linhaDe(grupo.rotuloTotal, todas));
+  return { colunas: ['Espécie', 'n', ...grupo.atbs.map(([rotulo]) => rotulo)], linhas };
+}
+
+/* Compatibilidade: a tabela original de enterobactérias, agora um caso particular. */
+function tabelaResistenciaEnterobacterias(culturas, sensPorCultura) {
+  return tabelaResistencia(culturas, sensPorCultura,
+    { chave: 'Enterobactérias', classificar: especieEnterobacteria, rotuloTotal: 'TODAS as enterobactérias', atbs: ATB_PERFIL });
 }
 
 /* ---- Cruzamento IRAS × cultura (por sítio) --------------------------------------------
@@ -677,14 +737,45 @@ function culturasDaIRAS(caso, indice, janela) {
 
 const _generoDe = s => normalizarTexto(String(s || '').trim().split(/\s+/)[0]);
 
+/* Melhor cultura para definir o agente da IRAS — a mais próxima na data nem sempre é a
+   certa (paciente com várias hemoculturas). Ordem dos critérios: gênero que bate com o
+   agente do caso > material específico do sítio (hemocultura só é "específica" na IPCS,
+   onde É o material do sítio) > menor distância de data > ter antibiograma. Devolve
+   { cultura, agenteProvavel }; germes distintos empatados nos três primeiros critérios
+   viram "A + B" (infecção polimicrobiana). */
+function melhorCulturaDaIRAS(caso, indice, janela, sensPorCultura) {
+  const ligadas = culturasDaIRAS(caso, indice, janela);
+  if (!ligadas.length) return null;
+  const sitio = sitioDaIRAS(caso.Topografia);
+  const generoCaso = _generoDe(caso.Microrganismo);
+  const nota = c => {
+    const m = normalizarTexto(c.Material);
+    const especifico = !!sitio && (sitio.materiais.test(m)
+      || (sitio.chave === 'IPCS' && HEMOCULTURA_UNIVERSAL.test(m)));
+    return [
+      generoCaso && _generoDe(c.Microrganismo) === generoCaso ? 0 : 1,
+      especifico ? 0 : 1,
+      _diasEntreDatas(c.DataColeta, caso.DataInfeccao),
+      (sensPorCultura && (sensPorCultura.get(c.ID_Cultura) || []).length) ? 0 : 1
+    ];
+  };
+  const ordenadas = ligadas.map(c => ({ c, n: nota(c) }))
+    .sort((a, b) => a.n[0] - b.n[0] || a.n[1] - b.n[1] || a.n[2] - b.n[2] || a.n[3] - b.n[3]);
+  const topo = ordenadas[0].n;
+  const empatadas = ordenadas.filter(x => x.n[0] === topo[0] && x.n[1] === topo[1] && x.n[2] === topo[2]);
+  const germes = [...new Set(empatadas.map(x => String(x.c.Microrganismo || '').trim()).filter(Boolean))];
+  return { cultura: ordenadas[0].c, agenteProvavel: germes.join(' + ') };
+}
+
 /* Agrega o cruzamento no período: cobertura por sítio, divergências (agente do caso × cultura
    ligada) e ausências reais (IPCS/pneumonia sem cultura). Núcleo puro, testável. */
-function cruzarIRAScomCulturas(bancos, inicio, fim, janela) {
+function cruzarIRAScomCulturas(bancos, inicio, fim, janela, sensPorCultura) {
   janela = janela == null ? JANELA_IRAS_CULTURA : janela;
   const casos = ((bancos.iras || {}).casos || []).filter(k => relPeriodo(k.DataInfeccao, inicio, fim));
   const indice = indiceCulturasPorProntuario((bancos.culturas || {}).culturas || []);
   const porSitio = new Map();
   const divergencias = [], ausencias = [];
+  const ligadasPorId = new Map();
   for (const k of casos) {
     const sitio = sitioDaIRAS(k.Topografia);
     const chave = sitio ? sitio.chave : 'Outro';
@@ -692,20 +783,24 @@ function cruzarIRAScomCulturas(bancos, inicio, fim, janela) {
     acc.casos++;
     const ligadas = culturasDaIRAS(k, indice, janela);
     if (ligadas.length) acc.ligados++;
+    ligadas.forEach(c => ligadasPorId.set(c.ID_Cultura, c));
     porSitio.set(chave, acc);
     const agenteCaso = String(k.Microrganismo || '').trim();
     if (agenteCaso && ligadas.length) {
       const generosCultura = new Set(ligadas.map(c => _generoDe(c.Microrganismo)));
       if (!generosCultura.has(_generoDe(agenteCaso))) {
+        const melhor = melhorCulturaDaIRAS(k, indice, janela, sensPorCultura);
         divergencias.push({ Prontuario: k.Prontuario, DataInfeccao: k.DataInfeccao, Topografia: k.Topografia,
-          agenteCaso, agentesCultura: [...new Set(ligadas.map(c => c.Microrganismo))].join(' / ') });
+          agenteCaso, agentesCultura: [...new Set(ligadas.map(c => c.Microrganismo))].join(' / '),
+          agenteProvavel: melhor ? melhor.agenteProvavel : '' });
       }
     }
     if (sitio && sitio.cobraAusencia && !ligadas.length) {
       ausencias.push({ Prontuario: k.Prontuario, DataInfeccao: k.DataInfeccao, Topografia: k.Topografia, agenteCaso: agenteCaso || '(sem agente)' });
     }
   }
-  return { janela, porSitio: [...porSitio.values()], divergencias, ausencias, totalCasos: casos.length };
+  return { janela, porSitio: [...porSitio.values()], divergencias, ausencias, totalCasos: casos.length,
+    culturasLigadas: [...ligadasPorId.values()] };
 }
 
 function perfilMicrobiologico(bancos, anoInicial, anoFinal, porSemestre) {
@@ -776,47 +871,70 @@ function perfilMicrobiologico(bancos, anoInicial, anoFinal, porSemestre) {
     return [topografia, n, top || '—'];
   });
 
-  /* 4. Cepas multirresistentes de importância epidemiológica (entre as IRAS). */
+  /* 4. Cepas multirresistentes (entre as IRAS), agrupadas germe × resistência × setor —
+     "Acinetobacter resistente a carbapenêmicos na UTI: N amostras". */
   const mdrIRAS = culturasIRAS
     .map(c => ({ c, mecanismo: mecanismoDaCultura(c, sensPorCultura) }))
-    .filter(x => x.mecanismo)
-    .sort((a, b) => String(a.c.DataColeta).localeCompare(String(b.c.DataColeta)));
-  const criterioDe = c => {
-    const sufixo = String(c.AvaliacaoCCIH || '').replace(/^IRAS\s*[—-]?\s*/, '').trim();
-    return sufixo || 'IRAS';
+    .filter(x => x.mecanismo);
+  const generoRotulo = m => {
+    const g = String(m || '').trim().split(/\s+/)[0];
+    return g ? g.charAt(0).toUpperCase() + g.slice(1).toLowerCase() : '(não informado)';
   };
-  const linhasMDR = mdrIRAS.slice(0, 40).map(({ c, mecanismo }) => [
-    (colunas.find(col => naColuna(c.DataColeta, col)) || {}).rotulo || String(c.DataColeta).slice(0, 10),
-    c.Microrganismo, criterioDe(c), c.Setor, mecanismo]);
+  const gruposMDR = new Map();
+  for (const { c, mecanismo } of mdrIRAS) {
+    const germe = generoRotulo(c.Microrganismo);
+    const setor = String(c.Setor || '').trim() || '(não informado)';
+    const chave = germe + '|' + mecanismo + '|' + setor;
+    const acc = gruposMDR.get(chave) || { germe, mecanismo, setor, amostras: 0 };
+    acc.amostras++;
+    gruposMDR.set(chave, acc);
+  }
+  const linhasMDR = [...gruposMDR.values()]
+    .sort((a, b) => b.amostras - a.amostras || a.germe.localeCompare(b.germe) || a.setor.localeCompare(b.setor))
+    .map(g => [g.germe, g.mecanismo, g.setor, g.amostras]);
 
-  /* 5. %R das enterobactérias: só IRAS × todos os isolados (fora água/leite/não-cultura). */
-  const todasComGerme = ((bancos.culturas || {}).culturas || [])
-    .filter(c => relPeriodo(c.DataColeta, inicio, fim) && String(c.Microrganismo || '').trim()
-      && !['Água', 'Leite', 'Não é cultura'].includes(String(c.AvaliacaoCCIH || '').trim()));
-  const tabelaIRAS = tabelaResistenciaEnterobacterias(culturasIRAS, sensPorCultura);
-  const tabelaTodas = tabelaResistenciaEnterobacterias(todasComGerme, sensPorCultura);
-  /* Cobertura de antibiograma nos isolados de IRAS — sem isso as células vazias da
-     tabela 6 parecem erro, quando são falta de antibiograma vinculado à cultura. */
-  const enteroIRAS = culturasIRAS.filter(c => especieEnterobacteria(c.Microrganismo));
-  const enteroIRASComATB = enteroIRAS.filter(c => (sensPorCultura.get(c.ID_Cultura) || []).length);
-  const textoCoberturaIRAS = enteroIRAS.length
-    ? `Dos ${enteroIRAS.length} isolados de enterobactérias em IRAS, ${enteroIRASComATB.length} `
-      + `(${relPct(enteroIRASComATB.length, enteroIRAS.length)}) têm antibiograma vinculado — células vazias `
-      + 'refletem essa cobertura, não sensibilidade desconhecida no laboratório.'
-    : 'Nenhum isolado de enterobactéria em IRAS no período.';
-  const legendaCores = 'Célula = % de isolados resistentes (n = testados para o antibiótico). '
-    + 'Cores: verde <20%, laranja 20–49%, vermelho ≥50% de resistência. '
-    + 'Linhas com n<10 são exploratórias — amostra pequena.';
-
-  /* Cruzamento IRAS × cultura: cobertura por sítio + conferência (divergências e ausências). */
-  const cruz = cruzarIRAScomCulturas(bancos, inicio, fim);
+  /* Cruzamento IRAS × cultura: cobertura por sítio + conferência (divergências e ausências).
+     Vem antes da resistência porque as culturas LIGADAS entram no antibiograma cumulativo. */
+  const cruz = cruzarIRAScomCulturas(bancos, inicio, fim, undefined, sensPorCultura);
   const linhasCobertura = cruz.porSitio.sort((a, b) => b.casos - a.casos).map(s =>
     [s.sitio, s.casos, `${s.ligados} (${relPct(s.ligados, s.casos)})`,
       s.cobraAusencia ? 'coletada no hospital — ausência é falha' : 'externa esperada']);
   const linhasDiverg = cruz.divergencias.map(d =>
-    [String(d.DataInfeccao).slice(0, 10), d.Prontuario, d.Topografia, d.agenteCaso, d.agentesCultura]);
+    [String(d.DataInfeccao).slice(0, 10), d.Prontuario, d.Topografia, d.agenteCaso, d.agentesCultura, d.agenteProvavel]);
   const linhasAusencia = cruz.ausencias.slice(0, 50).map(a =>
     [String(a.DataInfeccao).slice(0, 10), a.Prontuario, a.Topografia, a.agenteCaso]);
+  /* Rastro das correções de agente pela cultura (scripts/corrigir-agentes-iras.js): a
+     cultura ligada pode ser a ERRADA, então os casos corrigidos ficam sempre à vista. */
+  const corrigidos = casos.filter(k => String(k.ID_CulturaAgente || '').trim());
+  const linhasCorrigidos = corrigidos.map(k => [String(k.DataInfeccao).slice(0, 10), k.Prontuario, k.Topografia,
+    String(k.AgenteOriginal || '').trim() || '(sem agente)', k.Microrganismo, k.ID_CulturaAgente]);
+
+  /* 5. Antibiograma cumulativo por grupos: IRAS (marcadas na revisão ∪ ligadas pelo
+     cruzamento, sem contar duas vezes) × todos os isolados (fora água/leite/não-cultura). */
+  const todasComGerme = ((bancos.culturas || {}).culturas || [])
+    .filter(c => relPeriodo(c.DataColeta, inicio, fim) && String(c.Microrganismo || '').trim()
+      && !['Água', 'Leite', 'Não é cultura'].includes(String(c.AvaliacaoCCIH || '').trim()));
+  const porIdInfeccao = new Map();
+  culturasIRAS.forEach(c => porIdInfeccao.set(c.ID_Cultura, c));
+  cruz.culturasLigadas.forEach(c => porIdInfeccao.set(c.ID_Cultura, c));
+  const culturasInfeccoes = [...porIdInfeccao.values()];
+  const tabelasResIRAS = GRUPOS_ANTIBIOGRAMA
+    .map(g => ({ g, t: tabelaResistencia(culturasInfeccoes, sensPorCultura, g) }))
+    .filter(x => x.t.linhas.length);
+  const tabelasResTodas = GRUPOS_ANTIBIOGRAMA
+    .map(g => ({ g, t: tabelaResistencia(todasComGerme, sensPorCultura, g) }))
+    .filter(x => x.t.linhas.length);
+  /* Cobertura de antibiograma — sem isso as células vazias parecem erro, quando são
+     falta de antibiograma vinculado à cultura. */
+  const infComATB = culturasInfeccoes.filter(c => (sensPorCultura.get(c.ID_Cultura) || []).length);
+  const textoCoberturaIRAS = culturasInfeccoes.length
+    ? `Das ${culturasInfeccoes.length} culturas vinculadas às IRAS (marcadas na revisão ou ligadas pelo `
+      + `cruzamento), ${infComATB.length} (${relPct(infComATB.length, culturasInfeccoes.length)}) têm antibiograma `
+      + 'vinculado — células vazias refletem essa cobertura, não sensibilidade desconhecida no laboratório.'
+    : 'Nenhuma cultura vinculada às IRAS no período.';
+  const legendaCores = 'Célula = % de isolados resistentes (n = testados para o antibiótico). '
+    + 'Cores: verde <20%, laranja 20–49%, vermelho ≥50% de resistência. '
+    + 'Linhas com n<10 são exploratórias — amostra pequena.';
 
   const rotuloPeriodo = anoInicial === anoFinal ? String(anoInicial) : `${anoInicial}–${anoFinal}`;
   return {
@@ -840,7 +958,8 @@ function perfilMicrobiologico(bancos, anoInicial, anoFinal, porSemestre) {
           + 'IPCS e pneumonia são coletadas no hospital: a ausência de cultura é uma falha a investigar. ISC e ITU '
           + 'têm cultura tipicamente externa (centro cirúrgico, ambulatorial), então a ausência é esperada.' },
       ...(linhasDiverg.length ? [{ titulo: '4c. Conferência — agente do caso diverge da cultura vinculada', tipo: 'tabela',
-        colunas: ['Data', 'Prontuário', 'Sítio', 'Agente no caso', 'Agente(s) na cultura'], linhas: linhasDiverg }] : []),
+        colunas: ['Data', 'Prontuário', 'Sítio', 'Agente no caso', 'Agente(s) na cultura', 'Agente mais provável (cultura)'],
+        linhas: linhasDiverg }] : []),
       (linhasAusencia.length
         ? { titulo: '4d. IPCS/pneumonia sem cultura vinculada (a investigar)', tipo: 'tabela',
             colunas: ['Data', 'Prontuário', 'Sítio', 'Agente no caso'], linhas: linhasAusencia }
@@ -848,15 +967,25 @@ function perfilMicrobiologico(bancos, anoInicial, anoFinal, porSemestre) {
             corpo: 'Todas as IPCS e pneumonias do período têm cultura vinculada.' }),
       ...(cruz.ausencias.length > 50 ? [{ titulo: 'Nota', tipo: 'texto',
         corpo: `Mostrando 50 de ${cruz.ausencias.length} IPCS/pneumonias sem cultura vinculada.` }] : []),
-      { titulo: '5. Cepas multirresistentes nas IRAS', tipo: 'tabela',
-        colunas: ['Período', 'Microrganismo', 'Critério', 'Setor', 'Resistência'], linhas: linhasMDR },
-      ...(mdrIRAS.length > 40 ? [{ titulo: 'Nota', tipo: 'texto',
-        corpo: `Mostrando as 40 primeiras de ${mdrIRAS.length} cepas multirresistentes do período.` }] : []),
-      { titulo: '6. Resistência das enterobactérias — isolados de IRAS', tipo: 'tabela',
-        colunas: tabelaIRAS.colunas, linhas: tabelaIRAS.linhas },
+      ...(linhasCorrigidos.length ? [{ titulo: '4e. Agentes corrigidos pela cultura vinculada', tipo: 'tabela',
+        colunas: ['Data', 'Prontuário', 'Sítio', 'Agente original', 'Agente atual (da cultura)', 'ID da cultura'],
+        linhas: linhasCorrigidos },
+      { titulo: 'Nota', tipo: 'texto',
+        corpo: 'Casos cujo agente foi substituído pelo da cultura vinculada (script de correção, com backup). '
+          + 'A cultura ligada pode ser a errada: confira e, se preciso, desfaça — o agente original fica '
+          + 'guardado no próprio caso (AgenteOriginal) e o script tem a opção --desfazer.' }] : []),
+      { titulo: '5. Cepas multirresistentes nas IRAS — grupos por setor', tipo: 'tabela',
+        colunas: ['Microrganismo', 'Resistência', 'Setor', 'Amostras'], linhas: linhasMDR },
+      ...(tabelasResIRAS.length
+        ? tabelasResIRAS.map((x, i) => ({
+            titulo: `6${String.fromCharCode(97 + i)}. Antibiograma cumulativo das IRAS — ${x.g.chave}`,
+            tipo: 'tabela', colunas: x.t.colunas, linhas: x.t.linhas }))
+        : [{ titulo: '6. Antibiograma cumulativo das IRAS', tipo: 'texto',
+            corpo: 'Nenhum isolado dos grupos monitorados vinculado às IRAS no período.' }]),
       { titulo: 'Cobertura de antibiograma nas IRAS', tipo: 'texto', corpo: textoCoberturaIRAS },
-      { titulo: '7. Resistência das enterobactérias — todos os isolados', tipo: 'tabela',
-        colunas: tabelaTodas.colunas, linhas: tabelaTodas.linhas },
+      ...tabelasResTodas.map((x, i) => ({
+        titulo: `7${String.fromCharCode(97 + i)}. Resistência — todos os isolados — ${x.g.chave}`,
+        tipo: 'tabela', colunas: x.t.colunas, linhas: x.t.linhas })),
       { titulo: 'Como ler as tabelas de resistência', tipo: 'texto', corpo: legendaCores },
       { titulo: '8. Considerações e limitações', tipo: 'texto',
         corpo: 'Grafias de microrganismos e antibióticos são unificadas pela auditoria de vocabulário e pelos '
@@ -899,6 +1028,8 @@ if (typeof module !== 'undefined' && module.exports) {
     relatorioResumoExecutivo, RELATORIOS_PADRAO, BANCOS_RELATORIOS, pacientesDia, pacientesDiaDoCenso,
     relMediana, relDiasEntre, mesAnteriorIntervalo,
     diasDeDispositivo, taxasPorDispositivo, grupoDoDispositivo,
-    perfilMicrobiologico, cruzarIRAScomCulturas, culturasDaIRAS, sitioDaIRAS, materialCasaSitio, colunasDoPerfil, classificarGram, especieEnterobacteria,
-    tabelaResistenciaEnterobacterias, corDeResistencia, indiceSensibilidade, mecanismoDaCultura };
+    perfilMicrobiologico, cruzarIRAScomCulturas, culturasDaIRAS, melhorCulturaDaIRAS, indiceCulturasPorProntuario,
+    sitioDaIRAS, materialCasaSitio, colunasDoPerfil, classificarGram, especieEnterobacteria,
+    especieNaoFermentador, especieStaphAureus, especieEnterococo, GRUPOS_ANTIBIOGRAMA, tabelaResistencia,
+    tabelaResistenciaEnterobacterias, corDeResistencia, indiceSensibilidade, mecanismoDaCultura, JANELA_IRAS_CULTURA };
 }

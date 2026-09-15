@@ -30,10 +30,24 @@ Exploração no banco do HNSC (12/09/2026), 950 IRAS × 38.724 culturas:
   cobra cultura desses sítios; só cobra ausência real de IPCS e pneumonia.
 - Achado a investigar: IPCS diverge em 62 de 119 (agente do caso ≠ gênero da hemocultura mais
   próxima) — provável porque o paciente tem várias hemoculturas; a ligação precisa escolher a
-  melhor, e/ou é sinal de qualidade de dado.
+  melhor, e/ou é sinal de qualidade de dado. → Resolvido em 14/09/2026: melhorCulturaDaIRAS
+  escolhe por gênero que bate > material do sítio > data > antibiograma; divergências reais
+  caíram para 9 no HNSC.
 
-Aberto antes de construir: mapa final topografia→material (o usuário quer ajustar); como usar
-no relatório (anexar agente/resistência por IRAS + conferência de divergências/ausências).
+Segunda rodada (14/09/2026): agente mais provável + correção em lote + antibiograma por grupos.
+- scripts/corrigir-agentes-iras.js corrige o Microrganismo do caso pela cultura vinculada
+  (dry-run por padrão; --aplicar grava com backup; --desfazer reverte). Rastro permanente:
+  AgenteOriginal + ID_CulturaAgente em iras.casos, linha em Observacoes, seção 4e do perfil.
+- Perfil: seção 5 agrupada germe × resistência × setor; 6a–6d antibiograma cumulativo das
+  IRAS por grupos (enterobactérias, não fermentadores, S. aureus, Enterococcus) sobre a
+  UNIÃO das marcadas IRAS ∪ ligadas pelo cruzamento; 7a–7d idem para todos os isolados.
+- **Aguardando o usuário rodar `node scripts/corrigir-agentes-iras.js --aplicar`** (dry-run
+  no HNSC: 63 correções — 40 especificam espécie, 14 preenchem sem agente, 9 divergências).
+  Conferir antes as 9 divergências: várias trocam para Staphylococcus coagulase-negativo,
+  possível contaminante de hemocultura.
+- Antibiograma cumulativo das IRAS quase vazio no HNSC por ora: só 2 de 623 culturas
+  vinculadas têm painel S/I/R (o banco só tem sensibilidade desde jun/2026) — vai encher
+  com o tempo.
 
 ## Relatórios — pacientes-dia POR SETOR (passagem de setor)
 

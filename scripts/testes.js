@@ -1733,17 +1733,25 @@ console.log('\n== 48. Perfil microbiológico das IRAS: colunas, Gram, %R com cor
   verificar('Gram calculado só nas culturas de IRAS',
     gram.corpo.includes('1 Gram-negativos') && gram.corpo.includes('1 Gram-positivos'), gram.corpo);
   const mdr = p.secoes.find(s => s.titulo.startsWith('5.'));
-  verificar('MDR: mecanismo inferido do antibiograma, critério do sufixo da classificação',
-    mdr.linhas.length === 2 && mdr.linhas[0][4] === 'Resistente a carbapenêmicos'
-    && mdr.linhas.some(l => l[2] === 'ISC') && mdr.linhas.some(l => l[2] === 'IRAS'), JSON.stringify(mdr.linhas));
-  const tabIRAS = p.secoes.find(s => s.titulo.startsWith('6.'));
+  verificar('MDR agrupada germe × resistência × setor, mecanismo inferido do antibiograma',
+    mdr.linhas.length === 2
+    && mdr.linhas.some(l => l[0] === 'Klebsiella' && l[1] === 'Resistente a carbapenêmicos' && l[2] === 'CTI' && l[3] === 1)
+    && mdr.linhas.some(l => l[0] === 'Staphylococcus' && l[1] === 'MRSA' && l[2] === 'CC' && l[3] === 1),
+    JSON.stringify(mdr.linhas));
+  const tabIRAS = p.secoes.find(s => s.titulo.startsWith('6a.'));
+  verificar('seção 6a é o grupo enterobactérias das IRAS', tabIRAS.titulo.includes('Enterobactérias'));
   const kp = tabIRAS.linhas.find(l => l[0] === 'Klebsiella pneumoniae');
   const colMero = tabIRAS.colunas.indexOf('Meropenem');
   verificar('%R nas IRAS: K. pneumoniae 100% meropenem, vermelho',
     kp[colMero].t === '100% (n=1)' && kp[colMero].cor === 'vermelho', JSON.stringify(kp));
   verificar('%R nas IRAS: E. coli (colonização) fica FORA da tabela de IRAS',
     !tabIRAS.linhas.some(l => l[0] === 'Escherichia coli'));
-  const tabTodas = p.secoes.find(s => s.titulo.startsWith('7.'));
+  const tabSA = p.secoes.find(s => s.titulo.startsWith('6') && s.titulo.includes('Staphylococcus aureus'));
+  verificar('S. aureus das IRAS ganha painel próprio com oxacilina 100% R',
+    !!tabSA && tabSA.linhas[0][tabSA.colunas.indexOf('Oxacilina')].t === '100% (n=1)',
+    JSON.stringify(tabSA && tabSA.linhas));
+  const tabTodas = p.secoes.find(s => s.titulo.startsWith('7a.'));
+  verificar('seção 7a é o grupo enterobactérias de todos os isolados', tabTodas.titulo.includes('Enterobactérias'));
   const ecoli = tabTodas.linhas.find(l => l[0] === 'Escherichia coli');
   verificar('%R em todos os isolados: E. coli entra, 0% meropenem, verde, grafia com + casa',
     ecoli && ecoli[colMero].t === '0% (n=1)' && ecoli[colMero].cor === 'verde'
@@ -2751,6 +2759,123 @@ console.log('\n== 67. Cruzamento IRAS × cultura por sítio (perfil microbiológ
     culturas: { culturas: [{ ID_Cultura: 'H', Prontuario: '9', DataColeta: '2026-03-10', Material: 'Hemocultura', Microrganismo: 'Klebsiella pneumoniae' }] }
   }, '2026-01-01', '2026-12-31', 3);
   verificar('hemocultura vale para pneumonia (universal)', soHemo.porSitio[0].ligados === 1 && soHemo.ausencias.length === 0);
+}
+
+console.log('\n== 68. Melhor cultura da IRAS, antibiograma por grupos e correção de agente ==');
+{
+  const rel = require(path.join(__dirname, '..', 'js', 'relatorios.js'));
+
+  /* Melhor cultura: gênero que bate vence a mais próxima; material do sítio vence
+     hemocultura; antibiograma desempata. */
+  const casoPAV = { Prontuario: '1', DataInfeccao: '2026-03-10',
+    Topografia: 'Pneumonia associada à ventilação mecânica (PAV)', Microrganismo: 'Pseudomonas aeruginosa' };
+  const culturas = [
+    /* mais próxima, mas gênero errado */
+    { ID_Cultura: 'A', Prontuario: '1', DataColeta: '2026-03-10', Material: 'Hemocultura', Microrganismo: 'Candida albicans' },
+    /* gênero certo, 2 dias de distância */
+    { ID_Cultura: 'B', Prontuario: '1', DataColeta: '2026-03-12', Material: 'Secreção traqueal', Microrganismo: 'Pseudomonas aeruginosa' }
+  ];
+  const indice = rel.indiceCulturasPorProntuario(culturas);
+  const m1 = rel.melhorCulturaDaIRAS(casoPAV, indice, 3);
+  verificar('gênero que bate com o caso vence a cultura mais próxima',
+    m1.cultura.ID_Cultura === 'B' && m1.agenteProvavel === 'Pseudomonas aeruginosa', JSON.stringify(m1));
+
+  /* Sem agente no caso: material do sítio vence hemocultura na mesma data. */
+  const casoSem = { Prontuario: '1', DataInfeccao: '2026-03-10',
+    Topografia: 'Pneumonia associada à ventilação mecânica (PAV)', Microrganismo: '' };
+  const empate = rel.indiceCulturasPorProntuario([
+    { ID_Cultura: 'H', Prontuario: '1', DataColeta: '2026-03-10', Material: 'Hemocultura', Microrganismo: 'Klebsiella pneumoniae' },
+    { ID_Cultura: 'S', Prontuario: '1', DataColeta: '2026-03-10', Material: 'Secreção traqueal', Microrganismo: 'Acinetobacter baumannii' }
+  ]);
+  const m2 = rel.melhorCulturaDaIRAS(casoSem, empate, 3);
+  verificar('material do sítio vence hemocultura', m2.cultura.ID_Cultura === 'S', JSON.stringify(m2));
+
+  /* Empate total (mesmo material, mesma data, germes distintos) → polimicrobiana "A + B". */
+  const poli = rel.indiceCulturasPorProntuario([
+    { ID_Cultura: 'P1', Prontuario: '1', DataColeta: '2026-03-10', Material: 'Secreção traqueal', Microrganismo: 'Klebsiella pneumoniae' },
+    { ID_Cultura: 'P2', Prontuario: '1', DataColeta: '2026-03-10', Material: 'Secreção traqueal', Microrganismo: 'Serratia marcescens' }
+  ]);
+  const m3 = rel.melhorCulturaDaIRAS(casoSem, poli, 3);
+  verificar('empate de germes distintos vira "A + B"',
+    m3.agenteProvavel === 'Klebsiella pneumoniae + Serratia marcescens', JSON.stringify(m3));
+  verificar('na IPCS a hemocultura é material do próprio sítio', (() => {
+    const casoIPCS = { Prontuario: '1', DataInfeccao: '2026-03-10', Topografia: 'IPCS clínica', Microrganismo: '' };
+    const m = rel.melhorCulturaDaIRAS(casoIPCS, empate, 3);
+    return m.cultura.ID_Cultura === 'H';
+  })(), 'esperava a hemocultura H');
+  verificar('sem cultura vinculada devolve null', rel.melhorCulturaDaIRAS(casoSem, new Map(), 3) === null);
+
+  /* Divergência no cruzamento traz o agente mais provável. */
+  const cruz = rel.cruzarIRAScomCulturas({
+    iras: { casos: [{ Prontuario: '5', DataInfeccao: '2026-03-10', Topografia: 'IPCS clínica', Microrganismo: 'Enterococcus faecalis' }] },
+    culturas: { culturas: [{ ID_Cultura: 'C5', Prontuario: '5', DataColeta: '2026-03-09', Material: 'Hemocultura', Microrganismo: 'Candida albicans' }] }
+  }, '2026-01-01', '2026-12-31', 3);
+  verificar('divergência traz agenteProvavel e culturasLigadas',
+    cruz.divergencias[0].agenteProvavel === 'Candida albicans'
+    && cruz.culturasLigadas.length === 1 && cruz.culturasLigadas[0].ID_Cultura === 'C5', JSON.stringify(cruz.divergencias));
+
+  /* Antibiograma por grupos: não fermentador e Enterococcus. */
+  verificar('classificadores dos grupos', rel.especieNaoFermentador('ACINETOBACTER BAUMANNII') === 'Acinetobacter baumannii'
+    && rel.especieNaoFermentador('Escherichia coli') === null
+    && rel.especieStaphAureus('Staph aureus') === 'Staphylococcus aureus'
+    && rel.especieStaphAureus('Staphylococcus epidermidis') === null
+    && rel.especieEnterococo('Enterococcus faecium') === 'Enterococcus faecium');
+  const gNF = rel.GRUPOS_ANTIBIOGRAMA.find(g => g.chave === 'Não fermentadores');
+  const sens = new Map([['N1', [{ Antibiotico: 'Meropenem', Resultado: 'R' }, { Antibiotico: 'Polimixina B', Resultado: 'S' }]]]);
+  const tNF = rel.tabelaResistencia([{ ID_Cultura: 'N1', Microrganismo: 'Pseudomonas aeruginosa' }], sens, gNF);
+  const iMero = tNF.colunas.indexOf('Meropenem'), iPoli = tNF.colunas.indexOf('Polimixina B');
+  verificar('não fermentador: meropenem 100% vermelho, polimixina 0% verde',
+    tNF.linhas[0][iMero].t === '100% (n=1)' && tNF.linhas[0][iMero].cor === 'vermelho'
+    && tNF.linhas[0][iPoli].t === '0% (n=1)' && tNF.linhas[0][iPoli].cor === 'verde', JSON.stringify(tNF.linhas));
+
+  /* União IRAS ∪ vinculadas sem contar duas vezes: a mesma cultura marcada IRAS e ligada
+     pelo cruzamento aparece uma vez só no antibiograma (n=1). */
+  const bancosUniao = {
+    iras: { casos: [{ Prontuario: '7', DataInfeccao: '2026-03-10', Topografia: 'IPCS clínica', Microrganismo: 'Klebsiella pneumoniae' }] },
+    pacientes: { internacoes: [] },
+    culturas: {
+      culturas: [{ ID_Cultura: 'U1', Prontuario: '7', DataColeta: '2026-03-10', Material: 'Hemocultura',
+        Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: '', AvaliacaoCCIH: 'IRAS' }],
+      sensibilidade: [{ ID_Cultura: 'U1', Antibiotico: 'Meropenem', Resultado: 'S' }]
+    }
+  };
+  const perfilUniao = rel.perfilMicrobiologico(bancosUniao, 2026, 2026, false);
+  const sec6 = perfilUniao.secoes.find(s => s.titulo.startsWith('6a.'));
+  const linhaKp = sec6.linhas.find(l => l[0] === 'Klebsiella pneumoniae');
+  verificar('união deduplica: cultura marcada IRAS e ligada conta n=1', linhaKp && linhaKp[1] === 1, JSON.stringify(sec6.linhas));
+
+  /* Seção 4e: casos corrigidos ficam sempre à vista no perfil. */
+  const bancosCorr = JSON.parse(JSON.stringify(bancosUniao));
+  bancosCorr.iras.casos[0].AgenteOriginal = 'Escherichia coli';
+  bancosCorr.iras.casos[0].ID_CulturaAgente = 'U1';
+  const perfilCorr = rel.perfilMicrobiologico(bancosCorr, 2026, 2026, false);
+  const sec4e = perfilCorr.secoes.find(s => s.titulo.startsWith('4e.'));
+  verificar('seção 4e lista o caso corrigido com original → atual e a cultura',
+    sec4e && sec4e.linhas.length === 1 && sec4e.linhas[0][3] === 'Escherichia coli'
+    && sec4e.linhas[0][4] === 'Klebsiella pneumoniae' && sec4e.linhas[0][5] === 'U1', JSON.stringify(sec4e && sec4e.linhas));
+  verificar('sem correções não há seção 4e', !perfilUniao.secoes.some(s => s.titulo.startsWith('4e.')));
+
+  /* Regras do script de correção (decidirCorrecao é pura). */
+  const { decidirCorrecao } = require(path.join(__dirname, 'corrigir-agentes-iras.js'));
+  verificar('regra 1: sem agente preenche', decidirCorrecao('', 'Klebsiella pneumoniae').regra === 'sem agente → preenchido');
+  verificar('regra 2: genérico do mesmo gênero especifica',
+    decidirCorrecao('Klebsiella spp', 'Klebsiella pneumoniae').regra === 'genérico → espécie da cultura'
+    && decidirCorrecao('Klebsiella', 'Klebsiella pneumoniae').regra === 'genérico → espécie da cultura');
+  verificar('mesmo gênero com espécie definida NÃO é tocado',
+    decidirCorrecao('Klebsiella oxytoca', 'Klebsiella pneumoniae') === null);
+  verificar('regra 3: divergência substitui',
+    decidirCorrecao('Enterococcus faecalis', 'Candida albicans').regra === 'divergência → agente da cultura');
+  verificar('igual (mesmo normalizado) não mexe', decidirCorrecao('Klebsiella pneumoniae', 'KLEBSIELLA PNEUMONIAE') === null);
+  verificar('sem proposta não mexe', decidirCorrecao('Klebsiella pneumoniae', '') === null);
+  verificar('polimicrobiana com gênero do caso presente não mexe (específico)',
+    decidirCorrecao('Klebsiella pneumoniae', 'Klebsiella pneumoniae + Serratia marcescens') === null);
+  verificar('genérico → genérico do mesmo gênero é ruído, não mexe',
+    decidirCorrecao('Acinetobacter', 'Acinetobacter spp') === null);
+  verificar('sentinela __NAO_CULTURA__ vale como sem agente',
+    decidirCorrecao('__NAO_CULTURA__', 'Candida albicans').regra === 'sem agente → preenchido');
+  verificar('divergência NÃO rebaixa agente nomeado para cultura não identificada',
+    decidirCorrecao('Enterobacter spp', 'Bacilo Gram negativo (não identificado)') === null
+    && decidirCorrecao('', 'Bacilo Gram negativo (não identificado)').regra === 'sem agente → preenchido');
 }
 
 /* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==

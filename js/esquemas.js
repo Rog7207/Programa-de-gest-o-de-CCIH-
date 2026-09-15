@@ -75,7 +75,11 @@ const ESQUEMAS = {
   iras: {
     arquivo: 'iras.xlsx',
     abas: {
-      casos: ['ID_IRAS', 'Prontuario', 'DataInfeccao', 'Topografia', 'CriterioDiagnostico', 'Setor', 'DispositivoAssociado', 'Microrganismo', 'Desfecho', 'StatusInvestigacao', 'NotificadoANVISA', 'Observacoes', 'ConfirmadoPor', 'ConfirmadoEm', 'CriadoPor', 'CriadoEm']
+      /* AgenteOriginal + ID_CulturaAgente: rastro das correções de agente pela cultura
+         vinculada (scripts/corrigir-agentes-iras.js) — a cultura ligada pode ser a errada,
+         então toda correção fica visível e reversível. AgenteOriginal guarda o valor
+         PRIMITIVO (nunca sobrescrito por correções posteriores). */
+      casos: ['ID_IRAS', 'Prontuario', 'DataInfeccao', 'Topografia', 'CriterioDiagnostico', 'Setor', 'DispositivoAssociado', 'Microrganismo', 'AgenteOriginal', 'ID_CulturaAgente', 'Desfecho', 'StatusInvestigacao', 'NotificadoANVISA', 'Observacoes', 'ConfirmadoPor', 'ConfirmadoEm', 'CriadoPor', 'CriadoEm']
     }
   },
   /* Censo mensal agregado por setor: os denominadores que o censo individual não dá.

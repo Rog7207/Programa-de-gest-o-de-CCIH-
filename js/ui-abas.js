@@ -897,13 +897,59 @@ async function montarCirurgias(conteudo) {
   const pacientes = new Map(bancoPacientes.pacientes.map(p => [normalizarProntuario(p.Prontuario), p]));
   const hoje = hojeISO();
 
-  const total = banco.cirurgias.length;
   const pendentes = banco.cirurgias.filter(c => c.StatusVigilancia === 'pendente')
     .sort((a, b) => String(a.DataCirurgia).localeCompare(String(b.DataCirurgia)));
-  const comISC = banco.cirurgias.filter(c => c.ISC === 'S').length;
-  const resumo = [['Em vigilância', pendentes.length], ['Com ISC', comISC], ['Total de cirurgias', total]];
-  conteudo.append(el('div', { class: 'grade-cartoes' }, ...resumo.map(([r, n]) =>
-    el('div', { class: 'cartao cartao-numero' }, el('div', { class: 'numero-grande' }, fmtInt(n)), el('div', { class: 'texto-suave' }, r)))));
+
+  /* ---- Resumo por período + profilaxia (pedido da revisão tela a tela, 16/09/2026).
+     O seletor de datas rege os cartões e o quadro de profilaxia; "em vigilância" é
+     estado atual e fica fora do período. Padrão: últimos 90 dias. ---- */
+  const corte90c = (() => { const d = new Date(Date.parse(hoje + 'T00:00:00Z') - 90 * 864e5);
+    return d.toISOString().slice(0, 10); })();
+  const cirDe = el('input', { type: 'date', value: corte90c });
+  const cirAte = el('input', { type: 'date', value: hoje });
+  const areaResumoCir = el('div', {});
+  const desenharResumoCir = () => {
+    const de = cirDe.value || '0000-01-01', ate = cirAte.value || '9999-12-31';
+    const doPeriodo = banco.cirurgias.filter(c => {
+      const d = String(c.DataCirurgia).slice(0, 10);
+      return /^\d{4}-/.test(d) && d >= de && d <= ate && c.StatusVigilancia !== 'descartada';
+    });
+    const comProf = doPeriodo.filter(c => String(c.ProfilaxiaAntibiotico || '').trim());
+    const prolongadas = comProf.filter(c => String(c.ProfilaxiaAntibiotico).includes('D+'));
+    const porDroga = new Map();
+    for (const c of comProf) {
+      const drogas = String(c.ProfilaxiaAntibiotico).split(' — ')[0].split(' + ');
+      drogas.forEach(dd => { const nome = dd.trim(); if (nome) porDroga.set(nome, (porDroga.get(nome) || 0) + 1); });
+    }
+    const topDrogas = [...porDroga.entries()].sort((x, y) => y[1] - x[1]).slice(0, 8);
+    areaResumoCir.replaceChildren(
+      el('div', { class: 'grade-cartoes' }, ...[
+        ['Cirurgias no período', doPeriodo.length],
+        ['Com ISC', doPeriodo.filter(c => c.ISC === 'S').length],
+        ['Com profilaxia registrada', doPeriodo.length
+          ? fmtInt(comProf.length) + ' (' + Math.round(comProf.length / doPeriodo.length * 100) + '%)' : '0'],
+        ['Profilaxia além de D+1', prolongadas.length],
+        ['Em vigilância (hoje)', pendentes.length]
+      ].map(([r, n]) => el('div', { class: 'cartao cartao-numero' },
+        el('div', { class: 'numero-grande' }, typeof n === 'number' ? fmtInt(n) : n),
+        el('div', { class: 'texto-suave' }, r)))),
+      topDrogas.length ? el('div', { class: 'cartao' },
+        el('h2', {}, 'Profilaxia antibiótica no período'),
+        el('table', { class: 'tabela' },
+          el('thead', {}, el('tr', {}, ['Antibiótico', 'Cirurgias'].map(t => el('th', {}, t)))),
+          el('tbody', {}, topDrogas.map(([nome, n]) => el('tr', {},
+            el('td', {}, nome), el('td', {}, fmtInt(n)))))),
+        el('p', { class: 'texto-suave' },
+          'Do relatório de baixas do centro cirúrgico (janela D-1 a D+1 da cirurgia). '
+          + '"Além de D+1" = baixas da mesma internação até D+7 — candidatas a profilaxia prolongada.')) : null);
+  };
+  [cirDe, cirAte].forEach(c2 => c2.addEventListener('change', desenharResumoCir));
+  conteudo.append(el('div', { class: 'cartao' },
+    el('div', { class: 'linha-campos' },
+      el('span', { style: 'display:flex; gap:14px; align-items:center' },
+        el('label', {}, 'De: ', cirDe), el('label', {}, 'Até: ', cirAte)))),
+    areaResumoCir);
+  desenharResumoCir();
 
   /* ---- Busca de paciente em TODAS as cirurgias (as listas abaixo só trazem recortes) ---- */
   const campoBusca = el('input', { type: 'search', placeholder: 'nome ou prontuário do paciente…', style: 'min-width:280px' });

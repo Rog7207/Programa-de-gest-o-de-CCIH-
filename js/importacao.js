@@ -2595,10 +2595,13 @@ function paresAtendimentoProntuario(pacientes, internacoes) {
     if (p) pronReais.add(p);
     if (a && p) pronDoAt.set(a, p);
   }
-  const nomeDoPron = new Map();
+  const nomeDoPron = new Map(), nomeCruDoPron = new Map();
   for (const p of (pacientes || [])) {
     const k = normalizarProntuario(p.Prontuario);
-    if (k && !nomeDoPron.has(k) && String(p.Nome || '').trim()) nomeDoPron.set(k, normalizarTexto(p.Nome));
+    if (k && !nomeDoPron.has(k) && String(p.Nome || '').trim()) {
+      nomeDoPron.set(k, normalizarTexto(p.Nome));
+      nomeCruDoPron.set(k, String(p.Nome).trim());
+    }
   }
   const pares = [], conflitos = [];
   for (const p of (pacientes || [])) {
@@ -2606,7 +2609,7 @@ function paresAtendimentoProntuario(pacientes, internacoes) {
     if (!k || pronReais.has(k)) continue;          /* prontuário de verdade: não é atendimento */
     const alvo = pronDoAt.get(k);
     if (!alvo || alvo === k) continue;
-    const par = { de: p.Prontuario, para: alvo, nome: p.Nome || '' };
+    const par = { de: p.Prontuario, para: alvo, nome: p.Nome || '', nomePara: nomeCruDoPron.get(alvo) || '' };
     if (_nomesCompativeis(normalizarTexto(p.Nome), nomeDoPron.get(alvo))) pares.push(par);
     else conflitos.push(par);
   }

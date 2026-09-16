@@ -28,6 +28,11 @@ const PASTA = process.env.PASTA_CCIH || path.join(os.homedir(), 'Documentos', 'D
 const APLICAR = process.argv.includes('--aplicar');
 const ESQUEMAS = esquemas.ESQUEMAS;
 const N = imp.normalizarProntuario;
+/* --forcar DE=PARA (repetível): aplica um par que caiu em conflito de nome, DEPOIS de o
+   usuário conferir os dois nomes e confirmar que é a mesma pessoa. */
+const FORCADOS = process.argv.filter(a => /^\d+=\d+$/.test(a) || a.startsWith('--forcar='))
+  .map(a => a.replace('--forcar=', ''))
+  .map(a => a.split('=')).filter(p => p.length === 2);
 
 const lerBancoXlsx = arquivo => {
   const wb = XLSX.read(fs.readFileSync(arquivo), { type: 'buffer' });
@@ -40,10 +45,24 @@ const bancoPac = lerBancoXlsx(path.join(PASTA, ESQUEMAS.pacientes.arquivo));
 const { pares, conflitos } = imp.paresAtendimentoProntuario(bancoPac.pacientes || [], bancoPac.internacoes || []);
 console.log(`pasta: ${PASTA}`);
 console.log(`pacientes: ${(bancoPac.pacientes || []).length} · unificáveis pelo atendimento: ${pares.length} · conflitos de nome (ficam de fora): ${conflitos.length}\n`);
-conflitos.forEach(c => console.log(`  CONFLITO ${c.de} → ${c.para} (nome não bate: revisar na mão)`));
+if (conflitos.length) {
+  console.log('CONFLITOS — o número casa com um atendimento, mas o NOME é de outra pessoa.');
+  console.log('Na maioria é coincidência de número (prontuário real × atendimento antigo): NÃO unificar.');
+  console.log('Se os dois nomes forem a mesma pessoa (grafia/abreviação), rode de novo com --forcar DE=PARA:\n');
+  for (const c of conflitos) {
+    console.log(`  ${String(c.de).padEnd(9)} "${c.nome || '(sem nome)'}"`);
+    console.log(`  → ${String(c.para).padEnd(7)} "${c.nomePara || '(sem nome)'}"\n`);
+  }
+}
 
-if (!pares.length) { console.log('nada a unificar.'); process.exit(0); }
 const mapa = new Map(pares.map(p => [N(p.de), N(p.para)]));
+for (const [de, para] of FORCADOS) {
+  const c = conflitos.find(x => N(x.de) === N(de) && N(x.para) === N(para));
+  if (!c) { console.log(`--forcar ${de}=${para} IGNORADO: não é um dos conflitos listados.`); continue; }
+  mapa.set(N(de), N(para));
+  console.log(`forçado (confirmado pelo usuário): ${de} → ${para}`);
+}
+if (!mapa.size) { console.log('nada a unificar.'); process.exit(0); }
 
 /* Reescreve o prontuário em todos os bancos com a coluna, como unificarProntuarios faz. */
 const bancosComProntuario = Object.keys(ESQUEMAS).filter(nome =>

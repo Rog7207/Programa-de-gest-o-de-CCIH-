@@ -295,9 +295,26 @@ function relatorioAntibioticos(bancos, setoresEscopo, inicio, fim) {
   const pd = doCenso ? doCenso.dias
     : (setoresEscopo ? 0 : pacientesDia((bancos.pacientes || {}).internacoes, inicio, fim));
   const dotMil = pd ? (dot / pd * 1000).toFixed(0) : null;
-  const avaliacoes = ((bancos.antibioticos || {}).avaliacoes || [])
+  /* Avaliações de TODAS as fontes: a aba própria e as feitas na visita da UTI pelo
+     miniapp (uti.avaliacoes_atb) — sem isso as da UTI ficavam órfãs no relatório. */
+  const avaliacoesUTI = (((bancos.uti || {}).avaliacoes_atb) || []).map(a => ({
+    Prontuario: a.Prontuario, Antibiotico: a.Antibiotico, Indicacao: a.Indicacao,
+    Avaliacao: a.Avaliacao, Recomendacao: a.Recomendacao, DataDados: a.Data, CriadoEm: a.CriadoEm }));
+  const avaliacoes = ((bancos.antibioticos || {}).avaliacoes || []).concat(avaliacoesUTI)
     .filter(a => relPeriodo(a.DataDados || a.CriadoEm, inicio, fim));
   const corretas = avaliacoes.filter(a => normalizarTexto(a.Avaliacao) === 'correto');
+  const daUTINoPeriodo = avaliacoesUTI.filter(a => relPeriodo(a.DataDados || a.CriadoEm, inicio, fim)).length;
+  /* Integração pelo prontuário: curso avaliado = alguma avaliação do MESMO paciente e da
+     MESMA droga com data dentro do curso (folga de 2 dias após o fim, para o parecer que
+     sai logo depois do término). */
+  const cursosAvaliados = noPeriodo.filter(c => avaliacoes.some(a => {
+    if (normalizarProntuario(a.Prontuario) !== normalizarProntuario(c.Prontuario)) return false;
+    if (normalizarTexto(a.Antibiotico) !== normalizarTexto(c.Antibiotico)) return false;
+    const d = String(a.DataDados || a.CriadoEm).slice(0, 10);
+    const depoisDoInicio = relDiasEntre(c.inicio, d);
+    const antesDoFim = relDiasEntre(d, c.fim);
+    return depoisDoInicio !== null && depoisDoInicio >= 0 && antesDoFim !== null && antesDoFim >= -2;
+  }));
 
   const secoes = [
     { titulo: 'Panorama', tipo: 'numeros', itens: [
@@ -307,7 +324,10 @@ function relatorioAntibioticos(bancos, setoresEscopo, inicio, fim) {
       ['Cursos prolongados (10+ dias)', `${prolongados.length} (${relPct(prolongados.length, noPeriodo.length)})`],
       ['Pacientes em antibiótico', pacientes.size],
       ['Avaliações de stewardship', avaliacoes.length],
+      ...(daUTINoPeriodo ? [['— feitas na visita da UTI (miniapp)', daUTINoPeriodo]] : []),
       ['Avaliadas como "Correto"', `${corretas.length} (${relPct(corretas.length, avaliacoes.length)})`],
+      ...(avaliacoes.length ? [['Cursos com avaliação casada (prontuário + droga)',
+        `${cursosAvaliados.length} (${relPct(cursosAvaliados.length, noPeriodo.length)})`]] : []),
       ...(dotMil ? [['Fonte do denominador', doCenso
         ? `censo mensal por setor (${doCenso.meses} mês(es) de competência)`
         : 'censo individual — total do hospital']] : [])
@@ -1039,7 +1059,7 @@ const RELATORIOS_PADRAO = [
 
 /* Bancos que os relatórios leem — a UI carrega todos de uma vez. */
 const BANCOS_RELATORIOS = ['iras', 'culturas', 'higiene_maos', 'antibioticos', 'isolamentos', 'denominadores',
-  'sepse', 'cirurgias', 'pacientes'];
+  'sepse', 'cirurgias', 'pacientes', 'uti'];
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { relatorioIRAS, relatorioMicrobiologico, relatorioHigiene,

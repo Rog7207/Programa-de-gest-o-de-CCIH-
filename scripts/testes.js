@@ -3050,6 +3050,42 @@ console.log('\n== 71. Análise de antibióticos do Tasy (tipo analise_atb) ==');
     null, '2026-08-01', '2026-08-31').secoes.some(s => s.titulo.includes('Análises de antibiótico')));
 }
 
+console.log('\n== 72. Avaliações de ATB da visita da UTI entram no stewardship ==');
+{
+  const rel = require(path.join(__dirname, '..', 'js', 'relatorios.js'));
+  const bancos = {
+    antibioticos: { prescricoes: [
+      { Prontuario: '100', Antibiotico: 'Meropenem', DataInicio: '2026-08-01', DataFim: '2026-08-07', Setor: 'CTI' },
+      { Prontuario: '200', Antibiotico: 'Vancomicina', DataInicio: '2026-08-01', DataFim: '2026-08-07', Setor: 'CTI' }
+    ], avaliacoes: [] },
+    pacientes: { internacoes: [] },
+    uti: { avaliacoes_atb: [
+      /* mesma pessoa, mesma droga, 2 dias após o fim: casa (folga) */
+      { Data: '2026-08-09', Prontuario: '100', Antibiotico: 'MEROPENEM', Avaliacao: 'Correto', Recomendacao: 'Manter' },
+      /* prontuário diferente: conta como avaliação, mas não casa curso nenhum */
+      { Data: '2026-08-03', Prontuario: '999', Antibiotico: 'Vancomicina', Avaliacao: 'Incorreto', Recomendacao: 'Suspender' },
+      /* fora do período do relatório: fica de fora */
+      { Data: '2026-09-15', Prontuario: '100', Antibiotico: 'Meropenem', Avaliacao: 'Correto', Recomendacao: 'Manter' }
+    ] }
+  };
+  const r = rel.relatorioAntibioticos(bancos, null, '2026-08-01', '2026-08-31');
+  const pan = r.secoes.find(s => s.titulo === 'Panorama');
+  const item = rot => (pan.itens.find(i => i[0] === rot) || [])[1];
+  verificar('avaliações da UTI contam no stewardship (2 no período)',
+    item('Avaliações de stewardship') === 2, JSON.stringify(pan.itens));
+  verificar('item próprio mostra quantas vieram da visita da UTI',
+    item('— feitas na visita da UTI (miniapp)') === 2);
+  verificar('"Correto" calculado sobre a união', String(item('Avaliadas como "Correto"')).startsWith('1 '));
+  verificar('curso casado pelo prontuário+droga com folga de 2 dias após o fim (1 de 2)',
+    String(item('Cursos com avaliação casada (prontuário + droga)')).startsWith('1 '),
+    JSON.stringify(pan.itens));
+  const rSemUti = rel.relatorioAntibioticos({ antibioticos: bancos.antibioticos, pacientes: { internacoes: [] } },
+    null, '2026-08-01', '2026-08-31');
+  verificar('sem banco uti, relatório segue funcionando',
+    !!rSemUti.secoes.find(s => s.titulo === 'Panorama'));
+  verificar('banco uti entrou na lista de bancos dos relatórios', rel.BANCOS_RELATORIOS.includes('uti'));
+}
+
 /* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==
    A tela é avaliada de verdade, com DOM falso. Pega o que sintaxe e teste de motor não
    pegam: helper que não existe (era `config.usuario`, que nunca existiu no projeto),

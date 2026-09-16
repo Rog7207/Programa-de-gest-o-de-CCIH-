@@ -6,6 +6,22 @@
 
 async function montarDecisaoATB(conteudo) {
   conteudo.append(el('h1', {}, 'Decisão de antibioticoterapia empírica'));
+  /* QR do miniapp de celular (pedido da revisão tela a tela, 16/09/2026): mesma fonte e
+     mesmo gerador do cartão de Distribuição — o QR daqui nunca diverge do de lá. */
+  const miniapp = (typeof CATALOGO_MINIAPPS !== 'undefined' ? CATALOGO_MINIAPPS : [])
+    .find(m => m.titulo === 'Decisão de ATB empírica');
+  if (miniapp && miniapp.url) {
+    conteudo.append(el('div', { class: 'cartao', style: 'display:flex;gap:18px;align-items:center;flex-wrap:wrap' },
+      qrDe(miniapp.url, miniapp.titulo),
+      el('div', { style: 'max-width:520px' },
+        el('h2', {}, 'Leve no celular'),
+        el('p', { class: 'texto-suave' }, 'Aponte a câmera para o QR e BAIXE o arquivo (a pré-visualização do '
+          + 'Drive não executa — abra pela pasta Downloads ou ⋮ → Abrir com → Chrome). Depois de aberto, '
+          + 'funciona sem internet e registra as decisões do plantão para enviar à CCIH.'),
+        el('button', { class: 'botao-secundario', onclick: () =>
+          window.open('https://wa.me/?text=' + encodeURIComponent(miniapp.mensagem + '\n' + miniapp.url), '_blank') },
+          'Enviar pelo WhatsApp'))));
+  }
   let bancos;
   try {
     const [bCulturas, bAntibioticos, bPacientes] = await Promise.all([

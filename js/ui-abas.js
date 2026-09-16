@@ -493,7 +493,10 @@ async function montarPacientes(conteudo) {
     el('div', { class: 'linha-campos' },
       el('label', {}, 'Nome/prontuário: ', buscaTexto),
       el('label', {}, 'Setor: ', buscaSetor),
-      el('label', {}, 'De: ', buscaDe), el('label', {}, 'Até: ', buscaAte)),
+      /* As duas datas andam JUNTAS: agrupadas num flex próprio, quebram de linha como
+         um bloco só — nunca "De" numa linha e "Até" na outra. */
+      el('span', { style: 'display:flex; gap:14px; align-items:center' },
+        el('label', {}, 'De: ', buscaDe), el('label', {}, 'Até: ', buscaAte))),
     el('div', { class: 'linha-campos' }, ...CRITERIOS_BUSCA.map(([id, rotulo], i) =>
       el('label', { class: 'linha-clicavel' }, caixasBusca[i], ' ' + rotulo))),
     areaResultado));

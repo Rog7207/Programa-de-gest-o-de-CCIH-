@@ -3235,6 +3235,68 @@ console.log('\n== 76. Indicadores da reunião da CCIH ==');
     d.isolamentos.ativos === 1 && d.isolamentos.porTipo[0][0] === 'Contato');
 }
 
+console.log('\n== 77. Busca clínica de pacientes (aba Pacientes) ==');
+{
+  const bancos = {
+    pacientes: {
+      pacientes: [
+        { Prontuario: '100', Nome: 'Ana Souza' },
+        { Prontuario: '200', Nome: 'Bento Lima' },
+        { Prontuario: '300', Nome: 'Caio Prado' },
+        { Prontuario: '400', Nome: 'Descartado da Silva', Descartado: 'S' }
+      ],
+      internacoes: [
+        { Prontuario: '100', DataInternacao: '2026-08-01', DataAlta: '', SetorAtual: 'CTI' },
+        { Prontuario: '200', DataInternacao: '2026-07-01', DataAlta: '2026-07-10', SetorAtual: 'Unidade 05' },
+        { Prontuario: '300', DataInternacao: '2026-08-05', DataAlta: '2026-08-20', SetorAtual: 'CTI' }
+      ]
+    },
+    iras: { casos: [{ Prontuario: '100', DataInfeccao: '2026-08-10', Setor: 'CTI' }] },
+    culturas: { culturas: [
+      { Prontuario: '300', DataColeta: '2026-08-06', Setor: 'CTI', Microrganismo: 'Klebsiella pneumoniae', StatusRevisao: 'avaliada' },
+      { Prontuario: '200', DataColeta: '2026-07-02', Setor: 'Unidade 05', Microrganismo: 'na', StatusRevisao: 'triagem' }
+    ] },
+    antibioticos: { prescricoes: [
+      { Prontuario: '100', Antibiotico: 'Meropenem', DataInicio: '2026-09-10', DataFim: '2026-09-20' },
+      { Prontuario: '200', Antibiotico: 'Ceftriaxona', DataInicio: '2026-07-02', DataFim: '2026-07-09' }
+    ] },
+    sepse: { casos: [{ Prontuario: '200', DataProtocolo: '2026-07-03', Setor: 'Unidade 05' }] },
+    cirurgias: { cirurgias: [{ Prontuario: '300', DataCirurgia: '2026-08-06' }] },
+    isolamentos: { precaucoes: [{ Prontuario: '100', DataInicio: '2026-08-15', DataFim: '', Setor: 'CTI' }] }
+  };
+  const imp2 = imp.buscarPacientes;
+
+  const r1 = imp2(bancos, { setor: 'CTI', criterios: {} });
+  verificar('setor sem critério = internados no setor (100 e 300)',
+    r1.resultados.length === 2 && r1.criteriosAtivos.includes('internado'),
+    JSON.stringify(r1.resultados.map(x => x.paciente.Prontuario)));
+
+  const r2 = imp2(bancos, { setor: 'CTI', de: '2026-08-01', ate: '2026-08-31', criterios: { iras: true } });
+  verificar('IRAS de agosto no CTI = só 100', r2.resultados.length === 1 && r2.resultados[0].paciente.Prontuario === '100');
+
+  const r3 = imp2(bancos, { de: '2026-08-01', ate: '2026-08-31', criterios: { culturaPositiva: true } });
+  verificar('cultura positiva de agosto = só 300 ("na" não é germe)',
+    r3.resultados.length === 1 && r3.resultados[0].paciente.Prontuario === '300');
+
+  const r4 = imp2(bancos, { hoje: '2026-09-15', criterios: { atbAtual: true } });
+  verificar('antibiótico em uso hoje = só 100', r4.resultados.length === 1 && r4.resultados[0].paciente.Prontuario === '100');
+
+  const r5 = imp2(bancos, { de: '2026-07-01', ate: '2026-07-31', criterios: { atbPeriodo: true, sepse: true } });
+  verificar('E entre critérios: ATB + sepse em julho = só 200',
+    r5.resultados.length === 1 && r5.resultados[0].paciente.Prontuario === '200');
+
+  const r6 = imp2(bancos, { criterios: { isolamento: true }, de: '2026-09-01', ate: '2026-09-30' });
+  verificar('precaução sem fim segue ativa no período seguinte (100)',
+    r6.resultados.length === 1 && r6.resultados[0].paciente.Prontuario === '100');
+
+  const r7 = imp2(bancos, { busca: 'bento', criterios: {} });
+  verificar('busca por nome continua funcionando sem critérios', r7.resultados.length === 1
+    && r7.resultados[0].paciente.Prontuario === '200');
+
+  verificar('descartado nunca aparece', !imp2(bancos, { busca: 'descartado', criterios: {} }).resultados.length);
+  verificar('sem filtro nenhum não despeja o cadastro', imp2(bancos, { criterios: {} }).resultados.length === 0);
+}
+
 /* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==
    A tela é avaliada de verdade, com DOM falso. Pega o que sintaxe e teste de motor não
    pegam: helper que não existe (era `config.usuario`, que nunca existiu no projeto),

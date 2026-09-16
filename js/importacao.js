@@ -1122,6 +1122,86 @@ function lerEvolucoesTasy(matriz) {
   return { reconhecido: true, evolucoes, problemas, atendimentos: porAtendimento.size };
 }
 
+/* ---- Busca clínica de pacientes (aba Pacientes) ---------------------------------------
+   Filtros combinam por E; o período [de..ate] qualifica cada critério marcado (internação
+   que SOBREPÕE o período, cultura COLETADA nele, curso de ATB cruzando-o etc.); o setor
+   aplica-se ao critério correspondente (com a ressalva de que a internação registra o
+   setor de ENTRADA). Sem nenhum critério marcado, setor/período implicam "internado".
+   filtros: { busca, setor, de, ate, hoje, criterios: { internado, iras, culturaPositiva,
+   atbAtual, atbPeriodo, sepse, cirurgia, isolamento } } */
+function buscarPacientes(bancos, filtros) {
+  const f = filtros || {};
+  const criterios = Object.assign({}, f.criterios);
+  const de = String(f.de || '').slice(0, 10) || '0000-01-01';
+  const ate = String(f.ate || '').slice(0, 10) || '9999-12-31';
+  const hoje = String(f.hoje || '').slice(0, 10) || '9999-12-31';
+  const setor = String(f.setor || '').trim();
+  const busca = normalizarTexto(f.busca);
+  if (!Object.values(criterios).some(Boolean) && (setor || String(f.de || f.ate || '').trim())) {
+    criterios.internado = true;
+  }
+  const noPeriodo = data => { const d = String(data || '').slice(0, 10); return /^\d{4}-/.test(d) && d >= de && d <= ate; };
+  const sobrepoe = (inicio, fim) => {
+    const i = String(inicio || '').slice(0, 10);
+    if (!/^\d{4}-/.test(i) || i > ate) return false;
+    const x = String(fim || '').slice(0, 10);
+    return !/^\d{4}-/.test(x) || x >= de;
+  };
+  const casaSetor = valor => !setor || String(valor || '').trim() === setor;
+  const fimEfetivo = p => String(p.DataSuspensao || p.DataFim || p.DataInicio || '').slice(0, 10);
+
+  /* Índices por prontuário — uma passada por banco, não uma por paciente. */
+  const indice = new Map();
+  const marcar = (prontuario, criterio, info) => {
+    const k = normalizarProntuario(prontuario);
+    if (!k) return;
+    if (!indice.has(k)) indice.set(k, {});
+    const alvo = indice.get(k);
+    if (!alvo[criterio]) alvo[criterio] = info || true;
+  };
+  for (const i of ((bancos.pacientes || {}).internacoes || [])) {
+    if (sobrepoe(i.DataInternacao, i.DataAlta) && casaSetor(i.SetorAtual)) {
+      marcar(i.Prontuario, 'internado', { data: String(i.DataInternacao).slice(0, 10), setor: i.SetorAtual });
+    }
+  }
+  for (const k of ((bancos.iras || {}).casos || [])) {
+    if (noPeriodo(k.DataInfeccao) && casaSetor(k.Setor)) marcar(k.Prontuario, 'iras');
+  }
+  for (const c of ((bancos.culturas || {}).culturas || [])) {
+    if (c.StatusRevisao === 'descartada') continue;
+    if (germeDaCultura(c.Microrganismo) && noPeriodo(c.DataColeta) && casaSetor(c.Setor)) {
+      marcar(c.Prontuario, 'culturaPositiva');
+    }
+  }
+  for (const p of ((bancos.antibioticos || {}).prescricoes || [])) {
+    const inicio = String(p.DataInicio || '').slice(0, 10);
+    if (!/^\d{4}-/.test(inicio)) continue;
+    if (inicio <= hoje && fimEfetivo(p) >= hoje) marcar(p.Prontuario, 'atbAtual');
+    if (sobrepoe(inicio, fimEfetivo(p))) marcar(p.Prontuario, 'atbPeriodo');
+  }
+  for (const s of ((bancos.sepse || {}).casos || [])) {
+    if (noPeriodo(s.DataProtocolo) && casaSetor(s.Setor)) marcar(s.Prontuario, 'sepse');
+  }
+  for (const c of ((bancos.cirurgias || {}).cirurgias || [])) {
+    if (noPeriodo(c.DataCirurgia)) marcar(c.Prontuario, 'cirurgia');   /* cirurgia não tem setor */
+  }
+  for (const p of ((bancos.isolamentos || {}).precaucoes || [])) {
+    if (sobrepoe(p.DataInicio, p.DataFim) && casaSetor(p.Setor)) marcar(p.Prontuario, 'isolamento');
+  }
+
+  const ativos = Object.entries(criterios).filter(([, v]) => v).map(([c]) => c);
+  const resultados = [];
+  for (const p of ((bancos.pacientes || {}).pacientes || [])) {
+    if (p.Descartado === 'S') continue;
+    if (busca && !normalizarTexto(p.Nome).includes(busca) && !normalizarTexto(p.Prontuario).includes(busca)) continue;
+    const marcas = indice.get(normalizarProntuario(p.Prontuario)) || {};
+    if (ativos.length && !ativos.every(c => marcas[c])) continue;
+    if (!ativos.length && !busca) continue;   /* sem filtro nenhum: não despeja o cadastro inteiro */
+    resultados.push({ paciente: p, marcas });
+  }
+  return { resultados, criteriosAtivos: ativos };
+}
+
 /* Situação de internação NA DATA DA COLETA de uma cultura — o dado que separa infecção
    hospitalar de comunitária na revisão: coleta até o 2º dia de internação (<48h) é
    comunitária pelo critério clássico. Devolve:
@@ -3136,7 +3216,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome,
     enriquecerCirurgia, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, internacaoNaColeta, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, internacaoNaColeta, buscarPacientes, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

@@ -188,6 +188,13 @@ Fila (precisam de leitor/decisão): isolamentos vs.xls (8.230 precauções hist�
 Descartáveis: trio 4024 (sem prontuário/alta), isolamentos 15092026 (foto do dia).
 ALTAS 2023A2025/2026: reserva — inter cobre desfechos; estes têm setor/leito da saída.
 
+## Painel — cartão de "saúde dos dados" (ideia aprovada em 16/09/2026)
+
+O Painel é todo reativo a pendências clínicas; falta um cartãozinho de saúde dos DADOS:
+data da última importação de censo, de evoluções (a foto envelhece), de culturas — para
+lembrar quando cada fonte está ficando velha. Aprovado pelo usuário na revisão tela a
+tela; implementar numa rodada futura.
+
 ## Miniapps
 
 - **Decisão ATB no iPhone**: só funciona hospedado por `https` (arquivo baixado não roda no

@@ -384,8 +384,16 @@ async function unificarProntuario(de, para) {
 
 async function montarPacientes(conteudo) {
   conteudo.append(el('h1', {}, 'Pacientes'));
-  let banco;
-  try { banco = await lerBanco('pacientes'); }
+  let banco, bancosBusca;
+  try {
+    banco = await lerBanco('pacientes');
+    /* Bancos da busca clínica: quem falhar entra vazio — a busca continua funcionando
+       com os critérios que têm dados. */
+    const nomes = ['iras', 'culturas', 'antibioticos', 'sepse', 'cirurgias', 'isolamentos'];
+    const lidos = await Promise.all(nomes.map(n => lerBanco(n).catch(() => ({}))));
+    bancosBusca = { pacientes: banco };
+    nomes.forEach((n, i) => { bancosBusca[n] = lidos[i]; });
+  }
   catch (e) { conteudo.append(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message)); return; }
   const pseudos = banco.pacientes.filter(p => ehPseudoProntuario(p.Prontuario) && p.Descartado !== 'S');
   const descartados = banco.pacientes.filter(p => ehPseudoProntuario(p.Prontuario) && p.Descartado === 'S');
@@ -426,6 +434,70 @@ async function montarPacientes(conteudo) {
     conteudo.append(el('div', { class: 'cartao aviso-sucesso' }, app.avisoPacientes));
     app.avisoPacientes = null;
   }
+
+  /* ---- Busca clínica: a razão de ser da aba (pedido de 16/09/2026). Filtros combinam
+     por E; período qualifica cada critério; núcleo puro em buscarPacientes. ---- */
+  const CRITERIOS_BUSCA = [
+    ['internado', 'Internado'],
+    ['iras', 'Infecção hospitalar (IRAS)'],
+    ['culturaPositiva', 'Cultura positiva'],
+    ['atbAtual', 'Antibiótico em uso hoje'],
+    ['atbPeriodo', 'Antibiótico no período'],
+    ['sepse', 'Protocolo de sepse'],
+    ['cirurgia', 'Cirurgia'],
+    ['isolamento', 'Isolamento']
+  ];
+  const setoresBusca = [...new Set((banco.internacoes || []).map(i => i.SetorAtual).filter(Boolean))].sort();
+  const buscaTexto = el('input', { type: 'text', placeholder: 'nome ou prontuário' });
+  const buscaSetor = el('select', {}, el('option', { value: '' }, 'todos os setores'),
+    setoresBusca.map(s2 => el('option', { value: s2 }, s2)));
+  const buscaDe = el('input', { type: 'date' });
+  const buscaAte = el('input', { type: 'date' });
+  const caixasBusca = CRITERIOS_BUSCA.map(() => el('input', { type: 'checkbox' }));
+  const areaResultado = el('div', {});
+  const rotuloCriterio = new Map(CRITERIOS_BUSCA);
+
+  function aplicarBusca() {
+    const criterios = {};
+    CRITERIOS_BUSCA.forEach(([id], i) => { criterios[id] = caixasBusca[i].checked; });
+    const temAlgo = buscaTexto.value.trim() || buscaSetor.value || buscaDe.value || buscaAte.value
+      || Object.values(criterios).some(Boolean);
+    if (!temAlgo) {
+      areaResultado.replaceChildren(el('p', { class: 'texto-suave' },
+        'Digite um nome/prontuário ou marque filtros — ex.: setor + "internado", ou período + "cultura positiva".'));
+      return;
+    }
+    const { resultados, criteriosAtivos } = buscarPacientes(bancosBusca, {
+      busca: buscaTexto.value, setor: buscaSetor.value, de: buscaDe.value, ate: buscaAte.value,
+      hoje: hojeISO(), criterios });
+    const mostrados = resultados.slice(0, 200);
+    areaResultado.replaceChildren(
+      el('p', { class: 'texto-suave' }, `${fmtInt(resultados.length)} paciente(s)`
+        + (resultados.length > 200 ? ' (mostrando 200)' : '')
+        + (criteriosAtivos.length ? ' · critérios: ' + criteriosAtivos.map(c => rotuloCriterio.get(c)).join(' + ') : '')),
+      el('table', { class: 'tabela' },
+        el('thead', {}, el('tr', {}, ['Prontuário', 'Nome', 'Internação no período', 'Telefone'].map(c => el('th', {}, c)))),
+        el('tbody', {}, mostrados.map(({ paciente: p2, marcas }) => el('tr', {
+          class: 'linha-clicavel', title: 'Abrir a ficha completa',
+          onclick: () => abrirPaciente(p2.Prontuario) },
+          el('td', {}, String(p2.Prontuario || '')),
+          el('td', {}, String(p2.Nome || '')),
+          el('td', {}, marcas.internado && marcas.internado.data
+            ? marcas.internado.data + (marcas.internado.setor ? ' · ' + marcas.internado.setor : '') : ''),
+          el('td', {}, String(p2.Telefone || '')))))));
+  }
+  buscaTexto.addEventListener('input', aoPararDeDigitar(aplicarBusca));
+  [buscaSetor, buscaDe, buscaAte, ...caixasBusca].forEach(c2 => c2.addEventListener('change', aplicarBusca));
+  conteudo.append(el('div', { class: 'cartao' },
+    el('h2', {}, 'Buscar pacientes'),
+    el('div', { class: 'linha-campos' },
+      el('label', {}, 'Nome/prontuário: ', buscaTexto),
+      el('label', {}, 'Setor: ', buscaSetor),
+      el('label', {}, 'De: ', buscaDe), el('label', {}, 'Até: ', buscaAte)),
+    el('div', { class: 'linha-campos' }, ...CRITERIOS_BUSCA.map(([id, rotulo], i) =>
+      el('label', { class: 'linha-clicavel' }, caixasBusca[i], ' ' + rotulo))),
+    areaResultado));
+  aplicarBusca();
 
   conteudo.append(el('div', { class: 'grade-cartoes' }, ...[
     ['Pacientes', banco.pacientes.length],
@@ -529,23 +601,6 @@ async function montarPacientes(conteudo) {
           el('td', {}, el('button', { class: 'botao-secundario', onclick: () => reverterPseudo(p.Prontuario) }, '↩ Reverter')))))))));
   }
 
-  const campoBusca = el('input', { type: 'text', placeholder: 'nome ou prontuário' });
-  const areaLista = el('div', {});
-  campoBusca.addEventListener("input", aoPararDeDigitar(listar));
-  conteudo.append(el('div', { class: 'cartao' },
-    el('div', { class: 'linha-campos' }, el('label', {}, 'Buscar: ', campoBusca)), areaLista));
-
-  function listar() {
-    const b = normalizarTexto(campoBusca.value);
-    const achados = banco.pacientes.filter(p =>
-      !b || normalizarTexto(p.Nome).includes(b) || normalizarTexto(p.Prontuario).includes(b)).slice(0, 50);
-    areaLista.replaceChildren(el('table', { class: 'tabela' },
-      el('thead', {}, el('tr', {}, ['Prontuário', 'Nome', 'Nascimento', 'Telefone'].map(c => el('th', {}, c)))),
-      el('tbody', {}, achados.map(p => el('tr', { class: 'linha-clicavel', title: 'Abrir a ficha completa',
-        onclick: () => abrirPaciente(p.Prontuario) },
-        [p.Prontuario, p.Nome, p.DataNascimento, p.Telefone].map(v => el('td', {}, String(v || ''))))))));
-  }
-  listar();
 }
 
 /* ---- Aba Isolamentos (precauções e pendências de multirresistentes) ---- */

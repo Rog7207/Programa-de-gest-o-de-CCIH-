@@ -254,19 +254,25 @@ function resumoParaVisitaUTI(bancos, setor, hoje, mecanismosMonitorados) {
 
   const blocos = [];
 
-  /* MDR do mês: mecanismo declarado ou inferido do antibiograma. */
+  /* MDR do mês: mecanismo declarado ou inferido do antibiograma. A lista de "MDR
+     monitorados" da config vale para os ALERTAS de precaução do painel; no resumo da
+     visita entram TODOS os mecanismos — um MRSA fora da lista sumia daqui (visto no
+     banco real em 16/09/2026). */
   const culturas = ((bancos.culturas || {}).culturas || []).filter(c => doSetor(c.Setor));
   const mdr = detectarMultirresistentes(
     culturas.filter(c => String(c.DataColeta) >= corte),
-    (bancos.culturas || {}).sensibilidade || [], hoje, 30, mecanismosMonitorados);
+    (bancos.culturas || {}).sensibilidade || [], hoje, 30, null);
   if (mdr.length) {
     blocos.push({ titulo: `🦠 Multirresistentes (${mdr.length} no mês)`, linhas: mdr.slice(0, 8).map(a =>
       `${a.Microrganismo} (${a.Mecanismo}) — ${rotuloPaciente(a.Prontuario)} — coleta ${String(a.DataColeta).slice(0, 10)}`) });
   }
 
-  /* Isolamentos valendo agora. */
+  /* Isolamentos valendo agora: ativo = SEM data de fim (e não marcado encerrado). O
+     Status vem vazio em metade das precauções importadas — exigir Status === 'ativo'
+     escondia 32 de 38 ativas no banco real (visto em 16/09/2026). */
   const isolados = ((bancos.isolamentos || {}).precaucoes || [])
-    .filter(p => doSetor(p.Setor) && p.Status === 'ativo' && !String(p.DataFim || '').trim());
+    .filter(p => doSetor(p.Setor) && !String(p.DataFim || '').trim()
+      && normalizarTexto(p.Status) !== 'encerrado');
   if (isolados.length) {
     blocos.push({ titulo: `🚧 Em isolamento agora (${isolados.length})`, linhas: isolados.map(p =>
       `${p.TipoPrecaucao} — ${String(p.Motivo || '').slice(0, 48)} — ${rotuloPaciente(p.Prontuario, p.Leito)}`) });

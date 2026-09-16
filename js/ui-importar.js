@@ -283,8 +283,11 @@ async function processarArquivo(arquivo, codificacao, opcoesAba) {
            parser de datas do Excel trocaria dia e mês — por isso a releitura com raw. */
         const wbCru = XLSX.read(imp.buffer, { type: 'array', raw: true });
         for (const n of wbCru.SheetNames) {
-          const niss = lerCensoNISS(XLSX.utils.sheet_to_json(wbCru.Sheets[n], { header: 1, raw: true, defval: '' }));
+          const matrizCrua = XLSX.utils.sheet_to_json(wbCru.Sheets[n], { header: 1, raw: true, defval: '' });
+          const niss = lerCensoNISS(matrizCrua);
           if (niss.reconhecido && niss.linhas.length) { telaCensoNISS(arquivo, niss); return; }
+          const evolucoes = lerEvolucoesTasy(matrizCrua);
+          if (evolucoes.reconhecido && evolucoes.evolucoes.length) { await telaEvolucoes(arquivo, evolucoes); return; }
         }
       }
     }
@@ -470,6 +473,63 @@ async function gravarDispositivosDia(abas, arquivo, setor) {
   } catch (e) {
     imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao gravar: ' + e.message));
   }
+}
+
+/* Evoluções do Tasy: foto operacional. A tela mostra o que fica e o que cai pela regra de
+   retenção (só paciente com cultura pendente ou antibiótico em curso) ANTES de gravar —
+   e a gravação SUBSTITUI a foto anterior, nunca acumula. */
+async function telaEvolucoes(arquivo, leitura) {
+  let retidas = [];
+  try {
+    const [bCulturas, bAtb, bPacientes] = await Promise.all([
+      lerBanco('culturas'), lerBanco('antibioticos'), lerBanco('pacientes')]);
+    retidas = filtrarEvolucoesRetidas(leitura.evolucoes,
+      { culturas: bCulturas, antibioticos: bAtb, pacientes: bPacientes }, hojeISO());
+  } catch (e) {
+    imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message));
+    return;
+  }
+  const descartadas = leitura.evolucoes.length - retidas.length;
+  const datas = [...new Set(retidas.map(e => e.DataEvolucao))].sort();
+
+  imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
+    el('h2', {}, 'Evoluções do Tasy (foto operacional)'),
+    el('p', {}, `Reconheci ${arquivo.name} como o export de evoluções. `
+      + `${fmtInt(leitura.evolucoes.length)} evoluções (última geral + última médica) de `
+      + `${fmtInt(leitura.atendimentos)} atendimentos.`),
+    el('p', {}, `Ficam ${fmtInt(retidas.length)} — pacientes com cultura pendente ou antibiótico em curso. `
+      + `${fmtInt(descartadas)} sem pendência são descartadas, e a foto anterior é substituída inteira.`),
+    datas.length ? el('p', { class: 'texto-suave' }, 'Datas: ' + datas.join(', ')
+      + '. O texto fica só neste banco local — nunca sai em exportação ou miniapp.') : null,
+    leitura.problemas.length ? el('details', {},
+      el('summary', {}, `${fmtInt(leitura.problemas.length)} linha(s) com problema`),
+      el('ul', {}, leitura.problemas.slice(0, 20).map(p => el('li', {}, p)))) : null,
+    el('div', { class: 'linha-botoes' },
+      el('button', { class: 'botao-primario', onclick: async () => {
+        imp.detalhes.replaceChildren(el('div', { class: 'cartao' }, el('p', {}, 'Gravando…')));
+        try {
+          const agora = new Date().toISOString().slice(0, 16).replace('T', ' ');
+          const resumo = await comTrava(['evolucoes'], async () => {
+            const banco = await lerBanco('evolucoes');
+            const gerarID = proximoID([], 'ID_Evolucao', 'EVO');
+            banco.evolucoes = retidas.map(e => ({ ID_Evolucao: gerarID(), ...e,
+              CriadoPor: app.usuario || '', CriadoEm: agora }));
+            await gravarBanco('evolucoes', banco);
+            return banco.evolucoes.length;
+          });
+          imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
+            el('h2', {}, 'Importado'),
+            el('p', {}, `Foto do dia gravada: ${fmtInt(resumo)} evoluções de pacientes com pendência.`),
+            el('p', { class: 'texto-suave' }, 'Aparecem na ficha do paciente enquanto a pendência existir.')));
+        } catch (e) {
+          imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao gravar: ' + e.message));
+        }
+      } }, 'Substituir a foto do dia'),
+      ' ',
+      el('button', { onclick: () => {
+        imp.forcarPlanilhaComum = true;
+        processarArquivo(arquivo, 'auto');
+      } }, 'Não é isso — ler como planilha comum'))));
 }
 
 /* Censo diário de invasividade (NISS/Tasy): o setor vem do PRÓPRIO arquivo — a tela só

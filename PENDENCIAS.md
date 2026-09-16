@@ -175,6 +175,13 @@ Prontos para o usuário importar pela tela normal (validados em dry-run):
   3.780/5.637 cirurgias, 28 prolongadas. **Aguardando --aplicar.** Limitação: Dt baixa não
   tem hora — a janela de 60 min pré-incisão (IntervaloProfilaxia) precisa do relatório com
   hora da administração, a pedir ao TI.
+- **evoluc.xls (evoluções do Tasy)** — FEITO (16/09/2026): foto operacional. lerEvolucoesTasy
+  guarda última geral + última médica por atendimento (texto aparado em 1.500); a gravação
+  SUBSTITUI a foto e retém só paciente com pendência (cultura no painel ou ATB em curso) —
+  regra do usuário: "sem pendência, apaga". Exibida na ficha do paciente. Prova real:
+  7.252 evoluções → 250 retidas (212 KB). Rotina: exportar o evoluc do dia e arrastar no app.
+- **Dados vitais (Tasy)** — aguardando exemplar do arquivo; deve permitir marcar febre/SIRS
+  no dia da coleta da cultura (dado estruturado, barato de guardar).
 Fila (precisam de leitor/decisão): isolamentos vs.xls (8.230 precauções históricas),
 2393.xls (dispositivos por paciente), 2405.xls
 (nascimento+telefone — chave "Cd pessoa física" só casa 661/7.632, investigar).

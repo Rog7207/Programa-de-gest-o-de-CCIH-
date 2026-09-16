@@ -3113,6 +3113,53 @@ console.log('\n== 73. Profilaxia cirúrgica a partir das baixas do Tasy ==');
   verificar('data de cirurgia inválida devolve null', profilaxiaDaCirurgia('', baixas) === null);
 }
 
+console.log('\n== 74. Evoluções do Tasy: foto operacional com retenção por pendência ==');
+{
+  const cab = ['Nr atendimento', 'Cd evolucao', 'Ds setor atendimento', 'Ie evolucao clinica',
+    'Dt evolucao', 'Dt inativacao', 'Nm pessoa evolucao', 'Ds evolucao'];
+  const matriz = [cab,
+    ['111', 1, 'CTI', 'ENF', 46279, '', 'Enf. A', 'anotação de enfermagem'],
+    ['111', 2, 'CTI', 'E', 46279, '', 'Dr. B', 'evolução médica do dia'],
+    ['111', 3, 'CTI', 'SAE', 46280, '', 'Enf. C', 'sistematização (a última geral)'],
+    ['222', 4, 'Unidade 05', 'E', 46280, '', 'Dr. D', 'x'.repeat(2000)],
+    ['333', 5, 'Emergência', 'E', 46280, 46280, 'Dr. E', 'evolução INATIVADA — fora'],
+    ['444', 6, 'Unidade 09', 'E', 46280, '', 'Dr. F', 'paciente sem pendência nenhuma']
+  ];
+  const r = imp.lerEvolucoesTasy(matriz);
+  verificar('reconhece e guarda última geral + última médica por atendimento',
+    r.reconhecido && r.evolucoes.filter(e => e.Atendimento === '111').length === 2
+    && r.evolucoes.some(e => e.Atendimento === '111' && e.Categoria === 'SAE')
+    && r.evolucoes.some(e => e.Atendimento === '111' && e.Categoria === 'E'), JSON.stringify(r.evolucoes.map(e => e.Atendimento + '/' + e.Categoria)));
+  verificar('texto longo é aparado', r.evolucoes.find(e => e.Atendimento === '222').Texto.length <= 1510
+    && r.evolucoes.find(e => e.Atendimento === '222').Texto.endsWith('[…]'));
+  verificar('evolução inativada fica de fora', !r.evolucoes.some(e => e.Atendimento === '333'));
+  verificar('data em serial vira ISO', r.evolucoes.find(e => e.Atendimento === '444').DataEvolucao === '2026-09-15');
+
+  /* Retenção: só fica quem tem cultura pendente ou antibiótico em curso. */
+  const bancos = {
+    pacientes: { internacoes: [
+      { Prontuario: 'P1', Atendimento: '111' },
+      { Prontuario: 'P2', Atendimento: '222' },
+      { Prontuario: 'P4', Atendimento: '444' }
+    ] },
+    /* P1: cultura pendente no painel */
+    culturas: { culturas: [{ Prontuario: 'P1', StatusRevisao: 'pendente', AvaliacaoCCIH: 'Possível infecção', Microrganismo: 'Klebsiella pneumoniae' }] },
+    /* atendimento 222: antibiótico em curso hoje */
+    antibioticos: { prescricoes: [
+      { Atendimento: '222', Prontuario: 'P2', Antibiotico: 'Meropenem', DataInicio: '2026-09-13', DataFim: '2026-09-20' },
+      /* curso já encerrado não segura evolução */
+      { Atendimento: '444', Prontuario: 'P4', Antibiotico: 'Cefazolina', DataInicio: '2026-09-01', DataFim: '2026-09-03' }
+    ] }
+  };
+  const retidas = imp.filtrarEvolucoesRetidas(r.evolucoes, bancos, '2026-09-15');
+  verificar('cultura pendente segura as evoluções do paciente (111 fica, com prontuário resolvido)',
+    retidas.filter(e => e.Atendimento === '111').length === 2
+    && retidas.every(e => e.Atendimento !== '111' || e.Prontuario === 'P1'), JSON.stringify(retidas.map(e => e.Atendimento)));
+  verificar('antibiótico em curso segura (222 fica)', retidas.some(e => e.Atendimento === '222'));
+  verificar('sem pendência, a evolução é descartada (444 sai — curso já encerrado)',
+    !retidas.some(e => e.Atendimento === '444'));
+}
+
 /* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==
    A tela é avaliada de verdade, com DOM falso. Pega o que sintaxe e teste de motor não
    pegam: helper que não existe (era `config.usuario`, que nunca existiu no projeto),

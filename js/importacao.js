@@ -1064,6 +1064,102 @@ function lerCensoNISS(matriz) {
   return { reconhecido, linhas, problemas, cobertura, conferencia: [] };
 }
 
+/* ---- Evoluções do Tasy (foto operacional) --------------------------------------------
+   Export diário das evoluções em texto livre. Não é histórico: por atendimento ficam só a
+   ÚLTIMA evolução e a última MÉDICA (categoria E), texto aparado — contexto para revisar
+   cultura e analisar antibiótico sem abrir o Tasy. Datas em serial do Excel. */
+const TAMANHO_EVOLUCAO = 1500;
+function lerEvolucoesTasy(matriz) {
+  const linhas = (matriz || []);
+  let cab = -1, col = {};
+  for (let i = 0; i < Math.min(linhas.length, 5); i++) {
+    const nomes = (linhas[i] || []).map(c => normalizarTexto(c));
+    if (nomes.includes('nratendimento') && nomes.includes('dsevolucao')) {
+      cab = i;
+      nomes.forEach((n, j) => { col[n] = j; });
+      break;
+    }
+  }
+  if (cab < 0) return { reconhecido: false, evolucoes: [], problemas: [] };
+  const valor = (l, nome) => col[nome] === undefined ? '' : String(l[col[nome]] == null ? '' : l[col[nome]]).trim();
+  const dataDe = v => {
+    const n = Number(v);
+    if (isFinite(n) && n > 40000 && n < 80000) return new Date(Date.UTC(1899, 11, 30) + n * 864e5).toISOString().slice(0, 10);
+    const m = String(v).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : '';
+  };
+  const problemas = [];
+  const porAtendimento = new Map();
+  for (const l of linhas.slice(cab + 1)) {
+    const atendimento = valor(l, 'nratendimento').replace(/\D/g, '');
+    const texto = valor(l, 'dsevolucao');
+    if (!atendimento || !texto) continue;
+    if (valor(l, 'dtinativacao')) continue;              /* evolução inativada não vale */
+    const data = dataDe(valor(l, 'dtevolucao'));
+    if (!data) { problemas.push('evolução sem data no atendimento ' + atendimento); continue; }
+    const evo = {
+      Atendimento: atendimento, Prontuario: '',
+      Setor: valor(l, 'dssetoratendimento'),
+      Categoria: valor(l, 'ieevolucaoclinica'),
+      DataEvolucao: data,
+      Autor: valor(l, 'nmpessoaevolucao'),
+      Texto: texto.length > TAMANHO_EVOLUCAO ? texto.slice(0, TAMANHO_EVOLUCAO) + ' […]' : texto,
+      _ordem: Number(valor(l, 'cdevolucao')) || 0
+    };
+    if (!porAtendimento.has(atendimento)) porAtendimento.set(atendimento, []);
+    porAtendimento.get(atendimento).push(evo);
+  }
+  const evolucoes = [];
+  for (const lista of porAtendimento.values()) {
+    lista.sort((a, b) => a.DataEvolucao.localeCompare(b.DataEvolucao) || a._ordem - b._ordem);
+    const ultima = lista[lista.length - 1];
+    const medicas = lista.filter(e => e.Categoria === 'E');
+    const ultimaMedica = medicas[medicas.length - 1];
+    evolucoes.push(ultima);
+    if (ultimaMedica && ultimaMedica !== ultima) evolucoes.push(ultimaMedica);
+  }
+  evolucoes.forEach(e => { delete e._ordem; });
+  return { reconhecido: true, evolucoes, problemas, atendimentos: porAtendimento.size };
+}
+
+/* Retenção decidida pelo usuário (16/09/2026): a evolução só fica no banco enquanto o
+   paciente tem PENDÊNCIA — cultura no painel de revisão ou antibiótico em curso. Sem
+   pendência, é descartada (e a foto inteira é substituída a cada importação). Também
+   resolve o prontuário pelo atendimento, para a ficha do paciente achar. */
+function filtrarEvolucoesRetidas(evolucoes, bancos, hoje) {
+  const culturas = ((bancos.culturas || {}).culturas) || [];
+  const prescricoes = ((bancos.antibioticos || {}).prescricoes) || [];
+  const internacoes = ((bancos.pacientes || {}).internacoes) || [];
+  const pronDoAt = new Map();
+  for (const i of internacoes) {
+    const a = normalizarProntuario(i.Atendimento), p = normalizarProntuario(i.Prontuario);
+    if (a && p) pronDoAt.set(a, p);
+  }
+  const pronPendentes = new Set();
+  for (const c of culturas) {
+    if (culturaDoPainel(c)) pronPendentes.add(normalizarProntuario(c.Prontuario));
+  }
+  const atdComATB = new Set(), pronComATB = new Set();
+  const dia = String(hoje || '').slice(0, 10);
+  for (const p of prescricoes) {
+    const inicio = String(p.DataInicio || '').slice(0, 10);
+    if (!/^\d{4}-/.test(inicio) || inicio > dia) continue;
+    const fim = String(p.DataSuspensao || p.DataFim || p.DataInicio).slice(0, 10);
+    if (fim < dia) continue;                             /* curso já encerrado */
+    if (String(p.Atendimento || '').trim()) atdComATB.add(normalizarProntuario(p.Atendimento));
+    if (String(p.Prontuario || '').trim()) pronComATB.add(normalizarProntuario(p.Prontuario));
+  }
+  const retidas = [];
+  for (const e of evolucoes) {
+    const atd = normalizarProntuario(e.Atendimento);
+    const pron = pronDoAt.get(atd) || '';
+    const pendente = atdComATB.has(atd) || (pron && (pronPendentes.has(pron) || pronComATB.has(pron)));
+    if (!pendente) continue;
+    retidas.push({ ...e, Prontuario: pron });
+  }
+  return retidas;
+}
+
 /* Competência (AAAA-MM) a partir do NOME do arquivo. Relatório mensal agregado costuma
    não trazer data nenhuma na tabela — o mês está só no nome ("Censo 012026.csv",
    "antibioticos 07-2026.xls", "Infecções 2026-03.xls"). Sem isso, dois meses diferentes
@@ -3013,7 +3109,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome,
     enriquecerCirurgia, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

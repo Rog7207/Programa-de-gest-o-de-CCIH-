@@ -41,7 +41,7 @@ async function montarPaciente(conteudo) {
   let bancos;
   try {
     const nomes = ['pacientes', 'culturas', 'antibioticos', 'cirurgias', 'dispositivos',
-      'uti', 'iras', 'isolamentos', 'sepse'];
+      'uti', 'iras', 'isolamentos', 'sepse', 'evolucoes'];
     const lidos = await Promise.all(nomes.map(n => lerBanco(n).catch(() => ({}))));
     bancos = {};
     nomes.forEach((n, i) => { bancos[n] = lidos[i]; });
@@ -113,6 +113,23 @@ async function montarPaciente(conteudo) {
     ['Protocolos de sepse', casosSepse.length], ['Casos de IRAS', casosIras.length]
   ].map(([r, n]) => el('div', { class: 'cartao cartao-numero' },
     el('div', { class: 'numero-grande' }, fmtInt(n)), el('div', { class: 'texto-suave' }, r)))));
+
+  /* ---- evoluções (foto operacional do Tasy) ----
+     Existem só enquanto o paciente tem pendência (cultura no painel ou ATB em curso) —
+     a importação diária substitui a foto. São o contexto clínico da revisão. */
+  const evolucoesPessoa = ((bancos.evolucoes || {}).evolucoes || []).filter(e =>
+    conjunto.has(normalizarProntuario(e.Prontuario)) || atendimentos.has(normalizarProntuario(e.Atendimento)))
+    .sort((a, b) => String(b.DataEvolucao).localeCompare(String(a.DataEvolucao)));
+  if (evolucoesPessoa.length) {
+    conteudo.append(el('div', { class: 'cartao' },
+      el('h2', {}, 'Últimas evoluções (foto do Tasy)'),
+      ...evolucoesPessoa.slice(0, 3).map(e => el('div', {},
+        el('p', {}, el('strong', {}, e.DataEvolucao),
+          [e.Setor, e.Autor, e.Categoria === 'E' ? 'evolução médica' : ''].filter(Boolean).map(t => ' · ' + t).join('')),
+        el('p', { class: 'texto-suave', style: 'white-space:pre-wrap' }, e.Texto))),
+      el('p', { class: 'texto-suave' },
+        'Foto do dia da importação — some quando não houver mais cultura pendente nem antibiótico em curso.')));
+  }
 
   /* ---- linha do tempo ---- */
   const eventos = [];

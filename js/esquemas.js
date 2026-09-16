@@ -69,6 +69,17 @@ const ESQUEMAS = {
       avaliacoes_atb: ['Data', 'Setor', 'Leito', 'Prontuario', 'Antibiotico', 'Indicacao', 'Avaliacao', 'Recomendacao', 'CriadoPor', 'CriadoEm']
     }
   },
+  /* Foto OPERACIONAL das evoluções do Tasy: substituída a cada importação do arquivo
+     diário e retida só enquanto o paciente tem pendência (cultura no painel de revisão
+     ou antibiótico em curso) — sem pendência, a evolução é apagada na importação
+     seguinte, por decisão do usuário (16/09/2026). Texto aparado; NUNCA sai em
+     exportação ou miniapp. */
+  evolucoes: {
+    arquivo: 'evolucoes.xlsx',
+    abas: {
+      evolucoes: ['ID_Evolucao', 'Atendimento', 'Prontuario', 'Setor', 'Categoria', 'DataEvolucao', 'Autor', 'Texto', 'CriadoPor', 'CriadoEm']
+    }
+  },
   higiene_maos: {
     arquivo: 'higiene_maos.xlsx',
     abas: {
@@ -171,6 +182,7 @@ const VOCAB_APLICACAO = {
   setores: [['sepse', 'casos', 'Setor'], ['culturas', 'culturas', 'Setor'], ['antibioticos', 'prescricoes', 'Setor'],
     ['pacientes', 'internacoes', 'SetorAtual'], ['pacientes', 'obitos', 'Setor'], ['iras', 'casos', 'Setor'],
     ['isolamentos', 'precaucoes', 'Setor'], ['uti', 'visitas', 'Setor'], ['uti', 'avaliacoes_atb', 'Setor'],
+    ['evolucoes', 'evolucoes', 'Setor'],
     ['higiene_maos', 'observacoes', 'Setor'], ['higiene_maos', 'consumo_alcool', 'Setor'],
     ['surtos', 'investigacoes', 'Setor'],
     ['denominadores', 'censo_setor', 'Setor'], ['denominadores', 'dispositivos_dia', 'Setor'],

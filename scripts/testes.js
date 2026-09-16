@@ -3333,6 +3333,19 @@ console.log('\n== 78. Detecção de surtos: grafias spp, janelas múltiplas e de
     al.mesmaSuspeita(janelaNova, { ...invDescartada, Situacao: 'em investigação', DataEncerramento: '' }) === true);
 }
 
+console.log('\n== 79. Setor-padrão das ISC (Centro Cirúrgico × Obstétrico) ==');
+{
+  verificar('procedimento obstétrico vai para o Centro Obstétrico',
+    imp.setorPadraoISC('Cesariana') === 'Unidade de Espera Centro Obstetrico'
+    && imp.setorPadraoISC('PARTO NORMAL') === 'Unidade de Espera Centro Obstetrico'
+    && imp.setorPadraoISC('Curetagem uterina') === 'Unidade de Espera Centro Obstetrico');
+  verificar('procedimento geral (ou desconhecido) vai para o Centro Cirúrgico',
+    imp.setorPadraoISC('Herniorrafia inguinal') === 'Centro Cirúrgico'
+    && imp.setorPadraoISC('') === 'Centro Cirúrgico');
+  verificar('histerectomia NÃO é obstétrica (é ginecológica — CC)',
+    imp.setorPadraoISC('Histerectomia total') === 'Centro Cirúrgico');
+}
+
 /* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==
    A tela é avaliada de verdade, com DOM falso. Pega o que sintaxe e teste de motor não
    pegam: helper que não existe (era `config.usuario`, que nunca existiu no projeto),

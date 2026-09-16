@@ -1104,7 +1104,7 @@ async function montarCirurgias(conteudo) {
             bancoIras.casos.push({
               ID_IRAS: proximoIDLista(bancoIras.casos, 'ID_IRAS', 'IRA'),
               Prontuario: c.Prontuario, DataInfeccao: campoData.value, Topografia: TIPOS_ISC[selTipo.value],
-              CriterioDiagnostico: 'Vigilância pós-alta', Setor: '', DispositivoAssociado: 'Nenhum',
+              CriterioDiagnostico: 'Vigilância pós-alta', Setor: setorPadraoISC(c.Procedimento), DispositivoAssociado: 'Nenhum',
               Microrganismo: '', Desfecho: '', StatusInvestigacao: 'em investigação',
               NotificadoANVISA: '', CriadoPor: app.usuario, CriadoEm: agoraCurto()
             });

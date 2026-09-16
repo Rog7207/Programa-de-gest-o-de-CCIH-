@@ -426,7 +426,7 @@ async function montarVigilancia(conteudo) {
           atualIras.casos.push({
             ID_IRAS: idIras, Prontuario: alvo.Prontuario, DataInfeccao: campoData.value,
             Topografia: TIPOS_ISC[selTipo.value], CriterioDiagnostico: 'Vigilância pós-alta (contato telefônico)',
-            Setor: '', DispositivoAssociado: '', Microrganismo: '',
+            Setor: setorPadraoISC(alvo.Procedimento), DispositivoAssociado: '', Microrganismo: '',
             Desfecho: '', StatusInvestigacao: 'em investigação', NotificadoANVISA: '',
             CriadoPor: app.usuario, CriadoEm: agoraCurto()
           });

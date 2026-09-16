@@ -3297,6 +3297,42 @@ console.log('\n== 77. Busca clínica de pacientes (aba Pacientes) ==');
   verificar('sem filtro nenhum não despeja o cadastro', imp2(bancos, { criterios: {} }).resultados.length === 0);
 }
 
+console.log('\n== 78. Detecção de surtos: grafias spp, janelas múltiplas e descarte que expira ==');
+{
+  const al = require(path.join(__dirname, '..', 'js', 'alertas.js'));
+  const cultura = (id, pront, data, micro) => ({ ID_Cultura: id, Prontuario: pront, DataColeta: data,
+    Setor: 'CTI', Material: 'Secreção traqueal', Microrganismo: micro, StatusRevisao: 'avaliada', AvaliacaoCCIH: 'IRAS' });
+
+  /* Grafias "Acinetobacter" e "Acinetobacter spp" somam no mesmo grupo. */
+  const surtos1 = al.detectarSurtos([
+    cultura('C1', '1', '2026-06-01', 'Acinetobacter'),
+    cultura('C2', '2', '2026-06-03', 'Acinetobacter spp'),
+    cultura('C3', '3', '2026-06-05', 'Acinetobacter spp')
+  ]);
+  verificar('grafias spp unificadas: 3 pacientes num alerta só',
+    surtos1.length === 1 && surtos1[0].Pacientes === 3, JSON.stringify(surtos1));
+
+  /* Surto contínuo gera janelas SUCESSIVAS, não só a melhor. */
+  const contínuo = [];
+  for (let d = 1; d <= 28; d++) {
+    contínuo.push(cultura('K' + d, 'P' + d, '2026-06-' + String(d).padStart(2, '0'), 'Klebsiella pneumoniae'));
+  }
+  const surtos2 = al.detectarSurtos(contínuo);
+  verificar('surto de 28 dias vira 2 janelas de 14', surtos2.length === 2
+    && surtos2.every(s => s.Pacientes >= 3), JSON.stringify(surtos2.map(s => s.Inicio + '..' + s.Fim)));
+
+  /* Descarte só silencia o que veio ANTES do encerramento. */
+  const invDescartada = { Setor: 'CTI', Microrganismo: 'Acinetobacter', Situacao: 'descartado',
+    DataInicio: '2026-06-01', DataFim: '2026-06-12', DataEncerramento: '2026-06-12' };
+  const janelaAntiga = { Setor: 'CTI', Microrganismo: 'Acinetobacter', Inicio: '2026-06-01', Fim: '2026-06-12' };
+  const janelaNova = { Setor: 'CTI', Microrganismo: 'Acinetobacter', Inicio: '2026-06-20', Fim: '2026-07-02' };
+  verificar('janela antiga continua casada com o descarte', al.mesmaSuspeita(janelaAntiga, invDescartada) === true);
+  verificar('janela iniciada APÓS o descarte reacende o alerta', al.mesmaSuspeita(janelaNova, invDescartada) === false);
+  /* Investigação ABERTA (não descartada) segue engolindo a continuação — é a mesma investigação. */
+  verificar('investigação em andamento continua casando a continuação',
+    al.mesmaSuspeita(janelaNova, { ...invDescartada, Situacao: 'em investigação', DataEncerramento: '' }) === true);
+}
+
 /* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==
    A tela é avaliada de verdade, com DOM falso. Pega o que sintaxe e teste de motor não
    pegam: helper que não existe (era `config.usuario`, que nunca existiu no projeto),

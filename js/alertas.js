@@ -68,7 +68,10 @@ function detectarMultirresistentes(culturas, sensibilidade, hoje, janelaDias, me
    é o que reconhece "é o mesmo surto que eu já estava investigando". */
 function mesmaSuspeita(surto, investigacao, toleranciaDias) {
   if (normalizarTexto(surto.Setor) !== normalizarTexto(investigacao.Setor)) return false;
-  if (normalizarTexto(surto.Microrganismo) !== normalizarTexto(investigacao.Microrganismo)) return false;
+  /* Mesmo strip de spp/sp da detecção: a investigação de "Acinetobacter" precisa casar
+     com a suspeita do grupo "Acinetobacter spp" — é o mesmo sinal. */
+  const semSpp = m => normalizarTexto(m).replace(/spp?$/, '');
+  if (semSpp(surto.Microrganismo) !== semSpp(investigacao.Microrganismo)) return false;
   const tolerancia = toleranciaDias === undefined ? 30 : toleranciaDias;
   const inicioA = Date.parse(String(surto.Inicio) + 'T00:00:00Z');
   const fimA = Date.parse(String(surto.Fim) + 'T00:00:00Z');
@@ -79,6 +82,13 @@ function mesmaSuspeita(surto, investigacao, toleranciaDias) {
      setor+germe — antes deste ajuste, uma investigação sem data silenciava anos de alertas. */
   if (![inicioA, fimA].every(isFinite)) return true;
   if (![inicioB, fimB].every(isFinite)) return !String(investigacao.DataEncerramento || '').trim();
+  /* Investigação DESCARTADA só cala o que aconteceu até o descarte: cultura nova depois
+     do encerramento reacende a suspeita. Sem isto, o Acinetobacter do CTI descartado em
+     12/06/2026 silenciou a continuação de julho (visto no banco real em 16/09/2026). */
+  if (normalizarTexto(investigacao.Situacao) === 'descartado') {
+    const encerramento = Date.parse(String(investigacao.DataEncerramento || investigacao.DataFim) + 'T00:00:00Z');
+    if (isFinite(encerramento) && isFinite(inicioA) && inicioA > encerramento) return false;
+  }
   const folga = tolerancia * 86400000;
   return inicioA <= fimB + folga && inicioB <= fimA + folga;
 }
@@ -156,35 +166,41 @@ function detectarSurtos(culturas, janelaDias, minimoPacientes) {
     if (!c.Microrganismo || !c.DataColeta || !c.Setor || c.StatusRevisao === 'descartada') continue;
     if (c.AvaliacaoCCIH === 'Água' || c.AvaliacaoCCIH === 'Leite') continue;
     if (normalizarTexto(c.Material).includes('swab')) continue;
-    const chave = normalizarTexto(c.Setor) + '|' + normalizarTexto(c.Microrganismo);
+    /* "Acinetobacter" e "Acinetobacter spp" são o MESMO sinal: o sufixo spp/sp sai da
+       chave — no banco real as duas grafias dividiram o surto do CTI em grupos menores. */
+    const chave = normalizarTexto(c.Setor) + '|' + normalizarTexto(c.Microrganismo).replace(/spp?$/, '');
     (grupos[chave] = grupos[chave] || { setor: c.Setor, micro: c.Microrganismo, itens: [] })
       .itens.push({ data: c.DataColeta, prontuario: normalizarProntuario(c.Prontuario), cultura: c.ID_Cultura });
   }
   const alertas = [];
   for (const grupo of Object.values(grupos)) {
     const itens = grupo.itens.sort((a, b) => a.data.localeCompare(b.data));
-    let melhor = null;
-    for (let i = 0; i < itens.length; i++) {
+    /* TODAS as janelas que atingem o mínimo, não só a melhor: um surto que continua
+       depois de uma investigação descartada precisa virar alerta NOVO — com uma janela
+       única por grupo, a continuação ficava invisível para sempre. */
+    let i = 0;
+    while (i < itens.length) {
       const pacientes = new Set();
       const culturas = [];
       let fim = itens[i].data;
-      for (let j = i; j < itens.length && diasEntre(itens[i].data, itens[j].data) <= janelaDias; j++) {
+      let j = i;
+      for (; j < itens.length && diasEntre(itens[i].data, itens[j].data) <= janelaDias; j++) {
         pacientes.add(itens[j].prontuario);
         culturas.push({ ID_Cultura: itens[j].cultura, Prontuario: itens[j].prontuario, DataColeta: itens[j].data });
         fim = itens[j].data;
       }
-      if (pacientes.size >= minimoPacientes && (!melhor || pacientes.size > melhor.pacientes)) {
-        melhor = { pacientes: [...pacientes], culturas, inicio: itens[i].data, fim };
+      if (pacientes.size >= minimoPacientes) {
+        /* Os prontuários vão junto: são eles que a tela de investigação cruza com internações,
+           cirurgias e dispositivos para procurar o que os pacientes têm em comum. */
+        alertas.push({
+          Setor: grupo.setor, Microrganismo: grupo.micro, Pacientes: pacientes.size,
+          Prontuarios: [...pacientes], Culturas: culturas,
+          Inicio: itens[i].data, Fim: fim
+        });
+        i = j;   /* janela emitida: a próxima começa depois dela */
+      } else {
+        i++;
       }
-    }
-    if (melhor) {
-      /* Os prontuários vão junto: são eles que a tela de investigação cruza com internações,
-         cirurgias e dispositivos para procurar o que os pacientes têm em comum. */
-      alertas.push({
-        Setor: grupo.setor, Microrganismo: grupo.micro, Pacientes: melhor.pacientes.length,
-        Prontuarios: melhor.pacientes, Culturas: melhor.culturas,
-        Inicio: melhor.inicio, Fim: melhor.fim
-      });
     }
   }
   return alertas.sort((a, b) => b.Pacientes - a.Pacientes);

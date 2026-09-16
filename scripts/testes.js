@@ -3183,6 +3183,58 @@ console.log('\n== 75. Internação na data da coleta (hospitalar × comunitária
   verificar('data de coleta inválida devolve null', imp.internacaoNaColeta('100', '', internacoes) === null);
 }
 
+console.log('\n== 76. Indicadores da reunião da CCIH ==');
+{
+  const rel = require(path.join(__dirname, '..', 'js', 'relatorios.js'));
+  verificar('grupo do dispositivo cai para a topografia quando o campo está vazio',
+    rel.grupoDispositivoDaIRAS({ DispositivoAssociado: 'CVC', Topografia: 'PAV' }) === 'Cateter central'
+    && rel.grupoDispositivoDaIRAS({ DispositivoAssociado: '', Topografia: 'Pneumonia associada à ventilação mecânica (PAV)' }) === 'Ventilação mecânica'
+    && rel.grupoDispositivoDaIRAS({ DispositivoAssociado: '', Topografia: 'IPCS com confirmação laboratorial' }) === 'Cateter central'
+    && rel.grupoDispositivoDaIRAS({ DispositivoAssociado: '', Topografia: 'ITU associada a cateter vesical' }) === 'Sonda vesical'
+    && rel.grupoDispositivoDaIRAS({ DispositivoAssociado: '', Topografia: 'ISC de órgão/espaço' }) === '');
+
+  const bancos = {
+    iras: { casos: [
+      { DataInfeccao: '2026-08-10', Setor: 'CTI', Topografia: 'PAV', Microrganismo: 'Klebsiella pneumoniae' },
+      { DataInfeccao: '2026-07-05', Setor: 'CTI', Topografia: 'IPCS clínica', Microrganismo: '' }
+    ] },
+    pacientes: { internacoes: [
+      { Prontuario: '1', Atendimento: 'A1', DataInternacao: '2026-08-01', DataAlta: '2026-08-11', Desfecho: 'Alta melhorada', Obito: '' },
+      { Prontuario: '2', Atendimento: 'A2', DataInternacao: '2026-08-03', DataAlta: '2026-08-05', Desfecho: 'Óbito', Obito: '' }
+    ] },
+    denominadores: { dispositivos_dia: [
+      { Data: '2026-08-10', Competencia: '2026-08', Setor: 'CTI', Estrato: '', Dispositivo: 'Ventilação mecânica', Contagem: 10 },
+      { Data: '2026-08-11', Competencia: '2026-08', Setor: 'CTI', Estrato: '', Dispositivo: 'Ventilação mecânica', Contagem: 10 }
+    ] },
+    culturas: { culturas: [
+      { ID_Cultura: 'C1', Prontuario: '1', DataColeta: '2026-08-10', Setor: 'CTI', Microrganismo: 'Acinetobacter baumannii',
+        MecanismoResistencia: 'CRAb', AvaliacaoCCIH: 'IRAS' }
+    ], sensibilidade: [] },
+    antibioticos: { prescricoes: [], avaliacoes: [] },
+    isolamentos: { precaucoes: [
+      { TipoPrecaucao: 'Contato', DataInicio: '2026-08-01', DataFim: '' },
+      { TipoPrecaucao: 'Contato', DataInicio: '2026-07-01', DataFim: '2026-07-10' }
+    ] },
+    higiene_maos: { observacoes: [] }, sepse: { casos: [] }, cirurgias: { cirurgias: [] }
+  };
+  const d = rel.indicadoresReuniao(bancos, '2026-09-16');
+  verificar('mês de referência é o último fechado', d.mesReferencia === '2026-08');
+  verificar('série tem 12 meses e termina no mês de referência',
+    d.serie.length === 12 && d.serie[11].mes === '2026-08' && d.serie[0].mes === '2025-09');
+  const ago = d.serie[11];
+  verificar('agosto: 1 IRAS, 2 internações, 2 altas, 1 óbito, letalidade 50%',
+    ago.iras === 1 && ago.internacoes === 2 && ago.altas === 2 && ago.obitos === 1 && ago.letalidade === 50,
+    JSON.stringify(ago));
+  verificar('permanência média de agosto = 6 dias ((10+2)/2)', ago.permanencia === 6, JSON.stringify(ago));
+  verificar('dispositivos: PAV no CTI com 20 dias de VM → taxa 50/1.000',
+    d.dispositivos && d.dispositivos.taxas.linhas.some(l => l[0] === 'Ventilação mecânica' && l[1] === 20 && l[2] === 1 && l[3] === '50.00'),
+    JSON.stringify(d.dispositivos));
+  verificar('MDR do trimestre agrupada (Acinetobacter CRAb no CTI)',
+    d.mdr.length === 1 && d.mdr[0].germe === 'Acinetobacter' && d.mdr[0].n === 1, JSON.stringify(d.mdr));
+  verificar('isolamentos ativos: 1 sem data de fim',
+    d.isolamentos.ativos === 1 && d.isolamentos.porTipo[0][0] === 'Contato');
+}
+
 /* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==
    A tela é avaliada de verdade, com DOM falso. Pega o que sintaxe e teste de motor não
    pegam: helper que não existe (era `config.usuario`, que nunca existiu no projeto),

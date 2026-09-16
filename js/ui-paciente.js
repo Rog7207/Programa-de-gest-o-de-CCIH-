@@ -183,7 +183,9 @@ async function montarPaciente(conteudo) {
   });
   cirurgias.forEach(c => juntar(c.DataCirurgia, 'cirurgia', 'Cirurgia: ' + (c.ProcedimentoNHSN || c.Procedimento || ''),
     [c.Cirurgiao, c.PotencialContaminacao, c.ASA ? 'ASA ' + c.ASA : '',
-      c.DuracaoMin ? c.DuracaoMin + ' min' : '', c.ISC === 'S' ? 'ISC: ' + (c.TipoISC || 'sim') : ''].filter(Boolean).join(' · ')));
+      c.DuracaoMin ? c.DuracaoMin + ' min' : '',
+      c.ProfilaxiaAntibiotico ? 'profilaxia: ' + c.ProfilaxiaAntibiotico : '',
+      c.ISC === 'S' ? 'ISC: ' + (c.TipoISC || 'sim') : ''].filter(Boolean).join(' · ')));
   dispositivos.forEach(d => {
     juntar(d.DataInstalacao, 'dispositivo', 'Instalado: ' + (d.Dispositivo || d.Categoria || ''), d.Categoria || '');
     if (d.DataRetirada) juntar(d.DataRetirada, 'dispositivo', 'Retirado: ' + (d.Dispositivo || d.Categoria || ''),

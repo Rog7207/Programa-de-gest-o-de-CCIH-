@@ -16,6 +16,7 @@ const ABAS = [
   { id: 'sepse', rotulo: 'Sepse', ativa: true },
   { id: 'surtos', rotulo: 'Surtos', ativa: true },
   { id: 'relatorios', rotulo: 'Relatórios', ativa: true },
+  { id: 'reuniao', rotulo: 'Reunião CCIH', ativa: true },
   { id: 'perfil', rotulo: 'Perfil micro', ativa: true },
   { id: 'eventos', rotulo: 'Eventos', ativa: true },
   { id: 'importar', rotulo: 'Importar', ativa: true },
@@ -298,6 +299,7 @@ function renderizarAba(abaId) {
   else if (abaId === 'isolamentos') aoTerminar(montarIsolamentos(conteudo));
   else if (abaId === 'higiene') aoTerminar(montarHigiene(conteudo));
   else if (abaId === 'iras') aoTerminar(montarInfeccoes(conteudo));
+  else if (abaId === 'reuniao') aoTerminar(montarReuniao(conteudo));
   else if (abaId === 'relatorios') aoTerminar(montarAbaRelatorios(conteudo));
   else if (abaId === 'perfil') aoTerminar(montarPerfilMicro(conteudo));
   else if (abaId === 'decisao') aoTerminar(montarDecisaoATB(conteudo));

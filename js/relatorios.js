@@ -141,12 +141,26 @@ function diasDeDispositivo(bancos, inicio, fim, setoresEscopo) {
 
 /* Taxa de infecção por 1.000 dias de dispositivo. Só sai a linha do dispositivo que TEM
    denominador: taxa sem denominador não é taxa, é contagem disfarçada. */
+/* Grupo de dispositivo de UM caso de IRAS: usa o campo DispositivoAssociado quando
+   preenchido, senão infere pela TOPOGRAFIA (PAV→VM, IPCS→cateter central, ITU→SVD) —
+   no banco real o campo vem vazio em ~98% das notificações, e sem o fallback as taxas
+   por 1.000 dias de dispositivo ficavam com numerador quase zero. */
+function grupoDispositivoDaIRAS(caso) {
+  const doCampo = grupoDoDispositivo(caso.DispositivoAssociado);
+  if (doCampo) return doCampo;
+  const topo = normalizarTexto(caso.Topografia);
+  if (/pav|ventila/.test(topo)) return 'Ventilação mecânica';
+  if (/ipcs|correntesanguinea/.test(topo)) return 'Cateter central';
+  if (/itu|urinar/.test(topo)) return 'Sonda vesical';
+  return '';
+}
+
 function taxasPorDispositivo(bancos, casos, inicio, fim, setoresEscopo) {
   const denominador = diasDeDispositivo(bancos, inicio, fim, setoresEscopo);
   if (!denominador) return null;
   const linhas = [];
   for (const [grupo, dias] of [...denominador.porGrupo.entries()].sort()) {
-    const infeccoes = casos.filter(k => grupoDoDispositivo(k.DispositivoAssociado) === grupo).length;
+    const infeccoes = casos.filter(k => grupoDispositivoDaIRAS(k) === grupo).length;
     linhas.push([grupo, Math.round(dias), infeccoes, (infeccoes / dias * 1000).toFixed(2)]);
   }
   return { linhas, diasContados: denominador.diasContados };
@@ -1036,6 +1050,103 @@ function perfilMicrobiologico(bancos, anoInicial, anoFinal, porSemestre) {
   };
 }
 
+/* ---- Indicadores para a reunião da CCIH -----------------------------------------------
+   Núcleo puro da tela "Reunião": os principais indicadores CONSISTENTES do banco, prontos
+   para virar slides. Referência = último mês fechado; séries de 12 meses; dispositivos e
+   MDR no trimestre (mês sozinho tem n pequeno demais para taxa). Reusa os relatórios
+   testados em vez de recalcular. */
+function _mesesFechados(hoje, quantos) {
+  const [inicioRef] = mesAnteriorIntervalo(hoje);
+  const [ano0, mes0] = inicioRef.split('-').map(Number);
+  const meses = [];
+  for (let i = quantos - 1; i >= 0; i--) {
+    const total = (ano0 * 12 + (mes0 - 1)) - i;
+    const a = Math.floor(total / 12), m = total % 12 + 1;
+    const mm = String(m).padStart(2, '0');
+    const ultimo = new Date(Date.UTC(a, m, 0)).getUTCDate();
+    meses.push({ mes: `${a}-${mm}`, inicio: `${a}-${mm}-01`, fim: `${a}-${mm}-${String(ultimo).padStart(2, '0')}` });
+  }
+  return meses;
+}
+
+function indicadoresReuniao(bancos, hoje) {
+  const meses = _mesesFechados(hoje, 12);
+  const mesRef = meses[meses.length - 1];
+  const casosIras = ((bancos.iras || {}).casos || []);
+  const internacoes = ((bancos.pacientes || {}).internacoes || []);
+
+  /* Série mensal: IRAS, internações, IRAS/100, óbitos e permanência média (pelo mês da ALTA). */
+  const serie = meses.map(m => {
+    const iras = casosIras.filter(k => relPeriodo(k.DataInfeccao, m.inicio, m.fim)).length;
+    const iniciadas = internacoes.filter(i => relPeriodo(i.DataInternacao, m.inicio, m.fim)).length;
+    const altas = internacoes.filter(i => relPeriodo(i.DataAlta, m.inicio, m.fim));
+    const obitos = altas.filter(i => i.Obito === 'S' || /obito/.test(normalizarTexto(i.Desfecho))).length;
+    const dias = altas.map(i => relDiasEntre(i.DataInternacao, i.DataAlta)).filter(d => d !== null && d >= 0);
+    const permanencia = dias.length ? dias.reduce((a, b) => a + b, 0) / dias.length : null;
+    return { mes: m.mes, iras, internacoes: iniciadas,
+      por100: iniciadas ? +(iras / iniciadas * 100).toFixed(2) : null,
+      altas: altas.length, obitos,
+      letalidade: altas.length ? +(obitos / altas.length * 100).toFixed(1) : null,
+      permanencia: permanencia === null ? null : +permanencia.toFixed(1) };
+  });
+
+  /* Dispositivos: trimestre fechado, no escopo dos setores que TÊM contagem (hoje o CTI). */
+  const tri = meses.slice(-3);
+  const setoresNISS = [...new Set(((bancos.denominadores || {}).dispositivos_dia || []).map(l => l.Setor))].filter(Boolean);
+  const casosTri = casosIras.filter(k => relPeriodo(k.DataInfeccao, tri[0].inicio, mesRef.fim)
+    && relEscopo(k.Setor, setoresNISS.length ? setoresNISS : null));
+  const dispositivos = setoresNISS.length
+    ? { setores: setoresNISS, periodo: tri[0].mes + ' a ' + mesRef.mes,
+        taxas: taxasPorDispositivo(bancos, casosTri, tri[0].inicio, mesRef.fim, setoresNISS) }
+    : null;
+
+  /* MDR no trimestre: culturas de IRAS com mecanismo, germe × setor (como a seção 5 do perfil). */
+  const sensPorCultura = indiceSensibilidade(bancos);
+  const mdrMapa = new Map();
+  for (const c of ((bancos.culturas || {}).culturas || [])) {
+    if (!String(c.AvaliacaoCCIH || '').startsWith('IRAS')) continue;
+    if (!relPeriodo(c.DataColeta, tri[0].inicio, mesRef.fim)) continue;
+    const mecanismo = mecanismoDaCultura(c, sensPorCultura);
+    if (!mecanismo) continue;
+    const g = String(c.Microrganismo || '').trim().split(/\s+/)[0] || '?';
+    const germe = g.charAt(0).toUpperCase() + g.slice(1).toLowerCase();
+    const setor = String(c.Setor || '').trim() || '(não informado)';
+    const chave = germe + '|' + mecanismo + '|' + setor;
+    const acc = mdrMapa.get(chave) || { germe, mecanismo, setor, n: 0 };
+    acc.n++;
+    mdrMapa.set(chave, acc);
+  }
+  const mdr = [...mdrMapa.values()].sort((a, b) => b.n - a.n).slice(0, 8);
+
+  /* Antibióticos, higiene, sepse e pós-alta: cherry-pick dos relatórios já testados. */
+  const rAtb = relatorioAntibioticos(bancos, null, mesRef.inicio, mesRef.fim);
+  const rHig = relatorioHigiene(bancos, null, mesRef.inicio, mesRef.fim);
+  const rSep = relatorioSepse(bancos, null, mesRef.inicio, mesRef.fim);
+  const rPos = relatorioPosAlta(bancos, null, mesRef.inicio, mesRef.fim);
+  const doResumo = (rel2, rotulo) => { const p = (rel2.resumo || []).find(x => x[0] === rotulo); return p ? p[1] : null; };
+  const panAtb = (rAtb.secoes.find(s => s.titulo === 'Panorama') || { itens: [] }).itens
+    .concat((rAtb.secoes.find(s => s.titulo === 'Análises de antibiótico (Tasy)') || { itens: [] }).itens);
+  const doPanorama = rotulo => { const p = panAtb.find(x => String(x[0]).includes(rotulo)); return p ? p[1] : null; };
+
+  /* Isolamentos ativos hoje. */
+  const precaucoes = ((bancos.isolamentos || {}).precaucoes || []);
+  const ativos = precaucoes.filter(p => !String(p.DataFim || '').trim());
+  const porTipo = relContar(ativos, p => p.TipoPrecaucao);
+
+  return {
+    mesReferencia: mesRef.mes, trimestre: tri[0].mes + ' a ' + mesRef.mes, serie,
+    dispositivos, mdr,
+    atb: { dot: doResumo(rAtb, 'DOT'), dotMil: doResumo(rAtb, 'DOT/1.000 pac-dia'),
+      analisadas: doPanorama('analisadas no período'),
+      avaliacoes: doPanorama('Avaliações de stewardship'),
+      cursosAvaliados: doPanorama('avaliação casada') },
+    higiene: { resumo: rHig.resumo || [] },
+    sepse: { resumo: rSep.resumo || [] },
+    posAlta: { resumo: rPos.resumo || [] },
+    isolamentos: { ativos: ativos.length, porTipo }
+  };
+}
+
 /* Intervalo do mês anterior fechado — o período padrão dos relatórios. */
 function mesAnteriorIntervalo(hoje) {
   const [ano, mes] = String(hoje).slice(0, 7).split('-').map(Number);
@@ -1066,7 +1177,7 @@ if (typeof module !== 'undefined' && module.exports) {
     relatorioAntibioticos, relatorioIsolamentos, relatorioSepse, relatorioPosAlta,
     relatorioResumoExecutivo, RELATORIOS_PADRAO, BANCOS_RELATORIOS, pacientesDia, pacientesDiaDoCenso,
     relMediana, relDiasEntre, mesAnteriorIntervalo,
-    diasDeDispositivo, taxasPorDispositivo, grupoDoDispositivo,
+    diasDeDispositivo, taxasPorDispositivo, grupoDoDispositivo, grupoDispositivoDaIRAS, indicadoresReuniao,
     perfilMicrobiologico, cruzarIRAScomCulturas, culturasDaIRAS, melhorCulturaDaIRAS, indiceCulturasPorProntuario,
     sitioDaIRAS, materialCasaSitio, colunasDoPerfil, classificarGram, especieEnterobacteria,
     especieNaoFermentador, especieStaphAureus, especieEnterococo, GRUPOS_ANTIBIOGRAMA, tabelaResistencia,

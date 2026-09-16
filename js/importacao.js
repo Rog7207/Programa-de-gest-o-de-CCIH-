@@ -1122,6 +1122,33 @@ function lerEvolucoesTasy(matriz) {
   return { reconhecido: true, evolucoes, problemas, atendimentos: porAtendimento.size };
 }
 
+/* Situação de internação NA DATA DA COLETA de uma cultura — o dado que separa infecção
+   hospitalar de comunitária na revisão: coleta até o 2º dia de internação (<48h) é
+   comunitária pelo critério clássico. Devolve:
+   { situacao: 'internado', internacao, diaDaInternacao }  — coleta durante internação
+   { situacao: 'fora', internacao }                         — última internação foi antes
+   { situacao: 'sem-internacao' }                           — paciente sem internação conhecida */
+function internacaoNaColeta(prontuario, dataColeta, internacoes) {
+  const p = normalizarProntuario(prontuario);
+  const d = String(dataColeta || '').slice(0, 10);
+  if (!p || !/^\d{4}-/.test(d)) return null;
+  const doPaciente = (internacoes || []).filter(i => normalizarProntuario(i.Prontuario) === p
+    && /^\d{4}-/.test(String(i.DataInternacao)));
+  if (!doPaciente.length) return { situacao: 'sem-internacao' };
+  const cobre = doPaciente.filter(i => String(i.DataInternacao).slice(0, 10) <= d
+    && (!String(i.DataAlta || '').trim() || String(i.DataAlta).slice(0, 10) >= d));
+  if (cobre.length) {
+    /* Mais de uma internação cobrindo (dados sujos): vale a mais recente. */
+    const i = cobre.sort((a, b) => String(b.DataInternacao).localeCompare(String(a.DataInternacao)))[0];
+    const dia = Math.round((Date.parse(d + 'T00:00:00Z')
+      - Date.parse(String(i.DataInternacao).slice(0, 10) + 'T00:00:00Z')) / 864e5) + 1;
+    return { situacao: 'internado', internacao: i, diaDaInternacao: dia };
+  }
+  const antes = doPaciente.filter(i => String(i.DataInternacao).slice(0, 10) <= d)
+    .sort((a, b) => String(b.DataInternacao).localeCompare(String(a.DataInternacao)))[0];
+  return antes ? { situacao: 'fora', internacao: antes } : { situacao: 'sem-internacao' };
+}
+
 /* Retenção decidida pelo usuário (16/09/2026): a evolução só fica no banco enquanto o
    paciente tem PENDÊNCIA — cultura no painel de revisão ou antibiótico em curso. Sem
    pendência, é descartada (e a foto inteira é substituída a cada importação). Também
@@ -3109,7 +3136,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome,
     enriquecerCirurgia, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, internacaoNaColeta, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

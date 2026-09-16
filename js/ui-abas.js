@@ -55,13 +55,57 @@ async function carregarIndiceSepse() {
 
 /* ---- Aba Culturas ---- */
 
+/* Contexto clínico do card da cultura: em que dia de internação a coleta aconteceu (a
+   chave para separar hospitalar de comunitária — <48h é comunitária pelo critério
+   clássico) e a última evolução MÉDICA da foto do Tasy, quando o paciente ainda está
+   internado com pendência. */
+function contextoDaColeta(c) {
+  const partes = [];
+  const sit = internacaoNaColeta(c.Prontuario, c.DataColeta, _internacoesCulturas || []);
+  if (sit && sit.situacao === 'internado') {
+    const alerta = sit.diaDaInternacao <= 2;
+    partes.push(el('p', {},
+      el('strong', {}, `Coleta no ${sit.diaDaInternacao}º dia de internação`),
+      ` (internado em ${String(sit.internacao.DataInternacao).slice(0, 10)}` +
+      (sit.internacao.SetorAtual ? `, entrada por ${sit.internacao.SetorAtual}` : '') + ')',
+      alerta ? el('span', { class: 'aviso-erro-texto' }, ' · <48h de internação — provável comunitária') : ''));
+  } else if (sit && sit.situacao === 'fora') {
+    partes.push(el('p', {},
+      el('strong', {}, 'Sem internação na data da coleta'),
+      ` — última internação em ${String(sit.internacao.DataInternacao).slice(0, 10)}` +
+      (String(sit.internacao.DataAlta || '').trim() ? `, alta em ${String(sit.internacao.DataAlta).slice(0, 10)}` : '') +
+      ' · provável ambulatorial/comunitária'));
+  } else if (sit && sit.situacao === 'sem-internacao') {
+    partes.push(el('p', {}, el('strong', {}, 'Nenhuma internação conhecida deste paciente'),
+      ' · provável ambulatorial/comunitária (ou censo do período ainda não importado)'));
+  }
+  const p = normalizarProntuario(c.Prontuario);
+  const atds = new Set((_internacoesCulturas || [])
+    .filter(i => normalizarProntuario(i.Prontuario) === p)
+    .map(i => normalizarProntuario(i.Atendimento)).filter(Boolean));
+  const medicas = (_evolucoesCulturas || []).filter(e => e.Categoria === 'E'
+    && (normalizarProntuario(e.Prontuario) === p || atds.has(normalizarProntuario(e.Atendimento))))
+    .sort((a, b) => String(b.DataEvolucao).localeCompare(String(a.DataEvolucao)));
+  if (medicas.length) {
+    const evo = medicas[0];
+    partes.push(el('details', {},
+      el('summary', {}, `Última evolução médica (${evo.DataEvolucao}` + (evo.Autor ? ` — ${evo.Autor}` : '') + ')'),
+      el('p', { class: 'texto-suave', style: 'white-space:pre-wrap' }, evo.Texto)));
+  }
+  return partes.length ? el('div', {}, ...partes) : null;
+}
+let _internacoesCulturas = null, _evolucoesCulturas = null;
+
 async function montarCulturas(conteudo) {
   conteudo.append(el('h1', {}, 'Culturas'));
-  let banco, bancoPacientes;
+  let banco, bancoPacientes, bancoEvolucoes;
   try {
-    [banco, bancoPacientes] = await Promise.all([lerBanco('culturas'), lerBanco('pacientes'), carregarIndiceSepse()]);
+    [banco, bancoPacientes, bancoEvolucoes] = await Promise.all([lerBanco('culturas'), lerBanco('pacientes'),
+      lerBanco('evolucoes').catch(() => ({ evolucoes: [] })), carregarIndiceSepse()]);
   } catch (e) { conteudo.append(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message)); return; }
   const nomes = new Map(bancoPacientes.pacientes.map(p => [normalizarProntuario(p.Prontuario), p.Nome]));
+  _internacoesCulturas = bancoPacientes.internacoes || [];
+  _evolucoesCulturas = bancoEvolucoes.evolucoes || [];
   const sensPorCultura = {};
   banco.sensibilidade.forEach(s => { (sensPorCultura[s.ID_Cultura] = sensPorCultura[s.ID_Cultura] || []).push(s); });
 
@@ -116,6 +160,7 @@ async function montarCulturas(conteudo) {
       el('p', { class: 'texto-suave' },
         `${nomes.get(normalizarProntuario(c.Prontuario)) || ''} (${c.Prontuario}) · ${c.Setor} · ${c.Material} · coleta ${c.DataColeta}` +
         (c.MecanismoResistencia ? ` · ${c.MecanismoResistencia}` : '')),
+      contextoDaColeta(c),
       sens.length ? el('table', { class: 'tabela' },
         el('thead', {}, el('tr', {}, ['Antibiótico', 'Resultado'].map(x => el('th', {}, x)))),
         el('tbody', {}, sens.map(s => el('tr', {}, el('td', {}, s.Antibiotico),

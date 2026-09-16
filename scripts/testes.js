@@ -3160,6 +3160,29 @@ console.log('\n== 74. Evoluções do Tasy: foto operacional com retenção por p
     !retidas.some(e => e.Atendimento === '444'));
 }
 
+console.log('\n== 75. Internação na data da coleta (hospitalar × comunitária) ==');
+{
+  const internacoes = [
+    { Prontuario: '100', Atendimento: 'A1', DataInternacao: '2026-09-01', DataAlta: '2026-09-10', SetorAtual: 'Emergência' },
+    { Prontuario: '100', Atendimento: 'A2', DataInternacao: '2026-09-14', DataAlta: '', SetorAtual: 'Unidade 05' },
+    { Prontuario: '200', Atendimento: 'B1', DataInternacao: '2026-08-01', DataAlta: '2026-08-05' }
+  ];
+  const s1 = imp.internacaoNaColeta('100', '2026-09-05', internacoes);
+  verificar('coleta no 5º dia da 1ª internação', s1.situacao === 'internado' && s1.diaDaInternacao === 5
+    && s1.internacao.Atendimento === 'A1', JSON.stringify(s1));
+  const s2 = imp.internacaoNaColeta('100', '2026-09-14', internacoes);
+  verificar('coleta no dia da entrada = 1º dia (internação aberta, sem alta)',
+    s2.situacao === 'internado' && s2.diaDaInternacao === 1 && s2.internacao.Atendimento === 'A2');
+  const s3 = imp.internacaoNaColeta('100', '2026-09-12', internacoes);
+  verificar('coleta entre internações = fora, aponta a última anterior',
+    s3.situacao === 'fora' && s3.internacao.Atendimento === 'A1', JSON.stringify(s3));
+  verificar('paciente sem internação conhecida',
+    imp.internacaoNaColeta('999', '2026-09-05', internacoes).situacao === 'sem-internacao');
+  verificar('coleta antes de qualquer internação do paciente = sem internação',
+    imp.internacaoNaColeta('200', '2026-07-01', internacoes).situacao === 'sem-internacao');
+  verificar('data de coleta inválida devolve null', imp.internacaoNaColeta('100', '', internacoes) === null);
+}
+
 /* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==
    A tela é avaliada de verdade, com DOM falso. Pega o que sintaxe e teste de motor não
    pegam: helper que não existe (era `config.usuario`, que nunca existiu no projeto),

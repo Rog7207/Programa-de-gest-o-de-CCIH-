@@ -42,7 +42,11 @@ const ESQUEMAS = {
   antibioticos: {
     arquivo: 'antibioticos.xlsx',
     abas: {
-      prescricoes: ['ID_Prescricao', 'Prontuario', 'Antibiotico', 'Dose', 'Via', 'Frequencia', 'DataInicio', 'DataFim', 'Setor', 'Indicacao', 'UltimaEvolucao', 'Restrito', 'ParecerInfecto', 'CriadoPor', 'CriadoEm'],
+      /* Atendimento/IDOrigem e os campos de análise vêm do relatório "análise de
+         antibióticos" do Tasy (tipo analise_atb): DataSuspensao é o fim EFETIVO do uso
+         (o DOT usa ela quando existe); DiasSolicitados × DiasLiberados + DataFimCCIH
+         registram a intervenção da CCIH sobre o curso. */
+      prescricoes: ['ID_Prescricao', 'Prontuario', 'Atendimento', 'IDOrigem', 'Antibiotico', 'Dose', 'Via', 'Frequencia', 'DataInicio', 'DataFim', 'DataSuspensao', 'SuspensoPor', 'DiasSolicitados', 'DiasLiberados', 'DataFimCCIH', 'Setor', 'Indicacao', 'UltimaEvolucao', 'Restrito', 'ParecerInfecto', 'CriadoPor', 'CriadoEm'],
       avaliacoes: ['ID_Prescricao', 'Prontuario', 'Antibiotico', 'Indicacao', 'Topografia', 'OrigemInfeccao', 'Avaliacao', 'Recomendacao', 'ParecerTexto', 'Avaliador', 'DataDados', 'CriadoEm'],
       /* Decisões empíricas registradas pelos médicos assistentes no miniapp: o que foi
          perguntado (Respostas), o que o protocolo sugeriu e o que foi de fato prescrito.
@@ -397,6 +401,37 @@ const TIPOS_RELATORIO = {
       { id: 'Medico', rotulo: 'Médico', tipo: 'texto', sinonimos: ['medico', 'medicoresponsavel'] },
       { id: 'Observacoes', rotulo: 'Observações', tipo: 'texto', sinonimos: ['observacoes', 'observacao'] },
       { id: 'MotivoExclusao', rotulo: 'Nota de exclusão dos indicadores', tipo: 'texto', sinonimos: ['motivoexclusao', 'excluirindicador'] }
+    ],
+    fixos: {}
+  },
+  /* Relatório "análise de antibióticos" do Tasy: uma linha por prescrição de
+     antimicrobiano, identificada pelo Nº do atendimento (sem prontuário — o importador
+     resolve pelo censo de internações) e pelo Nº de sequência (identidade estável para
+     reimportação). Traz início/fim previsto, suspensão real e a análise da CCIH
+     (dias solicitados × liberados, fim imposto). */
+  analise_atb: {
+    rotulo: 'Análise de antibióticos (Tasy)',
+    destino: 'antibioticos',
+    abaDestino: 'prescricoes',
+    prefixoID: 'PRE',
+    campoID: 'ID_Prescricao',
+    permiteAntibiograma: false,
+    resolvePorAtendimento: true,
+    /* SEM chaveOrigem de propósito: a chave composta (com o prontuário resolvido) faz a
+       prescrição do Tasy deduplicar contra a MESMA prescrição vinda do relatório antigo;
+       valorDeChave cai para o atendimento quando o prontuário não resolveu. */
+    chaveNatural: ['Prontuario', 'Antibiotico', 'DataInicio'],
+    campos: [
+      { id: 'Atendimento', rotulo: 'Nº do atendimento', obrigatorio: true, tipo: 'texto', sinonimos: ['nratendimento', 'atendimento', 'numerodoatendimento'] },
+      { id: 'IDOrigem', rotulo: 'Nº de sequência (Tasy)', tipo: 'texto', sinonimos: ['nrsequencia', 'sequencia', 'nrseq'] },
+      { id: 'Antibiotico', rotulo: 'Antibiótico', obrigatorio: true, tipo: 'vocab', vocab: 'antibioticos', sinonimos: ['dsmedicamento', 'medicamento', 'antibiotico', 'antimicrobiano'] },
+      { id: 'DataInicio', rotulo: 'Data de início', obrigatorio: true, tipo: 'data', sinonimos: ['dtinicio', 'datainicio', 'inicio'] },
+      { id: 'DataFim', rotulo: 'Fim previsto', tipo: 'data', sinonimos: ['dtfim', 'datafim', 'fim'] },
+      { id: 'DataSuspensao', rotulo: 'Suspensão', tipo: 'data', sinonimos: ['dtsuspensao', 'datasuspensao', 'suspensao'] },
+      { id: 'SuspensoPor', rotulo: 'Suspenso por', tipo: 'texto', sinonimos: ['nmusuariosusp', 'usuariosuspensao', 'suspensopor'] },
+      { id: 'DiasSolicitados', rotulo: 'Dias solicitados', tipo: 'texto', sinonimos: ['qtdiassolicitado', 'diassolicitados'] },
+      { id: 'DiasLiberados', rotulo: 'Dias liberados', tipo: 'texto', sinonimos: ['qtdiasliberado', 'diasliberados'] },
+      { id: 'DataFimCCIH', rotulo: 'Fim imposto pela CCIH', tipo: 'data', sinonimos: ['dtfimcih', 'fimcih', 'datafimccih'] }
     ],
     fixos: {}
   },

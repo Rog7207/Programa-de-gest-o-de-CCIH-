@@ -162,8 +162,14 @@ Prontos para o usuário importar pela tela normal (validados em dry-run):
   lerCensoNISS, detecção automática na importação (raw:true por causa das datas dd/mm que
   o Excel corrompe como mm/dd). 4.532 contagens → denominadores.dispositivos_dia; destrava
   taxas por 1.000 dias de dispositivo no HNSC. "invasividade UTI.xls" é subconjunto.
+- **analise antib 2026 2362.xls** — FEITO (15/09/2026): tipo novo "Análise de antibióticos
+  (Tasy)" (analise_atb) importa pela tela normal. Mapeia sozinho, datas em serial ok,
+  prontuário resolvido pelo atendimento (92% no dry-run), dedup por prontuário+ATB+início
+  (cai para atendimento sem prontuário). DOT passou a usar o fim EFETIVO (suspensão antes
+  do previsto encurta o curso) e o relatório de antibióticos ganhou o bloco "Análises de
+  antibiótico (Tasy)". 12 termos novos de antibiótico entram pela tela na importação.
 Fila (precisam de leitor/decisão): isolamentos vs.xls (8.230 precauções históricas),
-analise antib 2026 2362.xls (DOT), 2393.xls (dispositivos por paciente), 2405.xls
+2393.xls (dispositivos por paciente), 2405.xls
 (nascimento+telefone — chave "Cd pessoa física" só casa 661/7.632, investigar),
 atb cirurgias.xls (profilaxia cirúrgica; "2375 cirurgias antibioticos.xls" é idêntico).
 Descartáveis: trio 4024 (sem prontuário/alta), isolamentos 15092026 (foto do dia).

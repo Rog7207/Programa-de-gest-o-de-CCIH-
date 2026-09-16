@@ -125,6 +125,11 @@ async function importarArquivoAutomatico(arquivo) {
     /* Relatório que traz o ATENDIMENTO no campo de prontuário (ex.: leva de culturas de
        ago/2026) criaria um paciente novo por internação — corrige antes de tudo. */
     prontuariosCorrigidos = corrigirProntuarioAtendimento(validos, bancoPac.internacoes || []);
+    /* Tipos identificados só pelo atendimento (análise de ATB do Tasy): resolve o
+       prontuário pelo censo; quem não resolver fica com prontuário vazio, sem pseudo. */
+    if (TIPOS_RELATORIO[tipo].resolvePorAtendimento) {
+      resolverProntuarioPorAtendimento(validos, bancoPac.internacoes || []);
+    }
     if (tipo === 'cirurgias') {
       resolverProntuarioPorAtendimento(validos, bancoPac.internacoes || []);
       resolverProntuarioPorNome(validos, bancoPac.pacientes || []);
@@ -1143,6 +1148,9 @@ function aplicarDecisoes(linhasComErro) {
      deduplicação (senão a mesma linha entraria com duas identidades diferentes). */
   imp.prontuariosCorrigidos = imp.bancoPacientes
     ? corrigirProntuarioAtendimento(registrosFinais, imp.bancoPacientes.internacoes || []) : 0;
+  if (TIPOS_RELATORIO[imp.tipo].resolvePorAtendimento && imp.bancoPacientes) {
+    resolverProntuarioPorAtendimento(registrosFinais, imp.bancoPacientes.internacoes || []);
+  }
   const existentes = imp.bancoDestino[definicao.abaDestino] || [];
   imp.dedup = deduplicar(registrosFinais, existentes, imp.tipo);
   imp.excluidosPorErro = linhasComErro.size;

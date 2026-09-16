@@ -2985,6 +2985,71 @@ console.log('\n== 70. Censo diário de invasividade NISS (Tasy) ==');
     && g.grupoDoDispositivo('Pacientes-dia') === '');
 }
 
+console.log('\n== 71. Análise de antibióticos do Tasy (tipo analise_atb) ==');
+{
+  const rel = require(path.join(__dirname, '..', 'js', 'relatorios.js'));
+  const tipo = 'analise_atb';
+  const def = TIPOS_RELATORIO[tipo];
+  /* Cabeçalhos crus do relatório casam pelos sinônimos. */
+  const cab = ['Nr atendimento', 'Nr sequencia', 'Ds medicamento', 'Dt inicio', 'Dt fim',
+    'Dt suspensao', 'Nm usuario susp', 'Qt dias solicitado', 'Qt dias liberado', 'Dt fim cih'];
+  const mapeados = cab.map(c => {
+    const n = normalizarTexto(c);
+    const campo = def.campos.find(f => normalizarTexto(f.rotulo) === n || (f.sinonimos || []).includes(n));
+    return campo ? campo.id : '';
+  });
+  verificar('todas as colunas do Tasy mapeiam sozinhas',
+    mapeados.every(Boolean) && mapeados[0] === 'Atendimento' && mapeados[2] === 'Antibiotico'
+    && mapeados[9] === 'DataFimCCIH', JSON.stringify(mapeados));
+
+  /* normalizarLinhas: datas em serial do Excel viram ISO. */
+  const mapeamento = cab.map((c, i) => ({ coluna: i, cabecalho: c, destino: mapeados[i] }));
+  const { registros } = imp.normalizarLinhas([cab,
+    [1168886, 8876336, 'Ceftriaxona', 46068, 46075, 46069, 'M036438', 7, 2, 46069]], 0, mapeamento, tipo, []);
+  verificar('datas em serial viram ISO (início/fim/suspensão)',
+    registros[0].DataInicio === '2026-02-15' && registros[0].DataFim === '2026-02-22'
+    && registros[0].DataSuspensao === '2026-02-16', JSON.stringify(registros[0]));
+
+  /* Dedup: prescrição do relatório antigo (só prontuário) é a MESMA do Tasy depois de
+     resolver o atendimento; sem prontuário, o atendimento identifica. */
+  const existentes = [{ ID_Prescricao: 'PRE-1', Prontuario: '100', Antibiotico: 'Ceftriaxona', DataInicio: '2026-02-15' }];
+  const novos = [
+    { Prontuario: '100', Atendimento: '555', Antibiotico: 'Ceftriaxona', DataInicio: '2026-02-15' }, /* resolvido: duplica */
+    { Prontuario: '', Atendimento: '777', Antibiotico: 'Ceftriaxona', DataInicio: '2026-02-15' },    /* RN sem prontuário: novo */
+    { Prontuario: '', Atendimento: '888', Antibiotico: 'Ceftriaxona', DataInicio: '2026-02-15' }     /* outro RN: também novo */
+  ];
+  const dd = imp.deduplicar(novos, existentes, tipo);
+  verificar('dedup: resolvido duplica contra o antigo; sem prontuário separa por atendimento',
+    dd.duplicados.length === 1 && dd.novos.length === 2, JSON.stringify({ n: dd.novos.length, d: dd.duplicados.length }));
+
+  /* Curso: a suspensão encerra o uso de verdade (2 dias, não 8). */
+  const cursos = imp.cursosDeAntibiotico([
+    { Prontuario: '100', Antibiotico: 'Ceftriaxona', DataInicio: '2026-02-15', DataFim: '2026-02-22', DataSuspensao: '2026-02-16' },
+    { Prontuario: '', Atendimento: '777', Antibiotico: 'Vancomicina', DataInicio: '2026-03-01', DataFim: '2026-03-03' },
+    { Prontuario: '', Atendimento: '888', Antibiotico: 'Vancomicina', DataInicio: '2026-03-01', DataFim: '2026-03-05' }
+  ]);
+  const c1 = cursos.find(c => c.Antibiotico === 'Ceftriaxona');
+  verificar('fim efetivo = suspensão (curso de 2 dias, não 8)', c1.dias === 2, JSON.stringify(c1));
+  verificar('sem prontuário, atendimentos diferentes não se emendam num curso só',
+    cursos.filter(c => c.Antibiotico === 'Vancomicina').length === 2);
+
+  /* Relatório: bloco de análises do Tasy. */
+  const bancos = { antibioticos: { prescricoes: [
+    { Prontuario: '100', Antibiotico: 'Meropenem', DataInicio: '2026-08-01', DataFim: '2026-08-08',
+      DataSuspensao: '2026-08-03', DiasSolicitados: 7, DiasLiberados: 2, DataFimCCIH: '2026-08-03', Setor: 'CTI' },
+    { Prontuario: '200', Antibiotico: 'Ceftriaxona', DataInicio: '2026-08-02', DataFim: '2026-08-09',
+      DiasSolicitados: 7, DiasLiberados: '', DataFimCCIH: '', Setor: 'CTI' }
+  ], avaliacoes: [] }, pacientes: { internacoes: [] } };
+  const r = rel.relatorioAntibioticos(bancos, null, '2026-08-01', '2026-08-31');
+  const sec = r.secoes.find(s => s.titulo === 'Análises de antibiótico (Tasy)');
+  verificar('bloco de análises: 1 analisada, 1 corte, 1 suspensa antes do fim',
+    sec && sec.itens[0][1] === 1 && String(sec.itens[1][1]).startsWith('1')
+    && String(sec.itens[2][1]).startsWith('1'), JSON.stringify(sec && sec.itens));
+  verificar('sem análise no banco, o bloco não aparece', !rel.relatorioAntibioticos(
+    { antibioticos: { prescricoes: [], avaliacoes: [] }, pacientes: { internacoes: [] } },
+    null, '2026-08-01', '2026-08-31').secoes.some(s => s.titulo.includes('Análises de antibiótico')));
+}
+
 /* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==
    A tela é avaliada de verdade, com DOM falso. Pega o que sintaxe e teste de motor não
    pegam: helper que não existe (era `config.usuario`, que nunca existiu no projeto),

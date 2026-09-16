@@ -320,6 +320,25 @@ function relatorioAntibioticos(bancos, setoresEscopo, inicio, fim) {
     { titulo: 'Recomendações dadas', tipo: 'tabela', colunas: ['Recomendação', 'Quantidade'],
       linhas: relContar(avaliacoes, a => a.Recomendacao) }
   ];
+  /* Análises do Tasy: DiasLiberados/DataFimCCIH preenchidos marcam a prescrição que
+     passou pela análise da CCIH (fluxo iniciado em jul/2026). */
+  const analisadas = prescricoes.filter(p => relPeriodo(p.DataInicio, inicio, fim)
+    && (String(p.DiasLiberados == null ? '' : p.DiasLiberados).trim() || String(p.DataFimCCIH || '').trim()));
+  if (analisadas.length) {
+    const cortes = analisadas.filter(p => String(p.DiasLiberados).trim() !== ''
+      && String(p.DiasSolicitados == null ? '' : p.DiasSolicitados).trim() !== ''
+      && Number(p.DiasLiberados) < Number(p.DiasSolicitados));
+    const suspensasAntes = analisadas.filter(p => String(p.DataSuspensao || '').trim()
+      && String(p.DataFim || '').trim()
+      && String(p.DataSuspensao).slice(0, 10) < String(p.DataFim).slice(0, 10));
+    secoes.push({ titulo: 'Análises de antibiótico (Tasy)', tipo: 'numeros', itens: [
+      ['Prescrições analisadas no período', analisadas.length],
+      ['Com dias cortados (liberado < solicitado)', `${cortes.length} (${relPct(cortes.length, analisadas.length)})`],
+      ['Suspensas antes do fim previsto', `${suspensasAntes.length} (${relPct(suspensasAntes.length, analisadas.length)})`]
+    ] });
+    secoes.push({ titulo: 'Antibióticos mais analisados', tipo: 'tabela',
+      colunas: ['Antibiótico', 'Análises'], linhas: relContar(analisadas, p => p.Antibiotico).slice(0, 10) });
+  }
   if (setoresEscopo && !doCenso) secoes.push({ titulo: 'Nota', tipo: 'texto', corpo: TEXTO_SEM_DENSIDADE_SETOR });
   return { titulo: 'Antibióticos (stewardship)', secoes,
     resumo: [['DOT', dot], ['DOT/1.000 pac-dia', dotMil || '—'],

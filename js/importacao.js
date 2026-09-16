@@ -1427,6 +1427,12 @@ function chaveNaturalDe(registro, tipo) {
    caminho, reimportar o mesmo arquivo duplicaria tudo. */
 function valorDeChave(registro, campo, tipo) {
   if (tipo === 'cirurgias' && campo === 'Procedimento' && registro.ProcedimentoNHSN) return registro.ProcedimentoNHSN;
+  /* Análise de ATB (Tasy): a identidade do paciente é o prontuário quando resolvido —
+     assim a MESMA prescrição vinda do relatório antigo (que só tinha prontuário) deduplica
+     contra a do Tasy. Sem prontuário (RN/ambulatório), vale o atendimento, que é único. */
+  if (tipo === 'analise_atb' && campo === 'Prontuario') {
+    return String(registro.Prontuario || '').trim() || ('atd:' + String(registro.Atendimento || '').trim());
+  }
   if (campo === 'Microrganismo' && registro[campo] === NAO_CULTURA) {
     return (registro._originais && registro._originais.Microrganismo) || registro[campo];
   }
@@ -2025,7 +2031,10 @@ function cursosDeAntibiotico(prescricoes) {
   const porChave = new Map();
   for (const p of (prescricoes || [])) {
     if (!p.Antibiotico || !/^\d{4}-/.test(String(p.DataInicio))) continue;
-    const chave = normalizarProntuario(p.Prontuario) + '|' + normalizarTexto(p.Antibiotico);
+    /* Sem prontuário (RN/ambulatório ainda não resolvido), o atendimento identifica o
+       paciente — senão todos os sem-prontuário da mesma droga virariam um curso só. */
+    const quem = normalizarProntuario(p.Prontuario) || ('atd:' + normalizarProntuario(p.Atendimento));
+    const chave = quem + '|' + normalizarTexto(p.Antibiotico);
     if (!porChave.has(chave)) porChave.set(chave, []);
     porChave.get(chave).push(p);
   }
@@ -2035,7 +2044,9 @@ function cursosDeAntibiotico(prescricoes) {
     let atual = null;
     for (const p of lista) {
       const inicio = String(p.DataInicio).slice(0, 10);
-      const fim = String(p.DataFim || p.DataInicio).slice(0, 10);
+      /* Fim EFETIVO: a suspensão encerra o uso de verdade; o DataFim é o previsto na
+         prescrição (análise do Tasy: suspensa no dia 2 de 7 = 2 dias de terapia, não 7). */
+      const fim = String(p.DataSuspensao || p.DataFim || p.DataInicio).slice(0, 10);
       const emenda = atual && diasDesde(atual.fim, inicio) !== null && diasDesde(atual.fim, inicio) <= 1;
       if (emenda) {
         if (fim > atual.fim) atual.fim = fim;

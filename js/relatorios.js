@@ -107,7 +107,7 @@ function pacientesDiaDoCenso(bancos, inicio, fim, setoresEscopo) {
    pontuação), então alternativa com espaço — "sonda vesical" — nunca casaria, e a infecção
    assim rotulada sairia da taxa sem ninguém notar. Tudo aqui é sem espaço, de propósito. */
 const GRUPOS_DISPOSITIVO = [
-  { grupo: 'Cateter central', casa: /^(cvc|picc|catetercentral|acessocentral|hemodialise|cateterdehemodialise)/ },
+  { grupo: 'Cateter central', casa: /^(cvc|picc|cateter(venoso)?central|acessocentral|hemodialise|cateterdehemodialise)/ },
   { grupo: 'Ventilação mecânica', casa: /^(vm|ventila|tot|tubo)/ },
   { grupo: 'Sonda vesical', casa: /^(svd|sondavesical|sondadedemora)/ }
 ];

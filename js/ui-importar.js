@@ -274,6 +274,13 @@ async function processarArquivo(arquivo, codificacao, opcoesAba) {
         }
         const leitura = lerDispositivosDia(abas, { setor: '', ano: (/(20\d{2})/.exec(arquivo.name) || [])[1] });
         if (leitura.linhas.length) { telaDispositivosDia(abas, arquivo, leitura); return; }
+        /* Censo diário de invasividade (NISS/Tasy): as datas vêm como texto dd/mm/aaaa e o
+           parser de datas do Excel trocaria dia e mês — por isso a releitura com raw. */
+        const wbCru = XLSX.read(imp.buffer, { type: 'array', raw: true });
+        for (const n of wbCru.SheetNames) {
+          const niss = lerCensoNISS(XLSX.utils.sheet_to_json(wbCru.Sheets[n], { header: 1, raw: true, defval: '' }));
+          if (niss.reconhecido && niss.linhas.length) { telaCensoNISS(arquivo, niss); return; }
+        }
       }
     }
     if (/\.pdf$/i.test(arquivo.name)) {
@@ -416,37 +423,40 @@ function telaDispositivosDia(abas, arquivo, leitura) {
       } }, 'Não é isso — ler como planilha comum'))));
 }
 
+/* Grava contagens diárias em denominadores.dispositivos_dia. Reimportar o mesmo período
+   tem de ATUALIZAR, não duplicar: a identidade é dia + setor + estrato + dispositivo. */
+async function gravarContagensDiarias(linhas) {
+  const agora = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  return comTrava(['denominadores'], async () => {
+    const banco = await lerBanco('denominadores');
+    banco.dispositivos_dia = banco.dispositivos_dia || [];
+    const chaveDe = l => [l.Data, normalizarTexto(l.Setor), normalizarTexto(l.Estrato),
+      normalizarTexto(l.Dispositivo)].join('|');
+    const porChave = new Map(banco.dispositivos_dia.map(l => [chaveDe(l), l]));
+    const gerarID = proximoID(banco.dispositivos_dia, 'ID_Dispositivo', 'DSP');
+    let novos = 0, atualizados = 0;
+    for (const l of linhas) {
+      const chave = chaveDe(l);
+      const existente = porChave.get(chave);
+      if (existente) { Object.assign(existente, l, { CriadoEm: existente.CriadoEm }); atualizados++; }
+      else {
+        const nova = { ID_Dispositivo: gerarID(), ...l, CriadoPor: app.usuario || '', CriadoEm: agora };
+        banco.dispositivos_dia.push(nova);
+        porChave.set(chave, nova);
+        novos++;
+      }
+    }
+    await gravarBanco('denominadores', banco);
+    return { novos, atualizados };
+  });
+}
+
 async function gravarDispositivosDia(abas, arquivo, setor) {
   imp.detalhes.replaceChildren(el('div', { class: 'cartao' }, el('p', {}, 'Gravando…')));
   const ano = (/(20\d{2})/.exec(arquivo.name) || [])[1] || '';
   const leitura = lerDispositivosDia(abas, { setor, ano });
-  const agora = new Date().toISOString().slice(0, 16).replace('T', ' ');
   try {
-    const resumo = await comTrava(['denominadores'], async () => {
-      const banco = await lerBanco('denominadores');
-      banco.dispositivos_dia = banco.dispositivos_dia || [];
-      /* Reimportar o mesmo ano tem de ATUALIZAR, não duplicar: a planilha é preenchida ao
-         longo do mês e reenviada várias vezes. A identidade é dia + setor + estrato +
-         dispositivo. */
-      const chaveDe = l => [l.Data, normalizarTexto(l.Setor), normalizarTexto(l.Estrato),
-        normalizarTexto(l.Dispositivo)].join('|');
-      const porChave = new Map(banco.dispositivos_dia.map(l => [chaveDe(l), l]));
-      const gerarID = proximoID(banco.dispositivos_dia, 'ID_Dispositivo', 'DSP');
-      let novos = 0, atualizados = 0;
-      for (const l of leitura.linhas) {
-        const chave = chaveDe(l);
-        const existente = porChave.get(chave);
-        if (existente) { Object.assign(existente, l, { CriadoEm: existente.CriadoEm }); atualizados++; }
-        else {
-          const nova = { ID_Dispositivo: gerarID(), ...l, CriadoPor: app.usuario || '', CriadoEm: agora };
-          banco.dispositivos_dia.push(nova);
-          porChave.set(chave, nova);
-          novos++;
-        }
-      }
-      await gravarBanco('denominadores', banco);
-      return { novos, atualizados };
-    });
+    const resumo = await gravarContagensDiarias(leitura.linhas);
     imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
       el('h2', {}, 'Importado'),
       el('p', {}, `${fmtInt(resumo.novos)} contagens novas e ${fmtInt(resumo.atualizados)} atualizadas `
@@ -455,6 +465,48 @@ async function gravarDispositivosDia(abas, arquivo, setor) {
   } catch (e) {
     imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao gravar: ' + e.message));
   }
+}
+
+/* Censo diário de invasividade (NISS/Tasy): o setor vem do PRÓPRIO arquivo — a tela só
+   confirma. O vocabulário de setores vale como sempre: nome novo pede unificação depois. */
+function telaCensoNISS(arquivo, leitura) {
+  const setores = [...new Set(leitura.linhas.map(l => l.Setor))];
+  const competencias = [...new Set(leitura.linhas.map(l => l.Competencia))].sort();
+  const parciais = leitura.cobertura.filter(c => c.diasMedidos && !c.completo);
+  const dispositivos = [...new Set(leitura.linhas.map(l => l.Dispositivo))].sort();
+
+  imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
+    el('h2', {}, 'Censo diário de invasividade (NISS)'),
+    el('p', {}, `Reconheci ${arquivo.name} como o censo diário de invasividade do Tasy. `
+      + `${fmtInt(leitura.linhas.length)} contagens de ${competencias[0]} a ${competencias[competencias.length - 1]}, `
+      + `setor(es): ${setores.join(', ')}.`),
+    el('p', { class: 'texto-suave' }, 'Medidas: ' + dispositivos.join(', ')
+      + '. "Pacientes" entra como pacientes-dia; "Admitidos" não é denominador e fica de fora.'),
+    parciais.length ? el('p', { class: 'texto-suave' },
+      `Meses contados só em parte (dia sem linha não entra no denominador): `
+      + parciais.slice(0, 12).map(c => `${c.competencia} (${c.diasMedidos}/${c.diasNoMes})`).join(', ')
+      + (parciais.length > 12 ? ` e mais ${parciais.length - 12}` : '') + '.') : null,
+    leitura.problemas.length ? el('details', {},
+      el('summary', {}, `${fmtInt(leitura.problemas.length)} linha(s) com problema`),
+      el('ul', {}, leitura.problemas.slice(0, 30).map(p => el('li', {}, p)))) : null,
+    el('div', { class: 'linha-botoes' },
+      el('button', { class: 'botao-primario', onclick: async () => {
+        imp.detalhes.replaceChildren(el('div', { class: 'cartao' }, el('p', {}, 'Gravando…')));
+        try {
+          const resumo = await gravarContagensDiarias(leitura.linhas);
+          imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
+            el('h2', {}, 'Importado'),
+            el('p', {}, `${fmtInt(resumo.novos)} contagens novas e ${fmtInt(resumo.atualizados)} atualizadas.`),
+            el('p', { class: 'texto-suave' }, 'As taxas por 1.000 dias de dispositivo passam a usar estes dados.')));
+        } catch (e) {
+          imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao gravar: ' + e.message));
+        }
+      } }, 'Importar'),
+      ' ',
+      el('button', { onclick: () => {
+        imp.forcarPlanilhaComum = true;
+        processarArquivo(arquivo, 'auto');
+      } }, 'Não é isso — ler como planilha comum'))));
 }
 
 /* Um PDF pode ser três relatórios diferentes; cada um tem seu leitor. A ordem importa:

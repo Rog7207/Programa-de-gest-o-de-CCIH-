@@ -995,6 +995,75 @@ function lerDispositivosDia(abas, opcoes) {
   return { linhas, conferencia, cobertura, problemas, abasIgnoradas };
 }
 
+/* ---- Censo diário de invasividade (NISS/Tasy) ----------------------------------------
+   Relatório "Censo diário de Invasividade - NISS": texto tabulado paginado, blocos por
+   setor ("Setor" numa linha, o nome na seguinte), cabeçalho Referência | Pacientes |
+   Admitidos | Respiradores | CVC | SVD repetido a cada página, uma linha por DIA com as
+   contagens do dia. As datas vêm como texto dd/mm/aaaa — a matriz PRECISA ser lida com
+   raw:true, senão o Excel converte parte delas como mês/dia americano e troca as datas.
+   Devolve o mesmo formato longo de lerDispositivosDia (denominadores.dispositivos_dia). */
+const MEDIDAS_NISS = [
+  'Pacientes-dia',            /* Pacientes: vira cobertura e pacientes-dia diário */
+  '',                         /* Admitidos: não é denominador de dispositivo */
+  'Ventilação mecânica',      /* Respiradores */
+  'Cateter venoso central',   /* CVC */
+  'Sonda vesical de demora'   /* SVD */
+];
+function lerCensoNISS(matriz) {
+  const linhas = [], problemas = [];
+  const diasPorChave = new Map();          /* setor|competência → Set de dias */
+  let setor = '', esperandoSetor = false, reconhecido = false;
+  for (const bruta of (matriz || [])) {
+    const celulas = (bruta || []).map(c => String(c == null ? '' : c).trim()).filter(Boolean);
+    if (!celulas.length) continue;
+    const texto = normalizarTexto(celulas.join(' '));
+    if (texto.includes('censodiariodeinvasividade')) { reconhecido = true; continue; }
+    if (normalizarTexto(celulas[0]) === 'setor' && celulas.length === 1) { esperandoSetor = true; continue; }
+    if (normalizarTexto(celulas[0]).startsWith('referencia')) { esperandoSetor = false; continue; }
+    if (/^de:|^ate:|impressoem|pagina/.test(texto)) continue;
+    const m = celulas[0].match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) {
+      /* Data em NÚMERO é sintoma de leitura sem raw:true — o parser do Excel pode ter
+         trocado dia e mês; melhor recusar do que gravar data errada. */
+      if (reconhecido && /^\d{5}$/.test(celulas[0])) {
+        problemas.push('data convertida em número pelo Excel (' + celulas[0] + ') — ler o arquivo cru (raw)');
+        continue;
+      }
+      if (esperandoSetor) { setor = celulas.join(' '); esperandoSetor = false; }
+      continue;
+    }
+    const dia = Number(m[1]), mes = Number(m[2]), ano = Number(m[3]);
+    const diasNoMes = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+    if (mes < 1 || mes > 12 || dia < 1 || dia > diasNoMes) {
+      problemas.push('data inválida: ' + celulas[0]);
+      continue;
+    }
+    if (!setor) { problemas.push('contagem antes do nome do setor: ' + celulas.join(' | ')); continue; }
+    if (celulas.length < 1 + MEDIDAS_NISS.length) {
+      problemas.push('linha com menos colunas que o esperado: ' + celulas.join(' | '));
+      continue;
+    }
+    const data = `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+    const competencia = data.slice(0, 7);
+    const chave = setor + '|' + competencia;
+    if (!diasPorChave.has(chave)) diasPorChave.set(chave, { setor, competencia, diasNoMes, dias: new Set() });
+    diasPorChave.get(chave).dias.add(dia);
+    MEDIDAS_NISS.forEach((dispositivo, i) => {
+      if (!dispositivo) return;
+      const n = Number(String(celulas[1 + i]).replace(',', '.'));
+      if (!isFinite(n) || n <= 0) return;   /* zero é ausência: não vira linha (cobertura fica) */
+      linhas.push({ Data: data, Competencia: competencia, Setor: setor, Estrato: '',
+        Dispositivo: dispositivo, Contagem: n });
+    });
+  }
+  const cobertura = [...diasPorChave.values()].map(c => ({
+    competencia: c.competencia, setor: c.setor, diasNoMes: c.diasNoMes,
+    diasMedidos: c.dias.size, completo: c.dias.size >= c.diasNoMes }));
+  cobertura.sort((a, b) => (a.setor + a.competencia).localeCompare(b.setor + b.competencia));
+  if (reconhecido && !linhas.length) problemas.push('relatório reconhecido, mas nenhum dia com contagem lido');
+  return { reconhecido, linhas, problemas, cobertura, conferencia: [] };
+}
+
 /* Competência (AAAA-MM) a partir do NOME do arquivo. Relatório mensal agregado costuma
    não trazer data nenhuma na tabela — o mês está só no nome ("Censo 012026.csv",
    "antibioticos 07-2026.xls", "Infecções 2026-03.xls"). Sem isso, dois meses diferentes
@@ -2924,7 +2993,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome,
     enriquecerCirurgia, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

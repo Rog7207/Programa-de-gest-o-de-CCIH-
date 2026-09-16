@@ -2928,6 +2928,63 @@ console.log('\n== 69. Pacientes duplicados pelo atendimento no lugar do prontuá
     imp.sugerirUnificacoes(comPseudo).length === 1);
 }
 
+console.log('\n== 70. Censo diário de invasividade NISS (Tasy) ==');
+{
+  const matriz = [
+    ['Censo diário de Invasividade - NISS', '', ''],
+    ['', 'De:', '01/01/2026', 'Até:', '15/09/2026'],
+    ['', 'Setor'],
+    ['', 'CTI - Dr. Joaquim David Ferreira Lima'],
+    ['', 'Referência', '', 'Pacientes', 'Admitidos', 'Respiradores', 'CVC', 'SVD'],
+    ['', '01/01/2026', '', '28', '2', '17', '18', '22'],
+    ['', '02/01/2026', '', '26', '4', '0', '10', '16'],
+    ['Impresso em:  15/09/2026 17:57:48 Página   1'],
+    ['Censo diário de Invasividade - NISS'],                       /* página nova */
+    ['', 'Referência', '', 'Pacientes', 'Admitidos', 'Respiradores', 'CVC', 'SVD'],
+    ['', '03/01/2026', '', '30', '1', '12', '14', '20'],
+    ['', '31/02/2026', '', '9', '9', '9', '9', '9'],               /* data inválida */
+    ['', 'Setor'],
+    ['', 'UTI Neonatal / Pediátrica'],                             /* segundo bloco */
+    ['', 'Referência', '', 'Pacientes', 'Admitidos', 'Respiradores', 'CVC', 'SVD'],
+    ['', '01/01/2026', '', '10', '1', '2', '3', '4']
+  ];
+  const r = imp.lerCensoNISS(matriz);
+  verificar('reconhece o relatório e lê os dois setores', r.reconhecido
+    && new Set(r.linhas.map(l => l.Setor)).size === 2, JSON.stringify([...new Set(r.linhas.map(l => l.Setor))]));
+  const d1 = r.linhas.filter(l => l.Data === '2026-01-01' && l.Setor.startsWith('CTI'));
+  verificar('dia 01/01: pacientes-dia 28, VM 17, CVC 18, SVD 22; Admitidos fica de fora',
+    d1.length === 4
+    && d1.find(l => l.Dispositivo === 'Pacientes-dia').Contagem === 28
+    && d1.find(l => l.Dispositivo === 'Ventilação mecânica').Contagem === 17
+    && d1.find(l => l.Dispositivo === 'Cateter venoso central').Contagem === 18
+    && d1.find(l => l.Dispositivo === 'Sonda vesical de demora').Contagem === 22, JSON.stringify(d1));
+  verificar('zero não vira linha (dia 02 sem respirador), mas o dia conta na cobertura',
+    !r.linhas.some(l => l.Data === '2026-01-02' && l.Dispositivo === 'Ventilação mecânica')
+    && r.cobertura.find(c => c.setor.startsWith('CTI') && c.competencia === '2026-01').diasMedidos === 3);
+  verificar('data inválida (31/02) vira problema, não linha',
+    r.problemas.some(p => p.includes('31/02/2026')) && !r.linhas.some(l => l.Data.startsWith('2026-02')));
+  verificar('cabeçalho repetido de página não interrompe o setor corrente',
+    r.linhas.some(l => l.Data === '2026-01-03' && l.Setor.startsWith('CTI')));
+  verificar('mês parcial marcado (3 de 31 dias)',
+    r.cobertura.find(c => c.setor.startsWith('CTI')).completo === false);
+  /* Data que virou NÚMERO (lida sem raw) é recusada com explicação, não gravada errada. */
+  const rSerial = imp.lerCensoNISS([
+    ['Censo diário de Invasividade - NISS'],
+    ['', 'Setor'], ['', 'CTI'],
+    ['', 'Referência', 'Pacientes', 'Admitidos', 'Respiradores', 'CVC', 'SVD'],
+    ['', 45292, '28', '2', '17', '18', '22']
+  ]);
+  verificar('data em serial do Excel é recusada com aviso de leitura crua',
+    rSerial.linhas.length === 0 && rSerial.problemas.some(p => p.includes('raw')));
+  /* As medidas viram os grupos certos das taxas por dispositivo. */
+  const g = require(path.join(__dirname, '..', 'js', 'relatorios.js'));
+  verificar('nomes das medidas casam com os grupos das taxas (VM/CVC/SVD)',
+    g.grupoDoDispositivo('Ventilação mecânica') === 'Ventilação mecânica'
+    && g.grupoDoDispositivo('Cateter venoso central') === 'Cateter central'
+    && g.grupoDoDispositivo('Sonda vesical de demora') === 'Sonda vesical'
+    && g.grupoDoDispositivo('Pacientes-dia') === '');
+}
+
 /* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==
    A tela é avaliada de verdade, com DOM falso. Pega o que sintaxe e teste de motor não
    pegam: helper que não existe (era `config.usuario`, que nunca existiu no projeto),

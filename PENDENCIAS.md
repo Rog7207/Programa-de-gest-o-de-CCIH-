@@ -151,6 +151,24 @@ Resto ainda em aberto:
 - DataNascimento vazia no cadastro inteiro: nenhum relatório importado traz nascimento —
   sem ela, homônimos não podem ser fundidos com segurança.
 
+## Relatórios do Tasy trazidos em 15/09/2026 (pasta hhnsc/, gitignorada — dado real)
+
+Prontos para o usuário importar pela tela normal (validados em dry-run):
+- **inter20232026.xls** — internações 2023-2026 com prontuário+atendimento+alta+motivo
+  (3.636 óbitos). Mapeia sozinho no tipo "Internações (censo)": 61.147 registros, 0 erros,
+  0 setores novos; 47.217 novos, 13.930 já no banco, 289 atualizadas com alta. DEPOIS de
+  importar: rodar de novo scripts/unificar-pacientes-atendimento.js (mais pares resolvem).
+- **3066.xls** — Censo diário de Invasividade NISS (CTI, ago/2023-set/2026): leitor novo
+  lerCensoNISS, detecção automática na importação (raw:true por causa das datas dd/mm que
+  o Excel corrompe como mm/dd). 4.532 contagens → denominadores.dispositivos_dia; destrava
+  taxas por 1.000 dias de dispositivo no HNSC. "invasividade UTI.xls" é subconjunto.
+Fila (precisam de leitor/decisão): isolamentos vs.xls (8.230 precauções históricas),
+analise antib 2026 2362.xls (DOT), 2393.xls (dispositivos por paciente), 2405.xls
+(nascimento+telefone — chave "Cd pessoa física" só casa 661/7.632, investigar),
+atb cirurgias.xls (profilaxia cirúrgica; "2375 cirurgias antibioticos.xls" é idêntico).
+Descartáveis: trio 4024 (sem prontuário/alta), isolamentos 15092026 (foto do dia).
+ALTAS 2023A2025/2026: reserva — inter cobre desfechos; estes têm setor/leito da saída.
+
 ## Miniapps
 
 - **Decisão ATB no iPhone**: só funciona hospedado por `https` (arquivo baixado não roda no

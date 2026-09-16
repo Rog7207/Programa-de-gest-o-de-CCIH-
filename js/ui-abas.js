@@ -109,6 +109,23 @@ async function montarCulturas(conteudo) {
   const sensPorCultura = {};
   banco.sensibilidade.forEach(s => { (sensPorCultura[s.ID_Cultura] = sensPorCultura[s.ID_Cultura] || []).push(s); });
 
+  /* Quadro dos últimos 90 dias (pedido da revisão tela a tela, 16/09/2026): o pulso da
+     triagem — quanto entrou, como foi classificado e o que ainda espera. */
+  const corte90 = (() => { const d = new Date(Date.parse(hojeISO() + 'T00:00:00Z') - 90 * 864e5);
+    return d.toISOString().slice(0, 10); })();
+  const ultimas90 = banco.culturas.filter(c => String(c.DataColeta).slice(0, 10) >= corte90);
+  const aval = rotulo => ultimas90.filter(c => String(c.AvaliacaoCCIH || '').startsWith(rotulo)).length;
+  conteudo.append(el('div', { class: 'grade-cartoes' }, ...[
+    ['Culturas nos últimos 90 dias', ultimas90.length],
+    ['Avaliadas pela CCIH', ultimas90.filter(c => c.StatusRevisao === 'avaliada').length],
+    ['Presentes na admissão', aval('Presente na admissão')],
+    ['IRAS', aval('IRAS')],
+    ['Contaminação', aval('Contaminação')],
+    ['Colonização', aval('Colonização')],
+    ['Pendentes', ultimas90.filter(c => c.StatusRevisao === 'pendente').length]
+  ].map(([r, n]) => el('div', { class: 'cartao cartao-numero' },
+    el('div', { class: 'numero-grande' }, fmtInt(n)), el('div', { class: 'texto-suave' }, r)))));
+
   const filtro = Object.assign({ status: 'pendente', setor: '', busca: '', de: '', ate: '' }, app.filtroCulturas || {});
   app.filtroCulturas = null;
   const setores = [...new Set(banco.culturas.map(c => c.Setor).filter(Boolean))].sort();

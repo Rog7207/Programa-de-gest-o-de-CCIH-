@@ -132,6 +132,21 @@ async function montarVigilancia(conteudo) {
   const porStatus = status => banco.cirurgias.filter(c => c.StatusVigilancia === status && doMes(c));
   const recarregar = () => navegar('vigilancia', { historico: 'substituir' });
 
+  /* ---- Cartões do funil (pedido da revisão tela a tela, 16/09/2026): a mesma seleção
+     de mês rege os números — quantas cirurgias, em que degrau cada uma está. ---- */
+  const CONCLUIDAS_VIG = ['sem infecção', 'infecção confirmada', 'encerrada sem contato',
+    'encerrada — número incorreto', 'encerrada — óbito'];
+  const doPeriodoVig = banco.cirurgias.filter(c => doMes(c) && c.StatusVigilancia !== 'descartada');
+  const contaStatus = lista => doPeriodoVig.filter(c => lista.includes(String(c.StatusVigilancia || 'pendente'))).length;
+  conteudo.append(el('div', { class: 'grade-cartoes' }, ...[
+    ['Cirurgias', doPeriodoVig.length],
+    ['Monitoradas (aguardando contato)', contaStatus(['sob vigilância'])],
+    ['Mensagens enviadas', contaStatus(['mensagem enviada'])],
+    ['Respostas a avaliar', contaStatus(['em investigação'])],
+    ['Concluídas', contaStatus(CONCLUIDAS_VIG)]
+  ].map(([r, n]) => el('div', { class: 'cartao cartao-numero' },
+    el('div', { class: 'numero-grande' }, fmtInt(n)), el('div', { class: 'texto-suave' }, r)))));
+
   const categoriasVigiadas = config.rotina.vigilanciaCategorias;
   const seloImplante = c => classificarParaVigilancia(c, categoriasVigiadas).implante
     ? el('span', { class: 'selo', style: 'color:#533ab7;font-weight:600', title: 'Com prótese/implante — vigilância vale até 90 dias' }, ' ⚙ prótese')

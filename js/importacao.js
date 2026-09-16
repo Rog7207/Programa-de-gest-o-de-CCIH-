@@ -2149,6 +2149,12 @@ function montarLinhaImportada(registro, tipo, id, usuario, agora, tempoCorte) {
   for (const campo of definicao.campos) {
     if (!campo.paraPacientes) linha[campo.id] = registro[campo.id];
   }
+  /* Tipos sem coluna de prontuário no relatório (analise_atb): o prontuário RESOLVIDO
+     pelo atendimento não está nos campos declarados — sem esta linha ele se perdia na
+     gravação, mesmo com a deduplicação já o usando. */
+  if (definicao.resolvePorAtendimento && !definicao.campos.some(c => c.id === 'Prontuario')) {
+    linha.Prontuario = registro.Prontuario || '';
+  }
   if (tipo === 'cirurgias') {
     linha.ProcedimentoNHSN = registro.Procedimento;
     linha.Procedimento = (registro._originais && registro._originais.Procedimento) || registro.Procedimento;

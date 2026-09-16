@@ -3022,6 +3022,13 @@ console.log('\n== 71. Análise de antibióticos do Tasy (tipo analise_atb) ==');
   verificar('dedup: resolvido duplica contra o antigo; sem prontuário separa por atendimento',
     dd.duplicados.length === 1 && dd.novos.length === 2, JSON.stringify({ n: dd.novos.length, d: dd.duplicados.length }));
 
+  /* O prontuário RESOLVIDO sobrevive à gravação, mesmo sem ser campo declarado do tipo. */
+  const linhaGravada = imp.montarLinhaImportada(
+    { Atendimento: '555', Prontuario: '100', Antibiotico: 'Ceftriaxona', DataInicio: '2026-02-15' },
+    tipo, 'PRE-9', 'Teste', '2026-09-15 10:00');
+  verificar('montarLinhaImportada preserva o prontuário resolvido pelo atendimento',
+    linhaGravada.Prontuario === '100' && linhaGravada.Atendimento === '555', JSON.stringify(linhaGravada));
+
   /* Curso: a suspensão encerra o uso de verdade (2 dias, não 8). */
   const cursos = imp.cursosDeAntibiotico([
     { Prontuario: '100', Antibiotico: 'Ceftriaxona', DataInicio: '2026-02-15', DataFim: '2026-02-22', DataSuspensao: '2026-02-16' },

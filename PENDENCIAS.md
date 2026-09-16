@@ -168,10 +168,16 @@ Prontos para o usuário importar pela tela normal (validados em dry-run):
   (cai para atendimento sem prontuário). DOT passou a usar o fim EFETIVO (suspensão antes
   do previsto encurta o curso) e o relatório de antibióticos ganhou o bloco "Análises de
   antibiótico (Tasy)". 12 termos novos de antibiótico entram pela tela na importação.
+- **2375 cirurgias antibioticos.xls** (= atb cirurgias.xls) — FEITO (16/09/2026):
+  scripts/preencher-profilaxia-cirurgias.js casa as baixas do centro cirúrgico com as
+  cirurgias do banco por atendimento + janela D-1..D+1 e preenche ProfilaxiaAntibiotico
+  (sufixo "baixas até D+N" marca profilaxia prolongada; só preenche campo vazio). Dry-run:
+  3.780/5.637 cirurgias, 28 prolongadas. **Aguardando --aplicar.** Limitação: Dt baixa não
+  tem hora — a janela de 60 min pré-incisão (IntervaloProfilaxia) precisa do relatório com
+  hora da administração, a pedir ao TI.
 Fila (precisam de leitor/decisão): isolamentos vs.xls (8.230 precauções históricas),
 2393.xls (dispositivos por paciente), 2405.xls
-(nascimento+telefone — chave "Cd pessoa física" só casa 661/7.632, investigar),
-atb cirurgias.xls (profilaxia cirúrgica; "2375 cirurgias antibioticos.xls" é idêntico).
+(nascimento+telefone — chave "Cd pessoa física" só casa 661/7.632, investigar).
 Descartáveis: trio 4024 (sem prontuário/alta), isolamentos 15092026 (foto do dia).
 ALTAS 2023A2025/2026: reserva — inter cobre desfechos; estes têm setor/leito da saída.
 

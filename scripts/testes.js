@@ -3093,6 +3093,26 @@ console.log('\n== 72. Avaliações de ATB da visita da UTI entram no stewardship
   verificar('banco uti entrou na lista de bancos dos relatórios', rel.BANCOS_RELATORIOS.includes('uti'));
 }
 
+console.log('\n== 73. Profilaxia cirúrgica a partir das baixas do Tasy ==');
+{
+  const { profilaxiaDaCirurgia } = require(path.join(__dirname, 'preencher-profilaxia-cirurgias.js'));
+  const baixas = [
+    { Droga: 'Cefazolina', Data: '2026-03-10' },
+    { Droga: 'Cefazolina', Data: '2026-03-10' },      /* redose no mesmo dia: droga uma vez só */
+    { Droga: 'Vancomicina', Data: '2026-03-09' },     /* D-1 entra na janela */
+    { Droga: 'Cefazolina', Data: '2026-03-13' },      /* D+3: prolongada */
+    { Droga: 'Ceftriaxona', Data: '2026-02-01' }      /* outra internação: fora */
+  ];
+  const p = profilaxiaDaCirurgia('2026-03-10', baixas);
+  verificar('drogas da janela D-1..D+1, sem repetir, com sufixo de prolongamento',
+    p.drogas.length === 2 && p.texto === 'Cefazolina + Vancomicina — baixas até D+3', JSON.stringify(p));
+  verificar('sem baixa na janela devolve null (não inventa profilaxia)',
+    profilaxiaDaCirurgia('2026-06-01', baixas) === null);
+  verificar('baixa só no dia, sem dias seguintes, fica sem sufixo',
+    profilaxiaDaCirurgia('2026-03-10', [{ Droga: 'Cefazolina', Data: '2026-03-10' }]).texto === 'Cefazolina');
+  verificar('data de cirurgia inválida devolve null', profilaxiaDaCirurgia('', baixas) === null);
+}
+
 /* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==
    A tela é avaliada de verdade, com DOM falso. Pega o que sintaxe e teste de motor não
    pegam: helper que não existe (era `config.usuario`, que nunca existiu no projeto),

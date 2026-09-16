@@ -631,6 +631,7 @@ async function montarIsolamentos(conteudo) {
   try {
     [banco, bancoCulturas, bancoPacientes] = await Promise.all([
       lerBanco('isolamentos'), lerBanco('culturas'), lerBanco('pacientes')]);
+    var bancoEvolucoesIso = await lerBanco('evolucoes').catch(() => ({ evolucoes: [] }));
   } catch (e) { conteudo.append(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message)); return; }
   const nomes = new Map(bancoPacientes.pacientes.map(p => [normalizarProntuario(p.Prontuario), p.Nome]));
   const nomeDe = pr => nomes.get(normalizarProntuario(pr)) || '';
@@ -701,10 +702,58 @@ async function montarIsolamentos(conteudo) {
       el('h2', {}, 'Precauções ativas'),
       ativas.length ? el('table', { class: 'tabela' },
         el('thead', {}, el('tr', {}, ['Início', 'Prontuário', 'Paciente', 'Setor', 'Tipo', 'Motivo', ''].map(c => el('th', {}, c)))),
-        el('tbody', {}, ativas.map(p => el('tr', {},
+        el('tbody', {}, ativas.map(p => el('tr', { class: 'linha-clicavel', title: 'Clique para ver e anotar',
+            onclick: e => detalharIsolamento(p, e.currentTarget) },
           ...[p.DataInicio, p.Prontuario, nomeDe(p.Prontuario), p.Setor, p.TipoPrecaucao, p.Motivo].map(v => el('td', {}, String(v || ''))),
-          el('td', {}, el('button', { class: 'botao-secundario', onclick: () => encerrar(p) }, 'Encerrar'))))))
+          el('td', {}, el('button', { class: 'botao-secundario',
+            onclick: e => { e.stopPropagation(); encerrar(p); } }, 'Encerrar'))))))
         : el('p', { class: 'texto-suave' }, 'Nenhuma precaução ativa registrada.')));
+
+  /* Detalhe da precaução (pedido da revisão tela a tela, 16/09/2026): as anotações da
+     CCIH sobre o isolamento (diário datado e assinado, coluna Observacoes) e a última
+     evolução médica da foto do Tasy, quando houver. */
+  function detalharIsolamento(p, tr) {
+    const pron = normalizarProntuario(p.Prontuario);
+    const evolucoes = (bancoEvolucoesIso.evolucoes || []).filter(e2 =>
+      e2.Categoria === 'E' && normalizarProntuario(e2.Prontuario) === pron)
+      .sort((a2, b2) => String(b2.DataEvolucao).localeCompare(String(a2.DataEvolucao)));
+    const campoObs = el('input', { type: 'text', placeholder: 'observação da CCIH sobre este isolamento', style: 'min-width:340px' });
+    const msg2 = el('span', { class: 'aviso-erro-texto' });
+    const areaDiario = el('p', { class: 'texto-suave', style: 'white-space:pre-wrap' },
+      String(p.Observacoes || '').trim() || 'Sem observações registradas.');
+    detalharNaLinha(tr, el('div', { class: 'cartao cartao-detalhe' },
+      el('h2', {}, `${p.TipoPrecaucao} — ${nomeDe(p.Prontuario) || p.Prontuario}`),
+      el('p', { class: 'texto-suave' },
+        `${p.Motivo || ''} · ${p.Setor}${String(p.Leito || '').trim() ? ' · leito ' + p.Leito : ''}` +
+        ` · desde ${String(p.DataInicio).slice(0, 10)}`),
+      el('h3', {}, 'Observações da CCIH'),
+      areaDiario,
+      el('div', { class: 'linha-campos' }, campoObs,
+        el('button', { class: 'botao-primario', onclick: async () => {
+          if (!campoObs.value.trim()) { msg2.textContent = 'Escreva a observação.'; return; }
+          try {
+            await comTrava(['isolamentos'], async () => {
+              const atual = await lerBanco('isolamentos');
+              const alvo = atual.precaucoes.find(x => x.ID_Precaucao === p.ID_Precaucao);
+              if (!alvo) throw new Error('Precaução não encontrada no banco.');
+              alvo.Observacoes = acrescentarObservacao(alvo.Observacoes, '', campoObs.value.trim(),
+                app.usuario, agoraCurto());
+              p.Observacoes = alvo.Observacoes;
+              await gravarBanco('isolamentos', atual);
+            });
+            areaDiario.textContent = p.Observacoes;
+            campoObs.value = '';
+            msg2.textContent = '';
+          } catch (e2) { msg2.textContent = e2.message; }
+        } }, 'Anotar'), msg2),
+      evolucoes.length ? el('details', {},
+        el('summary', {}, `Última evolução médica (${evolucoes[0].DataEvolucao}` +
+          (evolucoes[0].Autor ? ' — ' + evolucoes[0].Autor : '') + ')'),
+        el('p', { class: 'texto-suave', style: 'white-space:pre-wrap' }, evolucoes[0].Texto)) : null,
+      el('div', { class: 'linha-botoes' },
+        el('button', { class: 'botao-secundario', onclick: () => abrirPaciente(p.Prontuario) },
+          'Ver ficha do paciente'))));
+  }
 
   /* ---- Lista imprimível para notificação no sistema do hospital ----
      O app não conversa com o sistema do hospital: depois da revisão das culturas, a

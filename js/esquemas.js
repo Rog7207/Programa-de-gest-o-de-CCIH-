@@ -125,7 +125,8 @@ const ESQUEMAS = {
   isolamentos: {
     arquivo: 'isolamentos.xlsx',
     abas: {
-      precaucoes: ['ID_Precaucao', 'Prontuario', 'Setor', 'Leito', 'TipoPrecaucao', 'Motivo', 'DataInternacao', 'DataInicio', 'DataFim', 'Status', 'VistoEm', 'CriadoPor', 'CriadoEm'],
+      /* Observacoes: diário datado e assinado da CCIH sobre o isolamento (16/09/2026). */
+      precaucoes: ['ID_Precaucao', 'Prontuario', 'Setor', 'Leito', 'TipoPrecaucao', 'Motivo', 'DataInternacao', 'DataInicio', 'DataFim', 'Status', 'VistoEm', 'Observacoes', 'CriadoPor', 'CriadoEm'],
       decisoes: ['ID_Cultura', 'Prontuario', 'Decisao', 'Justificativa', 'CriadoPor', 'CriadoEm']
     }
   },

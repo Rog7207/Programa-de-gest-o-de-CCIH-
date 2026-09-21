@@ -3508,6 +3508,97 @@ console.log('\n== 81. Deduplicação de casos de IRAS (mesmo episódio, vários 
     mantido && { data: mantido.DataInfeccao, obs: mantido.Observacoes });
 }
 
+console.log('\n== 82. Rotina da equipe: dias úteis, âncora na carga semanal e cadência do ATB ==');
+{
+  const al = require(path.join(__dirname, '..', 'js', 'alertas.js'));
+  const referencia = '2026-06-12';   /* sexta: data da última carga semanal */
+  const cultura = (id, data, extras) => ({ ID_Cultura: id, Prontuario: id, DataColeta: data, Setor: 'CTI',
+    Material: 'Hemocultura', Microrganismo: 'Klebsiella pneumoniae', StatusRevisao: 'pendente',
+    CriadoEm: '2026-06-08 08:00', ...extras });
+  const bancos = {
+    culturas: [
+      cultura('C1', '2026-06-01'),                                   /* seg: 9 dias úteis atrás */
+      cultura('C2', '2026-06-09'),                                   /* ter: 3 dias úteis atrás */
+      cultura('C3', '2026-05-01', { StatusRevisao: 'avaliada' })     /* já avaliada: fora da fila */
+    ],
+    casosIras: [
+      { ID_IRAS: 'K1', Prontuario: '1', DataInfeccao: '2026-06-09', StatusInvestigacao: 'em investigação' },
+      { ID_IRAS: 'K2', Prontuario: '2', DataInfeccao: '2026-05-01', StatusInvestigacao: 'confirmado' }
+    ],
+    visitasUti: [{ Data: '2026-06-05' }, { Data: '2026-05-29' }],    /* última sexta: 5 dias úteis */
+    observacoesHigiene: [],
+    avaliacoesAtb: [{ DataDados: '2026-06-08' }]                     /* seg: 4 dias úteis */
+  };
+  const buscar = (rotina, funcao) => rotina.find(r => r.funcao === funcao);
+
+  const prof = [
+    { Nome: 'Ana', Funcao: 'deteccao_iras', CadaDias: '2' },
+    { Nome: 'Bia', Funcao: 'deteccao_iras', CadaDias: '5' },        /* prazo vale o mais curto: 2 */
+    { Nome: 'Ana', Funcao: 'validacao_iras', CadaDias: '3' },
+    { Nome: 'Cid', Funcao: 'visita_uti', CadaDias: '2' },
+    { Nome: 'Duda', Funcao: 'higiene_maos', CadaDias: '30' },
+    { Nome: 'Ana', Funcao: 'controle_antibioticos', CadaDias: '5' },
+    { Nome: 'Eva', Funcao: 'gestor', CadaDias: '' }
+  ];
+  const rotina = al.rotinaDaEquipe(prof, bancos, referencia, {});
+
+  const det = buscar(rotina, 'deteccao_iras');
+  verificar('detecção de IRAS: fila de 2, mais antiga há 9 dias úteis, atrasada (prazo 2)',
+    det.pendentes === 2 && det.atrasoDias === 9 && det.status === 'atrasado' && det.cadaDias === 2, det);
+  verificar('detecção de IRAS lista os dois responsáveis',
+    det.responsaveis.length === 2 && det.responsaveis.includes('Ana') && det.responsaveis.includes('Bia'), det.responsaveis);
+
+  const val = buscar(rotina, 'validacao_iras');
+  verificar('validação de IRAS: 1 suspeita há 3 dias úteis, em dia (prazo 3); confirmado não conta',
+    val.pendentes === 1 && val.atrasoDias === 3 && val.status === 'em dia', val);
+
+  const uti = buscar(rotina, 'visita_uti');
+  verificar('visita à UTI: última há 5 dias úteis, atrasada (prazo 2)',
+    uti.tipo === 'cadencia' && uti.atrasoDias === 5 && uti.status === 'atrasado', uti);
+
+  const hig = buscar(rotina, 'higiene_maos');
+  verificar('higiene sem nenhuma observação: sem dados', hig.semDados === true && hig.status === 'sem dados', hig);
+
+  const atb = buscar(rotina, 'controle_antibioticos');
+  verificar('controle de ATB: cadência da última avaliação (4 dias úteis), em dia (prazo 5)',
+    atb.tipo === 'cadencia' && atb.atrasoDias === 4 && atb.status === 'em dia', atb);
+
+  const gestor = buscar(rotina, 'gestor');
+  verificar('gestor é informativo (sem fila)', gestor.status === 'informativo', gestor);
+
+  verificar('atrasadas vêm primeiro na ordenação',
+    rotina[0].status === 'atrasado' && rotina[1].status === 'atrasado', rotina.map(r => r.funcao + ':' + r.status));
+
+  /* Âncora na carga: item que entrou NA carga (data = referência) não está atrasado, mesmo
+     com prazo apertado — é o "congela entre cargas, mostra a semana vigente". */
+  const daSemana = al.rotinaDaEquipe([{ Nome: 'Ana', Funcao: 'deteccao_iras', CadaDias: '1' }],
+    { culturas: [cultura('X', '2026-06-12')] }, '2026-06-12', {});
+  verificar('item da carga vigente não conta como atraso',
+    daSemana[0].status === 'em dia' && daSemana[0].atrasoDias === 0, daSemana[0]);
+
+  /* Função sem periodicidade: não dá para julgar, mesmo com fila. */
+  const semPrazo = al.rotinaDaEquipe([{ Nome: 'Ana', Funcao: 'deteccao_iras', CadaDias: '' }], bancos, referencia, {});
+  verificar('função com fila mas sem "a cada N dias": sem periodicidade',
+    semPrazo[0].status === 'sem periodicidade' && semPrazo[0].pendentes === 2, semPrazo[0]);
+
+  /* Fila zerada nunca está atrasada. */
+  const zerada = al.rotinaDaEquipe([{ Nome: 'Ana', Funcao: 'deteccao_iras', CadaDias: '1' }],
+    { culturas: [] }, referencia, {});
+  verificar('fila vazia fica em dia', zerada[0].status === 'em dia' && zerada[0].pendentes === 0, zerada[0]);
+
+  /* Dias úteis: fim de semana não conta. */
+  verificar('sexta → segunda é 1 dia útil (pula o fim de semana)', al.diasUteis('2026-06-05', '2026-06-08') === 1);
+  verificar('segunda → sexta da mesma semana são 4 dias úteis', al.diasUteis('2026-06-08', '2026-06-12') === 4);
+  verificar('duas semanas (sex→sex+7úteis) contam 10', al.diasUteis('2026-05-29', '2026-06-12') === 10);
+  verificar('mesma data e datas invertidas dão 0',
+    al.diasUteis('2026-06-12', '2026-06-12') === 0 && al.diasUteis('2026-06-12', '2026-06-01') === 0);
+
+  /* Data da última carga: o carimbo de importação mais recente. */
+  verificar('data da última carga = CriadoEm mais recente',
+    al.dataDaUltimaCarga(['2026-06-08 09:00', '2026-06-01 10:00', '', 'lixo']) === '2026-06-08'
+    && al.dataDaUltimaCarga([]) === null);
+}
+
 /* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==
    A tela é avaliada de verdade, com DOM falso. Pega o que sintaxe e teste de motor não
    pegam: helper que não existe (era `config.usuario`, que nunca existiu no projeto),

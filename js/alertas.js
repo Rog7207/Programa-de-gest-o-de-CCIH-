@@ -335,10 +335,168 @@ function isolamentosParaNotificar(precaucoes, dia) {
     && String(p.DataInicio).slice(0, 10) === dia);
 }
 
+/* ---- Rotina da equipe ----
+   Consome o cadastro de Equipe e funções (Configurações): cada função da CCIH tem uma
+   FILA que se enche sozinha (culturas a revisar, suspeitas a validar, cirurgias a contatar…)
+   e uma PERIODICIDADE — o "a cada N dias" com que quem a exerce deve zerá-la. Aqui a
+   periodicidade vira o prazo: a fila está "atrasada" quando o item mais antigo já passou dele.
+
+   Duas escolhas da CCIH do HNSC moldam a conta (decididas em 21/09/2026):
+   - o relógio é a DATA DA ÚLTIMA CARGA semanal, não o calendário: os dados entram uma vez
+     por semana (segunda) e o trabalho de processo é feito nesse dia; entre cargas o painel
+     "congela" e mostra a semana vigente. Só vira atraso o que sobrou de semanas anteriores.
+   - conta-se em DIAS ÚTEIS: fim de semana é sobreaviso, não envelhece fila.
+
+   Duas naturezas de medidor:
+   - fila: backlog de itens pendentes; o atraso é a idade (em dias úteis) do mais antigo;
+   - cadência: atividade que se repete (visita, auditoria, avaliação semanal de ATB); o
+     atraso é o tempo (em dias úteis) desde a última, até a data de referência. */
+
+function diasCorridos(dataISO, hoje) {
+  const a = Date.parse(String(dataISO).slice(0, 10) + 'T00:00:00Z');
+  const b = Date.parse(String(hoje).slice(0, 10) + 'T00:00:00Z');
+  if (!isFinite(a) || !isFinite(b)) return null;
+  return Math.round((b - a) / 86400000);
+}
+
+/* Dias ÚTEIS (seg–sex) de `inicio` (exclusive) até `fim` (inclusive). Fim de semana é
+   sobreaviso: não conta. Cálculo O(1) — não varre datas antigas item a item. */
+function diasUteis(inicioISO, fimISO) {
+  const a = Date.parse(String(inicioISO).slice(0, 10) + 'T00:00:00Z');
+  const b = Date.parse(String(fimISO).slice(0, 10) + 'T00:00:00Z');
+  if (!isFinite(a) || !isFinite(b) || b <= a) return 0;
+  const totalDias = Math.round((b - a) / 86400000);
+  const semanas = Math.floor(totalDias / 7);
+  let count = semanas * 5;
+  const resto = totalDias - semanas * 7;
+  const dowInicio = new Date(a).getUTCDay();   /* 0=dom … 6=sáb */
+  for (let i = 1; i <= resto; i++) {
+    const d = (dowInicio + i) % 7;
+    if (d !== 0 && d !== 6) count++;
+  }
+  return count;
+}
+
+/* Data da última carga semanal: o carimbo de importação (CriadoEm) mais recente dos dados.
+   É o relógio dos indicadores de processo — o painel congela nela entre cargas. */
+function dataDaUltimaCarga(carimbos) {
+  let max = '';
+  for (const c of carimbos || []) {
+    const d = String(c || '').slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d) && d > max) max = d;
+  }
+  return max || null;
+}
+
+function rotinaDaEquipe(profissionais, bancos, referencia, opcoes) {
+  opcoes = opcoes || {};
+  bancos = bancos || {};
+
+  /* Idade da fila: quantos itens pendentes e há quantos dias úteis está o mais antigo. */
+  const idadeDaFila = (itens, dataDe, naveg) => {
+    let atraso = 0;
+    for (const it of itens) {
+      const d = diasUteis(dataDe(it), referencia);
+      if (d > atraso) atraso = d;
+    }
+    return { tipo: 'fila', pendentes: itens.length, atrasoDias: atraso, naveg };
+  };
+  /* Cadência: há quantos dias úteis foi a última vez. Sem nenhum registro = sem dados. */
+  const cadencia = (itens, dataDe, naveg) => {
+    let ultima = '';
+    for (const it of itens) {
+      const dt = String(dataDe(it) || '').slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dt) && dt > ultima) ultima = dt;
+    }
+    if (!ultima) return { tipo: 'cadencia', semDados: true, naveg };
+    return { tipo: 'cadencia', ultima, atrasoDias: diasUteis(ultima, referencia), naveg };
+  };
+
+  const medidores = {
+    gestor: () => ({ tipo: 'informativo', naveg: null }),
+    deteccao_iras: () => idadeDaFila(
+      (bancos.culturas || []).filter(c => normalizarTexto(c.StatusRevisao) === 'pendente' && c.Microrganismo),
+      c => c.DataColeta, 'culturas'),
+    validacao_iras: () => idadeDaFila(
+      (bancos.casosIras || []).filter(k => normalizarTexto(k.StatusInvestigacao) === 'eminvestigacao'),
+      k => k.DataInfeccao || k.CriadoEm, 'iras'),
+    isolamentos: () => idadeDaFila(
+      pendenciasIsolamento(bancos.culturas || [], bancos.sensibilidade || [], bancos.precaucoes || [],
+        bancos.decisoes || [], referencia, null, opcoes.mdrMonitorados),
+      m => m.DataColeta, 'isolamentos'),
+    investigacao_surtos: () => {
+      const suspeitas = detectarSurtos(bancos.culturas || [],
+        { sensibilidade: bancos.sensibilidade, cirurgias: bancos.cirurgias });
+      const ativas = suspeitas.filter(s => {
+        const inv = (bancos.investigacoesSurto || []).find(i => mesmaSuspeita(s, i));
+        return !inv || normalizarTexto(inv.Situacao) !== 'descartado';
+      });
+      return idadeDaFila(ativas, s => s.Fim, 'surtos');
+    },
+    /* Pós-alta: a fila é a cirurgia dentro da janela de contato (30–120 dias corridos,
+       JANELA_VIGILANCIA) ainda pendente; o atraso conta em dias úteis a partir da ABERTURA
+       da janela (data da cirurgia + 30 dias), não da cirurgia. */
+    vigilancia_pos_alta: () => {
+      const naJanela = (bancos.cirurgias || []).filter(c => {
+        if (normalizarTexto(c.StatusVigilancia) !== 'pendente') return false;
+        const d = diasCorridos(c.DataCirurgia, referencia);
+        return d !== null && d >= 30 && d <= 120;
+      });
+      let atraso = 0;
+      for (const c of naJanela) {
+        const inicio = Date.parse(String(c.DataCirurgia).slice(0, 10) + 'T00:00:00Z');
+        const abertura = new Date(inicio + 30 * 86400000).toISOString().slice(0, 10);
+        const d = diasUteis(abertura, referencia);
+        if (d > atraso) atraso = d;
+      }
+      return { tipo: 'fila', pendentes: naJanela.length, atrasoDias: atraso, naveg: 'vigilancia' };
+    },
+    visita_uti: () => cadencia(bancos.visitasUti || [], v => v.Data, 'uti'),
+    higiene_maos: () => cadencia(bancos.observacoesHigiene || [], o => o.Data, 'higiene'),
+    /* Controle de antibióticos: a lista sobe uma vez por semana e é avaliada na carga.
+       O medidor é a cadência da última avaliação registrada — em dia enquanto a avaliação
+       acompanha a carga semanal. */
+    controle_antibioticos: () => cadencia(bancos.avaliacoesAtb || [], a => a.DataDados || a.CriadoEm, 'antibioticos')
+  };
+
+  const porFuncao = new Map();
+  for (const p of profissionais || []) {
+    const funcao = String(p.Funcao || '').trim();
+    if (!funcao) continue;
+    if (!porFuncao.has(funcao)) porFuncao.set(funcao, { responsaveis: new Set(), dias: [] });
+    const g = porFuncao.get(funcao);
+    const nome = String(p.Nome || '').trim();
+    if (nome) g.responsaveis.add(nome);
+    const n = parseInt(p.CadaDias, 10);
+    if (Number.isFinite(n) && n > 0) g.dias.push(n);
+  }
+
+  const linhas = [];
+  for (const [funcao, g] of porFuncao) {
+    /* Duas pessoas na mesma função podem ter prazos diferentes; vale o mais curto — é o
+       prazo em que a fila DEVE estar zerada para todo mundo estar em dia. */
+    const cadaDias = g.dias.length ? Math.min(...g.dias) : null;
+    const medida = medidores[funcao] ? medidores[funcao]() : { tipo: 'sem_medidor', naveg: null };
+    let status;
+    if (medida.tipo === 'informativo') status = 'informativo';
+    else if (medida.tipo === 'sem_medidor') status = 'sem medidor';
+    else if (cadaDias == null) status = 'sem periodicidade';
+    else if (medida.semDados) status = 'sem dados';
+    else if (medida.tipo === 'fila') status = (medida.pendentes > 0 && medida.atrasoDias > cadaDias) ? 'atrasado' : 'em dia';
+    else status = medida.atrasoDias > cadaDias ? 'atrasado' : 'em dia';
+    linhas.push({ funcao, responsaveis: [...g.responsaveis], cadaDias, status, ...medida });
+  }
+
+  /* Atrasado primeiro: o painel é para agir. */
+  const ordem = { atrasado: 0, 'sem dados': 1, 'em dia': 2, 'sem periodicidade': 3, 'sem medidor': 4, informativo: 5 };
+  return linhas.sort((a, b) => (ordem[a.status] - ordem[b.status]) || a.funcao.localeCompare(b.funcao));
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { detectarSurtos, detectarMultirresistentes, inferirMecanismo, pendenciasIsolamento,
     mesmaSuspeita, correlacionarSurto, resumoParaVisitaUTI, ehSetorDeUTI, iniciaisDe, isolamentosParaNotificar,
     ehSetorPortaDeEntrada, perfilAntibiograma, antibiogramasSemelhantes,
+    rotinaDaEquipe, diasCorridos, diasUteis, dataDaUltimaCarga,
     GENEROS_GRAM_NEGATIVOS };
 }
 

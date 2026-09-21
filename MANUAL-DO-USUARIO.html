@@ -27,7 +27,41 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 <p>Na primeira conexão, a versão nova <strong>atualiza a estrutura do banco sozinha</strong> — acrescenta colunas e abas que ainda não existiam, preservando todos os dados.</p>
 <p><strong>Regra de ouro: só para frente.</strong> Nunca use uma versão antiga do app numa pasta de dados que já foi aberta por versão mais nova — a antiga não conhece as colunas novas.</p>
 <hr>
-<h2>2. Importando dados</h2>
+<h2>2. Cadastros e configurações</h2>
+<p>Tudo isto fica na aba <strong>Configurações</strong> — é o que você define uma vez (ou revisa de tempos em tempos) e o resto do app passa a respeitar.</p>
+<h3>Usuário</h3>
+<p>Seu nome <strong>assina</strong> tudo que você importa ou altera. Salve-o uma vez; fica guardado no navegador daquele computador.</p>
+<h3>Equipe e funções</h3>
+<p>Cadastre cada profissional da CCIH e marque <strong>quais funções</strong> ele exerce. Cada função pode receber um <strong>"a cada N dias"</strong> — a periodicidade com que a fila daquela função deve ser zerada.</p>
+<ul>
+<li><strong>Para que servem os nomes:</strong> viram os <strong>botões da tela de entrada</strong>, padronizando a assinatura (acaba o "Rogerio" × "Rogério" contando como duas pessoas).</li>
+<li><strong>Para que servem os dias:</strong> definem o <strong>prazo de cada fila</strong>. O prazo é <em>por função</em>, então a mesma pessoa pode ter "Detecção de IRAS a cada 1 dia" e "Visita à UTI a cada 2 dias". Deixe em branco quando a função não tem periodicidade fixa.</li>
+</ul>
+<p>As funções são: Gestor, Detecção de IRAS (revisão de culturas), Validação de IRAS (segunda assinatura), Vigilância pós-alta, Controle de antibióticos, Visita à UTI, Investigação de surtos, Controle de isolamentos e Auditoria de higiene das mãos.</p>
+<h3>Rotina da equipe (no Painel)</h3>
+<p>Esse cadastro alimenta o cartão <strong>Rotina da equipe</strong>, no Painel. Para cada função ele mostra a fila, quem responde por ela e se está <strong>em dia</strong> ou <strong>atrasada</strong> para o prazo:</p>
+<ul>
+<li><strong>fila</strong> (culturas a revisar, suspeitas a validar, isolamentos pendentes, cirurgias a contatar, surtos a investigar): atrasada quando o <strong>item mais antigo</strong> já passou do prazo;</li>
+<li><strong>cadência</strong> (visita à UTI, auditoria de higiene, avaliação semanal de antibióticos): atrasada quando faz <strong>mais tempo que o prazo desde a última vez</strong>.</li>
+</ul>
+<p>Duas regras importantes, decididas para a rotina do HNSC:</p>
+<ul>
+<li><strong>O relógio é a carga semanal, não o calendário.</strong> Os dados entram uma vez por semana (segunda) e o trabalho de processo é feito nesse dia. Entre uma carga e a próxima o painel <strong>congela</strong> e mostra a semana vigente — só vira atraso o que <strong>sobrou de semanas anteriores</strong>. A data de referência ("Dados de: DD/MM") aparece no topo do cartão e é detectada sozinha, pela última importação.</li>
+<li><strong>Conta-se em dias úteis.</strong> Sábado e domingo são sobreaviso e <strong>não envelhecem</strong> a fila: uma pendência de sexta para segunda conta como ~1 dia útil, não 3.</li>
+</ul>
+<p>Se ninguém estiver cadastrado com função, o cartão não aparece. O <strong>Gestor</strong> entra só como informativo — não é uma tarefa com fila.</p>
+<h3>Grupos de setores</h3>
+<p>Junte setores em grupos ("UTIs", "Clínicas cirúrgicas") para os relatórios saírem por grupo, além de por setor individual ou hospital inteiro.</p>
+<h3>Rotina da instituição</h3>
+<p>Três listas que ligam/desligam o que é da sua CCIH (desligado = comportamento completo, de fábrica):</p>
+<ul>
+<li><strong>Antibióticos avaliados</strong> rotineiramente — quais entram na fila de avaliação e na página remota dos médicos;</li>
+<li><strong>Multirresistentes isolados</strong> rotineiramente — quais mecanismos geram alerta de MDR no painel e pendência de isolamento;</li>
+<li><strong>Cirurgias com vigilância pós-alta</strong> — quais categorias entram pré-marcadas na triagem da aba Pós-alta.</li>
+</ul>
+<p>Ainda aqui ficam os <strong>perfis de importação</strong> (memorizam o layout de cada relatório, para não remapear a cada vez) e a <strong>auditoria de vocabulário</strong> (junta termos quase iguais, como "E. coli" e "Escherichia coli").</p>
+<hr>
+<h2>3. Importando dados</h2>
 <h3>O que pode ser importado (aba Importar)</h3>
 <table><thead><tr><th>Tipo</th><th>O que traz</th><th>De onde vem</th></tr></thead><tbody>
 <tr><td>Culturas (laboratório)</td><td>exames, germes, antibiograma</td><td>planilha/PDF do laboratório</td></tr>
@@ -61,7 +95,7 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 <li>O relatório original é sempre <strong>arquivado</strong> em <code>importados/AAAA-MM/</code> dentro da pasta de dados — nada se perde.</li>
 </ul>
 <hr>
-<h2>3. Culturas — triagem e revisão</h2>
+<h2>4. Culturas — triagem e revisão</h2>
 <p>Ao importar, o app <strong>pré-classifica sozinho</strong> o que não pede julgamento clínico: cultura sem crescimento → <strong>Negativa</strong>; swab de vigilância e pesquisa de SGB → <strong>Colonização</strong>; leite e água → controles. Essas ficam com status <code>triagem</code> e <strong>fora do painel</strong> (há um seletor no relatório para vê-las quando quiser).</p>
 <p>O que sobra na <strong>fila de revisão</strong> (aba Culturas) é o que pode ser infecção. Clique na linha: o detalhe abre embaixo dela, com antibiograma e o botão "Ver ficha do paciente". Classifique: Presente na admissão / IRAS (pede topografia e dispositivo) / Colonização / Contaminação / Repetição / Não é cultura.</p>
 <ul>
@@ -70,7 +104,7 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 </ul>
 <p>O <strong>Relatório microbiológico</strong> (aba Relatórios) filtra por período, setor, material, germe, resistência e classificação, mostra o antibiograma acumulado (%S só de painéis completos) e exporta para Excel.</p>
 <hr>
-<h2>4. Antibióticos</h2>
+<h2>5. Antibióticos</h2>
 <p>O extrato do hospital traz <em>janelas de prescrição</em> renovadas a cada 1–3 dias. O app funde as janelas contíguas do mesmo paciente + droga num <strong>curso de tratamento</strong> — é o curso que aparece na ficha do paciente, na fila e nos indicadores.</p>
 <p>A aba Antibióticos traz:</p>
 <ul>
@@ -80,7 +114,7 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 <li><strong>Página remota dos médicos</strong>: gera um HTML cifrado com os pacientes pendentes para os prescritores avaliarem de fora; o retorno entra pela aba Importar.</li>
 </ul>
 <hr>
-<h2>5. Miniapps (celular)</h2>
+<h2>6. Miniapps (celular)</h2>
 <p>Dois miniaplicativos rodam <strong>offline no celular</strong>, distribuídos por QR code (aba Configurações → distribuição):</p>
 <ul>
 <li><strong>Visita à UTI</strong>: dispositivos por paciente (com indicação e "sugerir retirada"), avaliação de antibióticos à beira do leito e <strong>suspeita de IRAS</strong> com foco.</li>
@@ -94,7 +128,7 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 </ul>
 <p>A aba UTI também gera o <strong>📋 resumo para levar à visita</strong> (último mês do setor: MDR, isolamentos, adesão à higiene, pendências) — enviado por WhatsApp para o celular de quem vai fazer a visita, com pacientes em iniciais.</p>
 <hr>
-<h2>6. Isolamentos</h2>
+<h2>7. Isolamentos</h2>
 <p>Duas fontes se encontram na aba Isolamentos:</p>
 <ul>
 <li>A <strong>lista diária de isolados</strong> importada do hospital (foto do momento — encerra sozinha quem saiu).</li>
@@ -102,7 +136,7 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 </ul>
 <p>Encerrar uma precaução manualmente também é feito ali. O painel inicial mostra o total de pendências abertas.</p>
 <hr>
-<h2>7. Notificação de IRAS — dupla assinatura</h2>
+<h2>8. Notificação de IRAS — dupla assinatura</h2>
 <p>Toda suspeita de infecção hospitalar — venha da revisão de culturas, da avaliação remota, do miniapp da UTI ou da vigilância pós-alta — entra como <strong>"em investigação"</strong>. A notificação oficial só nasce na <strong>aba Infecções</strong>, onde um segundo profissional:</p>
 <ul>
 <li>abre a suspeita (a lista fica no topo da aba, e o painel inicial avisa);</li>
@@ -112,7 +146,7 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 <p>Se você tentar confirmar uma suspeita que você mesmo abriu, o app avisa — não impede, mas o ideal é que sejam duas pessoas. Os indicadores contam apenas as confirmadas.</p>
 <p><strong>Sem duplicatas</strong>: o mesmo episódio costuma ser detectado por mais de um caminho (uma cultura revisada, o contato da pós-alta, uma planilha importada). O app reconhece o episódio — mesmo paciente, mesma topografia (contando siglas como ITU, PAV, IPCS e ISC) e datas até 14 dias entre si — e, em vez de abrir um caso novo, completa os campos vazios do existente. Duplicatas antigas aparecem no topo da aba Infecções com o botão <strong>Fundir duplicatas</strong>: fica o caso mais forte (decisão da segunda assinatura vale mais), e a fusão fica registrada nas observações.</p>
 <hr>
-<h2>8. Vigilância pós-alta (cirurgias)</h2>
+<h2>9. Vigilância pós-alta (cirurgias)</h2>
 <p>A aba Pós-alta acompanha infecção de sítio cirúrgico depois da alta:</p>
 <ul>
 <li><strong>Triagem</strong>: cirurgias de 30 a 120 dias aparecem com checkbox — próteses/implantes e cesarianas já marcadas. Confirme para colocar <strong>sob vigilância</strong>.</li>
@@ -122,19 +156,19 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 <li>Quem passa de 120 dias sem resposta é encerrado "sem contato".</li>
 </ul>
 <hr>
-<h2>9. As outras abas, em uma linha cada</h2>
+<h2>10. As outras abas, em uma linha cada</h2>
 <ul>
-<li><strong>Painel</strong> — alertas do dia (surtos, MDR 10 dias, antimicrobianos, suspeitas de IRAS, pendências) e gráficos rápidos.</li>
+<li><strong>Painel</strong> — alertas do dia (surtos, MDR 10 dias, antimicrobianos, suspeitas de IRAS, pendências), o cartão <strong>Rotina da equipe</strong> (ver seção 2) e gráficos rápidos.</li>
 <li><strong>Pacientes</strong> — cadastro, busca e unificação de registros provisórios do laboratório.</li>
 <li><strong>Ficha do paciente</strong> — tudo sobre uma pessoa numa linha do tempo (internações, culturas, antibióticos por curso, cirurgias, dispositivos, sepse, isolamentos, óbito); abre clicando no nome em qualquer tela.</li>
 <li><strong>Sepse</strong> — indicadores do protocolo (tempos, bundle, desfechos) e perfil microbiológico IRAS × admissão.</li>
 <li><strong>Surtos</strong> — investigação das suspeitas do painel, com cruzamento automático do que os pacientes têm em comum e anexos. A suspeita exige 3+ pacientes com o mesmo germe <strong>e antibiograma semelhante</strong> em 14 dias, no mesmo setor ou após o mesmo procedimento cirúrgico; pronto atendimento, emergência e ambulatórios ficam fora da detecção.</li>
 <li><strong>Higiene de mãos</strong> — adesão por momento da OMS, setor e categoria profissional.</li>
 <li><strong>Eventos</strong> — séries temporais de qualquer fonte do banco.</li>
-<li><strong>Configurações</strong> — vocabulários (com unificação de termos), distribuição dos miniapps.</li>
+<li><strong>Configurações</strong> — usuário, equipe e funções, grupos de setores, rotina da instituição, vocabulários e distribuição dos miniapps (detalhado na seção 2).</li>
 </ul>
 <hr>
-<h2>10. Segurança e boas práticas</h2>
+<h2>11. Segurança e boas práticas</h2>
 <ul>
 <li><strong>Backup</strong> = copiar a pasta de dados inteira. Os scripts de manutenção também deixam cópias em <code>backups/</code> antes de qualquer mudança em massa.</li>
 <li><strong>Multiusuário</strong>: cada arquivo tem trava; se outra pessoa estiver gravando, o app pede para aguardar. Evite editar as planilhas no Excel com o app aberto.</li>

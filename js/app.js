@@ -461,6 +461,61 @@ async function montarPainel(conteudo) {
     el('div', { class: 'cartao cartao-numero' + (acao ? ' linha-clicavel' : ''), onclick: acao },
       el('div', { class: 'numero-grande' }, fmtInt(n)), el('div', { class: 'texto-suave' }, rotulo)))));
 
+  /* Rotina da equipe: só aparece quando há gente cadastrada com função (Configurações →
+     Equipe e funções). Diz, por função, se a fila está em dia ou atrasada para o prazo. */
+  if ((config.profissionais || []).length) {
+    let uti = { visitas: [] }, higiene = { observacoes: [] }, bancoSurtos = { investigacoes: [] }, isol = { precaucoes: [], decisoes: [] };
+    try {
+      [uti, higiene, bancoSurtos, isol] = await Promise.all([
+        lerBanco('uti').catch(() => ({ visitas: [] })),
+        lerBanco('higiene_maos').catch(() => ({ observacoes: [] })),
+        lerBanco('surtos').catch(() => ({ investigacoes: [] })),
+        lerBanco('isolamentos').catch(() => ({ precaucoes: [], decisoes: [] }))
+      ]);
+    } catch (e) { /* bancos ainda não criados */ }
+    /* Relógio dos indicadores de processo = data da última carga semanal (o painel congela
+       nela entre cargas). Detectada pelos carimbos de importação dos dados alimentados. */
+    const dataRef = dataDaUltimaCarga([].concat(
+      culturas.culturas.map(c => c.CriadoEm),
+      antibioticos.prescricoes.map(p => p.CriadoEm))) || hoje;
+    const rotina = rotinaDaEquipe(config.profissionais, {
+      culturas: culturas.culturas, sensibilidade: culturas.sensibilidade,
+      casosIras: iras.casos, precaucoes: isol.precaucoes, decisoes: isol.decisoes,
+      cirurgias: cirurgias.cirurgias, visitasUti: uti.visitas,
+      observacoesHigiene: higiene.observacoes, investigacoesSurto: bancoSurtos.investigacoes,
+      avaliacoesAtb: antibioticos.avaliacoes
+    }, dataRef, { mdrMonitorados: config.rotina.mdrMonitorados });
+    const rotuloFuncao = Object.fromEntries(FUNCOES_CCIH);
+    const corStatus = { atrasado: '#b91c1c', 'em dia': '#15803d', 'sem dados': '#a16207' };
+    const seloStatus = st => el('span', { style: `font-weight:600;color:${corStatus[st] || '#6b7280'}` },
+      st === 'em dia' ? '✓ em dia' : st === 'atrasado' ? '⚠ atrasado' : st);
+    const situacaoTexto = r => {
+      if (r.tipo === 'fila') return r.pendentes
+        ? `${fmtInt(r.pendentes)} na fila · mais antiga há ${fmtInt(r.atrasoDias)} dia(s) útil(eis)` : 'fila zerada';
+      if (r.tipo === 'cadencia') return r.semDados ? 'sem registro' : `última há ${fmtInt(r.atrasoDias)} dia(s) útil(eis)`;
+      if (r.tipo === 'sem_medidor') return 'medidor automático em breve';
+      return '—';
+    };
+    const atrasadas = rotina.filter(r => r.status === 'atrasado').length;
+    const dataRefBR = dataRef.split('-').reverse().join('/');
+    conteudo.append(el('div', { class: 'cartao' },
+      el('h2', {}, 'Rotina da equipe' + (atrasadas ? ` — ${fmtInt(atrasadas)} atrasada(s)` : '')),
+      el('p', { class: 'texto-suave' },
+        `Referência: dados de ${dataRefBR} (última carga). Entre cargas semanais o painel mostra a semana `
+        + 'vigente; o prazo é contado em dias úteis (fim de semana é sobreaviso). Cada função tem uma fila '
+        + 'a zerar dentro da periodicidade do cadastro (Configurações → Equipe e funções). '
+        + 'Vermelho = passou do prazo.'),
+      el('table', { class: 'tabela' },
+        el('thead', {}, el('tr', {}, ['Função', 'Responsável(is)', 'Situação', 'Prazo', 'Status'].map(c => el('th', {}, c)))),
+        el('tbody', {}, rotina.map(r => el('tr', {
+          class: r.naveg ? 'linha-clicavel' : '', onclick: r.naveg ? () => navegar(r.naveg) : null },
+          el('td', {}, rotuloFuncao[r.funcao] || r.funcao),
+          el('td', {}, r.responsaveis.join(', ') || '—'),
+          el('td', {}, situacaoTexto(r)),
+          el('td', {}, r.cadaDias ? `a cada ${fmtInt(r.cadaDias)}d` : '—'),
+          el('td', {}, seloStatus(r.status))))))));
+  }
+
   const selPeriodo = el('select', {}, [['30', '30 dias'], ['90', '90 dias'], ['180', '180 dias'], ['365', '1 ano'], ['', 'tudo']]
     .map(([v, r]) => el('option', { value: v, selected: v === '90' ? '' : null }, r)));
   const areaGraficos = el('div', { class: 'grade-graficos' });

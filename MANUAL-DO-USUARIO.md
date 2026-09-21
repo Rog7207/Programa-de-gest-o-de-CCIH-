@@ -37,7 +37,79 @@ que já foi aberta por versão mais nova — a antiga não conhece as colunas no
 
 ---
 
-## 2. Importando dados
+## 2. Cadastros e configurações
+
+Tudo isto fica na aba **Configurações** — é o que você define uma vez (ou revisa de tempos
+em tempos) e o resto do app passa a respeitar.
+
+### Usuário
+
+Seu nome **assina** tudo que você importa ou altera. Salve-o uma vez; fica guardado no
+navegador daquele computador.
+
+### Equipe e funções
+
+Cadastre cada profissional da CCIH e marque **quais funções** ele exerce. Cada função pode
+receber um **"a cada N dias"** — a periodicidade com que a fila daquela função deve ser
+zerada.
+
+- **Para que servem os nomes:** viram os **botões da tela de entrada**, padronizando a
+  assinatura (acaba o "Rogerio" × "Rogério" contando como duas pessoas).
+- **Para que servem os dias:** definem o **prazo de cada fila**. O prazo é *por função*, então
+  a mesma pessoa pode ter "Detecção de IRAS a cada 1 dia" e "Visita à UTI a cada 2 dias".
+  Deixe em branco quando a função não tem periodicidade fixa.
+
+As funções são: Gestor, Detecção de IRAS (revisão de culturas), Validação de IRAS (segunda
+assinatura), Vigilância pós-alta, Controle de antibióticos, Visita à UTI, Investigação de
+surtos, Controle de isolamentos e Auditoria de higiene das mãos.
+
+### Rotina da equipe (no Painel)
+
+Esse cadastro alimenta o cartão **Rotina da equipe**, no Painel. Para cada função ele mostra
+a fila, quem responde por ela e se está **em dia** ou **atrasada** para o prazo:
+
+- **fila** (culturas a revisar, suspeitas a validar, isolamentos pendentes, cirurgias a
+  contatar, surtos a investigar): atrasada quando o **item mais antigo** já passou do prazo;
+- **cadência** (visita à UTI, auditoria de higiene, avaliação semanal de antibióticos):
+  atrasada quando faz **mais tempo que o prazo desde a última vez**.
+
+Duas regras importantes, decididas para a rotina do HNSC:
+
+- **O relógio é a carga semanal, não o calendário.** Os dados entram uma vez por semana
+  (segunda) e o trabalho de processo é feito nesse dia. Entre uma carga e a próxima o painel
+  **congela** e mostra a semana vigente — só vira atraso o que **sobrou de semanas
+  anteriores**. A data de referência ("Dados de: DD/MM") aparece no topo do cartão e é
+  detectada sozinha, pela última importação.
+- **Conta-se em dias úteis.** Sábado e domingo são sobreaviso e **não envelhecem** a fila:
+  uma pendência de sexta para segunda conta como ~1 dia útil, não 3.
+
+Se ninguém estiver cadastrado com função, o cartão não aparece. O **Gestor** entra só como
+informativo — não é uma tarefa com fila.
+
+### Grupos de setores
+
+Junte setores em grupos ("UTIs", "Clínicas cirúrgicas") para os relatórios saírem por grupo,
+além de por setor individual ou hospital inteiro.
+
+### Rotina da instituição
+
+Três listas que ligam/desligam o que é da sua CCIH (desligado = comportamento completo, de
+fábrica):
+
+- **Antibióticos avaliados** rotineiramente — quais entram na fila de avaliação e na página
+  remota dos médicos;
+- **Multirresistentes isolados** rotineiramente — quais mecanismos geram alerta de MDR no
+  painel e pendência de isolamento;
+- **Cirurgias com vigilância pós-alta** — quais categorias entram pré-marcadas na triagem da
+  aba Pós-alta.
+
+Ainda aqui ficam os **perfis de importação** (memorizam o layout de cada relatório, para não
+remapear a cada vez) e a **auditoria de vocabulário** (junta termos quase iguais, como
+"E. coli" e "Escherichia coli").
+
+---
+
+## 3. Importando dados
 
 ### O que pode ser importado (aba Importar)
 
@@ -86,7 +158,7 @@ atualizado. Na prática:
 
 ---
 
-## 3. Culturas — triagem e revisão
+## 4. Culturas — triagem e revisão
 
 Ao importar, o app **pré-classifica sozinho** o que não pede julgamento clínico:
 cultura sem crescimento → **Negativa**; swab de vigilância e pesquisa de SGB →
@@ -109,7 +181,7 @@ completos) e exporta para Excel.
 
 ---
 
-## 4. Antibióticos
+## 5. Antibióticos
 
 O extrato do hospital traz *janelas de prescrição* renovadas a cada 1–3 dias. O app funde
 as janelas contíguas do mesmo paciente + droga num **curso de tratamento** — é o curso que
@@ -131,7 +203,7 @@ A aba Antibióticos traz:
 
 ---
 
-## 5. Miniapps (celular)
+## 6. Miniapps (celular)
 
 Três miniaplicativos rodam **offline no celular**, distribuídos por QR code (aba
 Configurações → distribuição):
@@ -163,7 +235,7 @@ vai fazer a visita, com pacientes em iniciais.
 
 ---
 
-## 6. Isolamentos
+## 7. Isolamentos
 
 Duas fontes se encontram na aba Isolamentos:
 
@@ -178,7 +250,7 @@ pendências abertas.
 
 ---
 
-## 7. Notificação de IRAS — dupla assinatura
+## 8. Notificação de IRAS — dupla assinatura
 
 Toda suspeita de infecção hospitalar — venha da revisão de culturas, da avaliação remota,
 do miniapp da UTI ou da vigilância pós-alta — entra como **"em investigação"**. A
@@ -201,7 +273,7 @@ e a fusão fica registrada nas observações.
 
 ---
 
-## 8. Vigilância pós-alta (cirurgias)
+## 9. Vigilância pós-alta (cirurgias)
 
 A aba Pós-alta acompanha infecção de sítio cirúrgico depois da alta:
 
@@ -216,10 +288,10 @@ A aba Pós-alta acompanha infecção de sítio cirúrgico depois da alta:
 
 ---
 
-## 9. As outras abas, em uma linha cada
+## 10. As outras abas, em uma linha cada
 
 - **Painel** — alertas do dia (surtos, MDR 10 dias, antimicrobianos, suspeitas de IRAS,
-  pendências) e gráficos rápidos.
+  pendências), o cartão **Rotina da equipe** (ver seção 2) e gráficos rápidos.
 - **Pacientes** — cadastro, busca e unificação de registros provisórios do laboratório.
 - **Ficha do paciente** — tudo sobre uma pessoa numa linha do tempo (internações, culturas,
   antibióticos por curso, cirurgias, dispositivos, sepse, isolamentos, óbito); abre
@@ -232,11 +304,12 @@ A aba Pós-alta acompanha infecção de sítio cirúrgico depois da alta:
   cirúrgico; pronto atendimento, emergência e ambulatórios ficam fora da detecção.
 - **Higiene de mãos** — adesão por momento da OMS, setor e categoria profissional.
 - **Eventos** — séries temporais de qualquer fonte do banco.
-- **Configurações** — vocabulários (com unificação de termos), distribuição dos miniapps.
+- **Configurações** — usuário, equipe e funções, grupos de setores, rotina da instituição,
+  vocabulários e distribuição dos miniapps (detalhado na seção 2).
 
 ---
 
-## 10. Segurança e boas práticas
+## 11. Segurança e boas práticas
 
 - **Backup** = copiar a pasta de dados inteira. Os scripts de manutenção também deixam
   cópias em `backups/` antes de qualquer mudança em massa.

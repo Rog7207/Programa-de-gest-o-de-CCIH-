@@ -414,6 +414,14 @@ function rotinaDaEquipe(profissionais, bancos, referencia, opcoes) {
 
   const medidores = {
     gestor: () => ({ tipo: 'informativo', naveg: null }),
+    /* Entrada dos relatórios do Tasy: é a própria carga semanal. Exceção ao relógio
+       congelado — mede em dias úteis da última carga até HOJE (opcoes.hoje), porque a
+       pergunta é "está na hora de alimentar de novo?". */
+    importacao_tasy: () => {
+      const ultima = /^\d{4}-\d{2}-\d{2}$/.test(String(referencia)) ? String(referencia).slice(0, 10) : '';
+      if (!ultima) return { tipo: 'cadencia', semDados: true, naveg: 'importar' };
+      return { tipo: 'cadencia', ultima, atrasoDias: diasUteis(ultima, opcoes.hoje || ultima), naveg: 'importar' };
+    },
     deteccao_iras: () => idadeDaFila(
       (bancos.culturas || []).filter(c => normalizarTexto(c.StatusRevisao) === 'pendente' && c.Microrganismo),
       c => c.DataColeta, 'culturas'),
@@ -453,6 +461,11 @@ function rotinaDaEquipe(profissionais, bancos, referencia, opcoes) {
     },
     visita_uti: () => cadencia(bancos.visitasUti || [], v => v.Data, 'uti'),
     higiene_maos: () => cadencia(bancos.observacoesHigiene || [], o => o.Data, 'higiene'),
+    /* Perfis de cadastro sem medidor automático ainda — a fila entra ao chegarmos na tela:
+       validação de isolamentos = só os casos DUVIDOSOS encaminhados ao infectologista;
+       procedimentos invasivos = dispositivos a revisar (infectologista + enfermeiro). */
+    isolamento_validacao: () => ({ tipo: 'sem_medidor', naveg: 'isolamentos' }),
+    controle_procedimentos_invasivos: () => ({ tipo: 'sem_medidor', naveg: 'uti' }),
     /* Controle de antibióticos: a lista sobe uma vez por semana e é avaliada na carga.
        O medidor é a cadência da última avaliação registrada — em dia enquanto a avaliação
        acompanha a carga semanal. */

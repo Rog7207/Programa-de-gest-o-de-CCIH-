@@ -484,7 +484,7 @@ async function montarPainel(conteudo) {
       cirurgias: cirurgias.cirurgias, visitasUti: uti.visitas,
       observacoesHigiene: higiene.observacoes, investigacoesSurto: bancoSurtos.investigacoes,
       avaliacoesAtb: antibioticos.avaliacoes
-    }, dataRef, { mdrMonitorados: config.rotina.mdrMonitorados });
+    }, dataRef, { mdrMonitorados: config.rotina.mdrMonitorados, hoje });
     const rotuloFuncao = Object.fromEntries(FUNCOES_CCIH);
     const corStatus = { atrasado: '#b91c1c', 'em dia': '#15803d', 'sem dados': '#a16207' };
     const seloStatus = st => el('span', { style: `font-weight:600;color:${corStatus[st] || '#6b7280'}` },

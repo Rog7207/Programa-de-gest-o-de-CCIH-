@@ -59,9 +59,15 @@ zerada.
   a mesma pessoa pode ter "Detecção de IRAS a cada 1 dia" e "Visita à UTI a cada 2 dias".
   Deixe em branco quando a função não tem periodicidade fixa.
 
-As funções são: Gestor, Detecção de IRAS (revisão de culturas), Validação de IRAS (segunda
-assinatura), Vigilância pós-alta, Controle de antibióticos, Visita à UTI, Investigação de
-surtos, Controle de isolamentos e Auditoria de higiene das mãos.
+As funções são: Gestor, Entrada dos relatórios do Tasy, Detecção de IRAS (revisão de
+culturas), Validação de IRAS (segunda assinatura), Vigilância pós-alta, Controle de
+antibióticos, Visita à UTI, Controle de procedimentos invasivos, Investigação de surtos,
+Identificação de isolamentos, Validação de isolamentos (infectologista, casos duvidosos) e
+Auditoria de higiene das mãos.
+
+Alguns perfis já entram no cartão com medidor automático; outros (validação de isolamentos —
+que o infectologista faz **só nos casos duvidosos** — e controle de procedimentos invasivos)
+por ora são **só cadastro** e ganham o medidor quando chegarmos à tela correspondente.
 
 ### Rotina da equipe (no Painel)
 

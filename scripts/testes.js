@@ -3597,6 +3597,26 @@ console.log('\n== 82. Rotina da equipe: dias úteis, âncora na carga semanal e 
   verificar('data da última carga = CriadoEm mais recente',
     al.dataDaUltimaCarga(['2026-06-08 09:00', '2026-06-01 10:00', '', 'lixo']) === '2026-06-08'
     && al.dataDaUltimaCarga([]) === null);
+
+  /* Entrada dos relatórios do Tasy: mede da carga até HOJE (não congela), em dias úteis. */
+  const tasyOk = al.rotinaDaEquipe([{ Nome: 'Ana', Funcao: 'importacao_tasy', CadaDias: '5' }],
+    bancos, '2026-06-08', { hoje: '2026-06-12' });               /* seg→sex = 4 dias úteis */
+  verificar('entrada do Tasy: 4 dias úteis desde a carga, em dia (prazo 5)',
+    tasyOk[0].tipo === 'cadencia' && tasyOk[0].atrasoDias === 4 && tasyOk[0].status === 'em dia', tasyOk[0]);
+  const tasyAtrasada = al.rotinaDaEquipe([{ Nome: 'Ana', Funcao: 'importacao_tasy', CadaDias: '3' }],
+    bancos, '2026-06-05', { hoje: '2026-06-12' });               /* sex→sex = 5 dias úteis > 3 */
+  verificar('entrada do Tasy atrasada quando passa do prazo',
+    tasyAtrasada[0].atrasoDias === 5 && tasyAtrasada[0].status === 'atrasado', tasyAtrasada[0]);
+
+  /* Perfis de cadastro sem medidor automático ainda (validação de isolamentos por amostra,
+     controle de procedimentos invasivos) — aparecem, mas sem gauge. */
+  const semGauge = al.rotinaDaEquipe([
+    { Nome: 'Dr', Funcao: 'isolamento_validacao', CadaDias: '2' },
+    { Nome: 'Enf', Funcao: 'controle_procedimentos_invasivos', CadaDias: '2' }
+  ], bancos, referencia, {});
+  verificar('perfis novos sem medidor automático aparecem como "sem medidor"',
+    semGauge.length === 2 && semGauge.every(r => r.status === 'sem medidor'),
+    semGauge.map(r => r.funcao + ':' + r.status));
 }
 
 /* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==

@@ -161,13 +161,23 @@ const ESQUEMAS = {
    periodicidade com que a pessoa deve zerar a fila daquela função. */
 const FUNCOES_CCIH = [
   ['gestor', 'Gestor'],
+  ['importacao_tasy', 'Entrada dos relatórios do Tasy'],
   ['deteccao_iras', 'Detecção de IRAS (revisão de culturas)'],
   ['validacao_iras', 'Validação de IRAS (segunda assinatura)'],
   ['vigilancia_pos_alta', 'Vigilância pós-alta'],
   ['controle_antibioticos', 'Controle de antibióticos'],
   ['visita_uti', 'Visita à UTI'],
+  /* Controle de dispositivos invasivos (CVC/VM/SVD): infectologista + enfermeiro. Perfil
+     de cadastro; o medidor automático entra quando chegarmos à tela de dispositivos/UTI. */
+  ['controle_procedimentos_invasivos', 'Controle de procedimentos invasivos'],
   ['investigacao_surtos', 'Investigação de surtos'],
-  ['isolamentos', 'Controle de isolamentos'],
+  /* Isolamento em dois passos, como as IRAS: quem identifica a necessidade e o
+     infectologista que valida — mas só os DUVIDOSOS (a maioria não precisa). A chave
+     'isolamentos' é a identificação (não renomear — é por ela que a rotina reconhece a
+     fila). 'isolamento_validacao' é perfil de cadastro por ora; o encaminhamento do
+     duvidoso e o medidor entram na tela de Isolamentos. */
+  ['isolamentos', 'Identificação de isolamentos'],
+  ['isolamento_validacao', 'Validação de isolamentos (infectologista, casos duvidosos)'],
   ['higiene_maos', 'Auditoria de higiene das mãos']
 ];
 

@@ -8,6 +8,11 @@ _pasta-de-teste-vazia-NAO-USAR/
 hhnsc/
 *.zip
 
+# Subprojeto HNSC: só o README vai ao repositório. O pacote montado pode conter cópia
+# do banco (--com-dados) — jamais é commitado.
+hnsc/*
+!hnsc/README.md
+
 # Valores desta instalação (e-mail da CCIH, segredo do Apps Script) e o antibiograma
 # consolidado do hospital (só agregados, mas é desta casa)
 miniapps/fonte/config-local.json

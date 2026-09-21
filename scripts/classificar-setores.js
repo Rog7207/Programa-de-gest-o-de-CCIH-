@@ -49,13 +49,16 @@ const TIPOS = {
   'Alta Complexidade - 01': 'Internação',
   'Berçário RN': 'Internação',
 
+  /* Só a entrada de verdade é porta de entrada (fora da detecção de surto). As esperas
+     seguram pacientes já internados — conferido no banco (Sala Vermelha 98% internados,
+     Espera de Leitos-Emergência 93%), então são Espera/recuperação e ENTRAM na detecção. */
   'Emergência': 'Porta de entrada',
   'Pronto Atendimento': 'Porta de entrada',
-  'Unidade de Espera - Sala Vermelha': 'Porta de entrada',
-  'Unidade de Espera de Leitos - Pronto Atendimento': 'Porta de entrada',
-  'Unidade de Espera de Leitos - Emergência': 'Porta de entrada',
-  'Unidade de Espera de Leitos - Emergência Pediátrica': 'Porta de entrada',
 
+  'Unidade de Espera - Sala Vermelha': 'Espera/recuperação',
+  'Unidade de Espera de Leitos - Pronto Atendimento': 'Espera/recuperação',
+  'Unidade de Espera de Leitos - Emergência': 'Espera/recuperação',
+  'Unidade de Espera de Leitos - Emergência Pediátrica': 'Espera/recuperação',
   'Unidade de Espera Centro Obstetrico': 'Espera/recuperação',
   'Unidade de Espera Sala de Preparo': 'Espera/recuperação',
   'Unidade de Espera Pos Operatoria': 'Espera/recuperação',

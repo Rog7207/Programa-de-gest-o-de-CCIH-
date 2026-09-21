@@ -3386,9 +3386,13 @@ console.log('\n== 80. Detecção de surtos: antibiograma semelhante, portas de e
   verificar('pronto atendimento não alerta', al.detectarSurtos(naPorta('Pronto Atendimento')).length === 0);
   verificar('emergência não alerta', al.detectarSurtos(naPorta('Emergência Adulto')).length === 0);
   verificar('ambulatório não alerta', al.detectarSurtos(naPorta('Ambulatório de Feridas')).length === 0);
-  verificar('sala vermelha não alerta', al.detectarSurtos(naPorta('Unidade de Espera - Sala Vermelha')).length === 0);
+  /* Esperas seguram pacientes JÁ INTERNADOS (conferido no banco) — entram na detecção. */
+  verificar('sala vermelha (espera) entra na detecção', al.detectarSurtos(naPorta('Unidade de Espera - Sala Vermelha')).length === 1);
+  verificar('espera de leitos - emergência entra na detecção', al.detectarSurtos(naPorta('Unidade de Espera de Leitos - Emergência')).length === 1);
   verificar('reconhecimento de porta de entrada', al.ehSetorPortaDeEntrada('PRONTO-SOCORRO')
-    && al.ehSetorPortaDeEntrada('Emergência') && al.ehSetorPortaDeEntrada('Unidade de Espera - Sala Vermelha')
+    && al.ehSetorPortaDeEntrada('Emergência')
+    && !al.ehSetorPortaDeEntrada('Unidade de Espera - Sala Vermelha')
+    && !al.ehSetorPortaDeEntrada('Unidade de Espera de Leitos - Emergência')
     && !al.ehSetorPortaDeEntrada('CTI Adulto'));
 
   /* Eixo procedimento: pacientes em setores DIFERENTES (um deles porta de entrada), ligados

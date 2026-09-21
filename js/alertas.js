@@ -165,13 +165,16 @@ function correlacionarSurto(prontuarios, bancos) {
   };
 }
 
-/* Portas de entrada (pronto atendimento, pronto-socorro, emergência, sala vermelha,
-   ambulatórios): a flora chega da comunidade e o giro de pacientes é enorme — num hospital
-   grande, 3 pacientes com o mesmo germe em 14 dias ali é rotina, não transmissão cruzada.
-   A sala vermelha segura pacientes 24–48 h (ou mais) aguardando transferência, e as culturas
-   de quem nunca internou caem nesses setores; sem excluí-los o volume vira pseudo-surto. */
+/* Portas de entrada (pronto atendimento, pronto-socorro, emergência, ambulatórios): flora da
+   comunidade e giro enorme de pacientes — 3 com o mesmo germe em 14 dias ali é rotina, não
+   transmissão cruzada. As UNIDADES DE ESPERA ficam DE FORA desta exclusão: conferido no banco
+   real (21/09/2026), a Sala Vermelha e a Espera de Leitos-Emergência são >90% pacientes já
+   internados (têm internação cobrindo a coleta), então excluí-las descartaria surto de
+   verdade. Só o setor de entrada em si (sem "espera" no nome) é porta de entrada. */
 function ehSetorPortaDeEntrada(setor) {
-  return /prontoatendimento|prontosocorro|emergenc|ambulat|salavermelha/.test(normalizarTexto(setor));
+  const s = normalizarTexto(setor);
+  if (s.includes('espera')) return false;
+  return /prontoatendimento|prontosocorro|emergenc|ambulat/.test(s);
 }
 
 /* Perfil S/R de uma cultura a partir do antibiograma. 'I' fica de fora: intermediário

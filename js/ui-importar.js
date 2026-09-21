@@ -661,28 +661,22 @@ async function ingerirMiniapp(tipo, dadosPorAba, arquivo, silencioso) {
         }
       }
       /* Suspeita de IRAS marcada na visita vira caso aberto para a CCIH confirmar —
-         era a regra do projeto e este caminho ainda não a cumpria. Dedup contra as
-         suspeitas já abertas do mesmo paciente+foco. */
+         era a regra do projeto e este caminho ainda não a cumpria. registrarCasoIras
+         deduplica contra qualquer caso do mesmo episódio (aberto, confirmado ou já
+         descartado pela segunda assinatura), não só contra as suspeitas abertas. */
       const comSuspeita = linhas.filter(l => l.SuspeitaIRAS === 'S' && String(l.FocoSuspeito || '').trim());
       if (comSuspeita.length) {
         const bancoIras = await lerBanco('iras');
-        const abertas = new Set(bancoIras.casos
-          .filter(cs => cs.StatusInvestigacao === 'em investigação')
-          .map(cs => normalizarProntuario(cs.Prontuario) + '|' + normalizarTexto(cs.Topografia)));
         let novasSuspeitas = 0;
         for (const l of comSuspeita) {
-          const chave = normalizarProntuario(l.Prontuario) + '|' + normalizarTexto(l.FocoSuspeito);
-          if (abertas.has(chave)) continue;
-          abertas.add(chave);
-          bancoIras.casos.push({
-            ID_IRAS: proximoID(bancoIras.casos, 'ID_IRAS', 'IRA')(),
+          const { novo } = registrarCasoIras(bancoIras.casos, {
             Prontuario: normalizarProntuario(l.Prontuario), DataInfeccao: String(l.Data).slice(0, 10),
             Topografia: l.FocoSuspeito, CriterioDiagnostico: 'Suspeita na visita técnica da UTI',
             Setor: l.Setor || '', DispositivoAssociado: '', Microrganismo: '', Desfecho: '',
             StatusInvestigacao: 'em investigação', NotificadoANVISA: '',
             CriadoPor: app.usuario, CriadoEm: agora
-          });
-          novasSuspeitas++;
+          }, () => proximoID(bancoIras.casos, 'ID_IRAS', 'IRA')());
+          if (novo) novasSuspeitas++;
         }
         if (novasSuspeitas) await gravarBanco('iras', bancoIras);
       }
@@ -782,26 +776,21 @@ async function ingerirMiniapp(tipo, dadosPorAba, arquivo, silencioso) {
       let suspeitasNovas = 0;
       if (suspeitas.length || casosNovos.length) {
         const bancoIras = await lerBanco('iras');
+        /* registrarCasoIras: o mesmo episódio detectado por outro caminho (revisão local,
+           visita da UTI, pós-alta) não vira caso duplicado — só completa o existente. */
         for (const caso of casosNovos) {
-          bancoIras.casos.push({ ID_IRAS: proximoID(bancoIras.casos, 'ID_IRAS', 'IRA')(), ...caso });
+          registrarCasoIras(bancoIras.casos, caso, () => proximoID(bancoIras.casos, 'ID_IRAS', 'IRA')());
         }
-        const abertas = new Set(bancoIras.casos
-          .filter(cs => cs.StatusInvestigacao === 'em investigação')
-          .map(cs => normalizarProntuario(cs.Prontuario) + '|' + normalizarTexto(cs.Topografia)));
         for (const s of suspeitas) {
-          const chave = normalizarProntuario(s.Prontuario) + '|' + normalizarTexto(s.FocoSuspeito);
-          if (abertas.has(chave)) continue;
-          abertas.add(chave);
-          bancoIras.casos.push({
-            ID_IRAS: proximoID(bancoIras.casos, 'ID_IRAS', 'IRA')(),
+          const { novo } = registrarCasoIras(bancoIras.casos, {
             Prontuario: normalizarProntuario(s.Prontuario),
             DataInfeccao: String(s.DataDados || '').slice(0, 10), Topografia: s.FocoSuspeito,
             CriterioDiagnostico: 'Suspeita notificada na avaliação remota de antimicrobianos',
             Setor: '', DispositivoAssociado: '', Microrganismo: '', Desfecho: '',
             StatusInvestigacao: 'em investigação', NotificadoANVISA: '',
             CriadoPor: s.Avaliador || app.usuario, CriadoEm: agora
-          });
-          suspeitasNovas++;
+          }, () => proximoID(bancoIras.casos, 'ID_IRAS', 'IRA')());
+          if (novo) suspeitasNovas++;
         }
         if (suspeitasNovas || casosNovos.length) await gravarBanco('iras', bancoIras);
       }

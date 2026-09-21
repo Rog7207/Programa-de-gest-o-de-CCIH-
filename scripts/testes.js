@@ -3346,6 +3346,168 @@ console.log('\n== 79. Setor-padrão das ISC (Centro Cirúrgico × Obstétrico) =
     imp.setorPadraoISC('Histerectomia total') === 'Centro Cirúrgico');
 }
 
+console.log('\n== 80. Detecção de surtos: antibiograma semelhante, portas de entrada e eixo procedimento ==');
+{
+  const al = require(path.join(__dirname, '..', 'js', 'alertas.js'));
+  const cultura = (id, pront, data, extras) => ({ ID_Cultura: id, Prontuario: pront, DataColeta: data,
+    Setor: 'CTI', Material: 'Hemocultura', Microrganismo: 'Escherichia coli',
+    StatusRevisao: 'avaliada', AvaliacaoCCIH: 'IRAS', ...extras });
+  const painel = (id, resultados) => Object.entries(resultados)
+    .map(([Antibiotico, Resultado]) => ({ ID_Cultura: id, Antibiotico, Resultado }));
+
+  /* 3 pacientes, mesmo setor, antibiogramas DISCORDANTES: flora de hospital grande, não surto. */
+  const trio = [cultura('E1', '1', '2026-06-01'), cultura('E2', '2', '2026-06-03'), cultura('E3', '3', '2026-06-05')];
+  const discordantes = [
+    ...painel('E1', { Amicacina: 'S', Ceftriaxona: 'S', Ciprofloxacino: 'S', Meropenem: 'S' }),
+    ...painel('E2', { Amicacina: 'R', Ceftriaxona: 'R', Ciprofloxacino: 'S', Meropenem: 'S' }),
+    ...painel('E3', { Amicacina: 'S', Ceftriaxona: 'R', Ciprofloxacino: 'R', Meropenem: 'R' })
+  ];
+  verificar('antibiogramas discordantes não alertam',
+    al.detectarSurtos(trio, { sensibilidade: discordantes }).length === 0);
+
+  /* Os mesmos 3 pacientes com perfis iguais alertam — e só as culturas do subgrupo vão junto. */
+  const iguais = ['E1', 'E2', 'E3'].flatMap(id =>
+    painel(id, { Amicacina: 'S', Ceftriaxona: 'R', Ciprofloxacino: 'R', Meropenem: 'S' }));
+  const clonais = al.detectarSurtos(trio, { sensibilidade: iguais });
+  verificar('antibiogramas semelhantes alertam', clonais.length === 1 && clonais[0].Pacientes === 3
+    && clonais[0].Criterio === 'setor', JSON.stringify(clonais));
+
+  /* Sem NENHUM antibiograma (fungos, germe sem painel) vale a regra antiga. */
+  verificar('grupo sem antibiograma continua alertando', al.detectarSurtos(trio).length === 1);
+
+  /* 2 semelhantes + 1 sem antibiograma: quando há o que comparar, quem não tem painel não soma. */
+  const soDois = ['E1', 'E2'].flatMap(id =>
+    painel(id, { Amicacina: 'S', Ceftriaxona: 'R', Ciprofloxacino: 'R', Meropenem: 'S' }));
+  verificar('cultura sem antibiograma não completa o mínimo',
+    al.detectarSurtos(trio, { sensibilidade: soDois }).length === 0);
+
+  /* Portas de entrada ficam fora da detecção por setor. */
+  const naPorta = setor => [1, 2, 3].map(n => cultura('P' + n, String(n), '2026-06-0' + n, { Setor: setor }));
+  verificar('pronto atendimento não alerta', al.detectarSurtos(naPorta('Pronto Atendimento')).length === 0);
+  verificar('emergência não alerta', al.detectarSurtos(naPorta('Emergência Adulto')).length === 0);
+  verificar('ambulatório não alerta', al.detectarSurtos(naPorta('Ambulatório de Feridas')).length === 0);
+  verificar('reconhecimento de porta de entrada', al.ehSetorPortaDeEntrada('PRONTO-SOCORRO')
+    && al.ehSetorPortaDeEntrada('Emergência') && !al.ehSetorPortaDeEntrada('CTI Adulto'));
+
+  /* Eixo procedimento: pacientes em setores DIFERENTES (um deles porta de entrada), ligados
+     pela mesma cirurgia até 90 dias antes da coleta, com antibiogramas semelhantes. */
+  const posOp = [
+    cultura('S1', '10', '2026-06-10', { Setor: 'Clínica Cirúrgica' }),
+    cultura('S2', '11', '2026-06-14', { Setor: 'Emergência' }),
+    cultura('S3', '12', '2026-06-20', { Setor: 'Ortopedia' })
+  ];
+  const cirurgias = [
+    { Prontuario: '10', DataCirurgia: '2026-05-20', ProcedimentoNHSN: 'Artroplastia de quadril' },
+    { Prontuario: '11', DataCirurgia: '2026-04-02', ProcedimentoNHSN: 'Artroplastia de quadril' },
+    { Prontuario: '12', DataCirurgia: '2026-06-01', ProcedimentoNHSN: 'Artroplastia de quadril' },
+    { Prontuario: '12', DataCirurgia: '2025-01-01', ProcedimentoNHSN: 'Herniorrafia' }
+  ];
+  const perfilUnico = ['S1', 'S2', 'S3'].flatMap(id =>
+    painel(id, { Oxacilina: 'R', Clindamicina: 'R', Vancomicina: 'S', Gentamicina: 'S' }));
+  const porProcedimento = al.detectarSurtos(posOp, { sensibilidade: perfilUnico, cirurgias });
+  verificar('mesmo procedimento liga pacientes de setores diferentes',
+    porProcedimento.length === 1 && porProcedimento[0].Criterio === 'procedimento'
+    && porProcedimento[0].Setor === 'Procedimento: Artroplastia de quadril'
+    && porProcedimento[0].Pacientes === 3, JSON.stringify(porProcedimento));
+  verificar('cirurgia antiga (fora dos 90 dias) não agrupa',
+    !porProcedimento.some(s => s.Setor.includes('Herniorrafia')));
+
+  /* Mesmos pacientes alertando por setor E procedimento: fica só o alerta do setor. */
+  const mesmoSetorEProc = posOp.map(c => ({ ...c, Setor: 'CTI' }));
+  const deduplicado = al.detectarSurtos(mesmoSetorEProc, { sensibilidade: perfilUnico, cirurgias });
+  verificar('alerta por procedimento some quando o do setor já cobre os mesmos pacientes',
+    deduplicado.length === 1 && deduplicado[0].Criterio === 'setor', JSON.stringify(deduplicado));
+
+  /* Comparação de perfis: exige 3 antibióticos em comum e 80% de concordância. */
+  const perfil = o => al.perfilAntibiograma(painel('X', o));
+  verificar('perfis com menos de 3 antibióticos em comum não são comparáveis',
+    !al.antibiogramasSemelhantes(perfil({ Amicacina: 'S', Meropenem: 'S' }), perfil({ Amicacina: 'S', Meropenem: 'S' })));
+  verificar('1 discordância em 5 ainda é semelhante', al.antibiogramasSemelhantes(
+    perfil({ A: 'S', B: 'S', C: 'R', D: 'R', E: 'S' }), perfil({ A: 'S', B: 'S', C: 'R', D: 'R', E: 'R' })));
+  verificar('2 discordâncias em 5 já não é', !al.antibiogramasSemelhantes(
+    perfil({ A: 'S', B: 'S', C: 'R', D: 'R', E: 'S' }), perfil({ A: 'S', B: 'S', C: 'R', D: 'S', E: 'R' })));
+  verificar('intermediário não conta na comparação',
+    perfil({ A: 'S', B: 'I', C: 'R' }).size === 2);
+}
+
+console.log('\n== 81. Deduplicação de casos de IRAS (mesmo episódio, vários momentos de detecção) ==');
+{
+  const caso = (id, extras) => ({ ID_IRAS: id, Prontuario: '100', DataInfeccao: '2026-05-10',
+    Topografia: 'ITU', CriterioDiagnostico: '', Setor: '', DispositivoAssociado: '',
+    Microrganismo: '', Desfecho: '', StatusInvestigacao: 'em investigação',
+    NotificadoANVISA: '', Observacoes: '', CriadoPor: 'A', CriadoEm: '2026-05-10 08:00', ...extras });
+
+  /* Topografias equivalentes: sigla e nome por extenso são o mesmo grupo. */
+  verificar('ITU casa com o nome por extenso',
+    imp.grupoTopografia('ITU') === imp.grupoTopografia('Infecção do trato urinário'));
+  verificar('PAV casa com pneumonia associada à ventilação',
+    imp.grupoTopografia('PAV') === imp.grupoTopografia('Pneumonia associada à ventilação mecânica'));
+  verificar('IPCS casa com corrente sanguínea',
+    imp.grupoTopografia('IPCS') === imp.grupoTopografia('Infecção primária de corrente sanguínea'));
+  verificar('profundidades de ISC são o mesmo grupo',
+    imp.grupoTopografia('ISC superficial') === imp.grupoTopografia('Infecção de sítio cirúrgico — órgão/espaço'));
+  verificar('topografia desconhecida vale por si',
+    imp.grupoTopografia('Meningite') !== imp.grupoTopografia('ITU'));
+
+  /* Mesmo episódio: paciente + topografia + 14 dias. */
+  verificar('mesmo paciente, mesma topografia, 10 dias de diferença é duplicata',
+    imp.mesmoCasoIras(caso('IRA-1'), caso('IRA-2', { DataInfeccao: '2026-05-20', Topografia: 'Infecção do trato urinário' })));
+  verificar('20 dias de diferença já é outro episódio',
+    !imp.mesmoCasoIras(caso('IRA-1'), caso('IRA-2', { DataInfeccao: '2026-05-30' })));
+  verificar('outro paciente nunca é duplicata',
+    !imp.mesmoCasoIras(caso('IRA-1'), caso('IRA-2', { Prontuario: '200' })));
+
+  /* registrarCasoIras: não duplica, completa os vazios e fica com a data mais precoce. */
+  const casos = [caso('IRA-1', { StatusInvestigacao: 'confirmado' })];
+  const r1 = imp.registrarCasoIras(casos, caso('', {
+    DataInfeccao: '2026-05-07', Topografia: 'Infecção do trato urinário',
+    Microrganismo: 'Escherichia coli', Setor: 'CTI', CriadoPor: 'B'
+  }), () => 'IRA-9');
+  verificar('episódio repetido não cria caso novo', !r1.novo && casos.length === 1);
+  verificar('campos vazios do existente são completados',
+    casos[0].Microrganismo === 'Escherichia coli' && casos[0].Setor === 'CTI');
+  verificar('status e autoria do existente ficam como estavam',
+    casos[0].StatusInvestigacao === 'confirmado' && casos[0].CriadoPor === 'A');
+  verificar('a data mais precoce fica', casos[0].DataInfeccao === '2026-05-07');
+  verificar('topografia registrada não é sobrescrita', casos[0].Topografia === 'ITU');
+  const r2 = imp.registrarCasoIras(casos, caso('', { DataInfeccao: '2026-07-01' }), () => 'IRA-9');
+  verificar('mesmo foco meses depois é episódio NOVO', r2.novo && casos.length === 2);
+
+  /* Importação (planilha externa / relatório do Tasy): a chave exata não pega grafia e
+     data diferentes — a deduplicação de episódio pega. */
+  const existentes = [caso('IRA-1')];
+  const lote = [
+    caso('', { DataInfeccao: '2026-05-12', Topografia: 'Infecção do trato urinário' }),
+    caso('', { Prontuario: '300', DataInfeccao: '2026-05-12' }),
+    caso('', { Prontuario: '300', DataInfeccao: '2026-05-14', Topografia: 'Infecção urinária' })
+  ];
+  const resultado = imp.deduplicar(lote, existentes, 'iras');
+  verificar('episódio já no banco é duplicata mesmo com outra grafia e data',
+    resultado.novos.length === 1 && resultado.duplicados.length === 1 && resultado.duplicadosInternos.length === 1,
+    { novos: resultado.novos.length, duplicados: resultado.duplicados.length, internos: resultado.duplicadosInternos.length });
+  verificar('paciente novo entra', resultado.novos[0].Prontuario === '300');
+
+  /* Fusão do banco existente: encadeia pela data, o mais forte fica, cirurgias reapontam. */
+  const banco = [
+    caso('IRA-1', { DataInfeccao: '2026-05-01' }),
+    caso('IRA-2', { DataInfeccao: '2026-05-10', Topografia: 'Infecção do trato urinário',
+      StatusInvestigacao: 'confirmado', ConfirmadoPor: 'C', Microrganismo: 'Klebsiella pneumoniae' }),
+    caso('IRA-3', { DataInfeccao: '2026-05-18' }),           /* encadeia com IRA-2 (8 dias) */
+    caso('IRA-4', { DataInfeccao: '2026-08-01' }),           /* outro episódio */
+    caso('IRA-5', { Prontuario: '500', Topografia: 'Meningite' })
+  ];
+  const dedup = imp.deduplicarCasosIras(banco);
+  verificar('grupo encadeado 1-2-3 fundido num caso só; 4 e 5 intactos',
+    dedup.casos.length === 3 && dedup.remover.size === 2,
+    dedup.casos.map(c => c.ID_IRAS));
+  const mantido = dedup.casos.find(c => c.ID_IRAS === 'IRA-2');
+  verificar('o confirmado é quem fica', Boolean(mantido) && dedup.remover.get('IRA-1') === 'IRA-2'
+    && dedup.remover.get('IRA-3') === 'IRA-2');
+  verificar('data mais precoce e rastro da fusão no mantido',
+    mantido.DataInfeccao === '2026-05-01' && /Fundido com IRA-1, IRA-3/.test(mantido.Observacoes),
+    mantido && { data: mantido.DataInfeccao, obs: mantido.Observacoes });
+}
+
 /* == 61. Fumaça da tela de dispositivos: montar e gravar SEM explodir ==
    A tela é avaliada de verdade, com DOM falso. Pega o que sintaxe e teste de motor não
    pegam: helper que não existe (era `config.usuario`, que nunca existiu no projeto),

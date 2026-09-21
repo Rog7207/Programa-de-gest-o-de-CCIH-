@@ -1668,14 +1668,161 @@ function valorDeChave(registro, campo, tipo) {
 function deduplicar(registros, existentes, tipo) {
   const chavesExistentes = new Set(existentes.map(r => chaveNaturalDe(r, tipo)));
   const vistas = new Set();
-  const novos = [], duplicados = [], duplicadosInternos = [];
+  let novos = [];
+  const duplicados = [], duplicadosInternos = [];
   for (const registro of registros) {
     const chave = chaveNaturalDe(registro, tipo);
     if (chavesExistentes.has(chave)) duplicados.push(registro);
     else if (vistas.has(chave)) duplicadosInternos.push(registro);
     else { vistas.add(chave); novos.push(registro); }
   }
+  /* Casos de IRAS: além da chave exata, o MESMO episódio chega de fora com outra grafia
+     de topografia ou outra data — planilha externa e relatório do Tasy redescobrem o que
+     a revisão de culturas já abriu. Mesmo paciente + topografia equivalente + datas
+     próximas é duplicata, não caso novo. */
+  if (tipo === 'iras') {
+    const aceitos = [];
+    for (const registro of novos) {
+      if (existentes.some(e => mesmoCasoIras(e, registro))) duplicados.push(registro);
+      else if (aceitos.some(a => mesmoCasoIras(a, registro))) duplicadosInternos.push(registro);
+      else aceitos.push(registro);
+    }
+    novos = aceitos;
+  }
   return { novos, duplicados, duplicadosInternos };
+}
+
+/* ---- Deduplicação de casos de IRAS ----
+   O mesmo episódio de infecção é detectado em vários momentos — revisão de culturas,
+   pós-alta, visita da UTI, avaliação remota, planilha externa, relatório do Tasy — e cada
+   caminho abria um caso novo. Mesmo paciente + mesma topografia (contando siglas e grafias
+   equivalentes) + datas dentro da janela é o MESMO caso. A janela é o corte de episódio
+   que a aba Infecções já usa para culturas (14 dias, o repeat infection timeframe). */
+
+const IRAS_JANELA_DUPLICATA_DIAS = 14;
+
+/* Grupo canônico da topografia: "ITU" e "Infecção do trato urinário" são a mesma coisa,
+   assim como as variações de profundidade da ISC do mesmo episódio. */
+function grupoTopografia(topografia) {
+  const t = normalizarTexto(topografia);
+  if (!t) return '';
+  if (t === 'itu' || /urinari/.test(t)) return 'itu';
+  if (t === 'pav' || t === 'pnm' || /pneumonia/.test(t)) return 'pneumonia';
+  if (t === 'ipcs' || t === 'ipcsl' || t === 'ipcsc' || /correntesanguinea|bacteremia/.test(t)) return 'ipcs';
+  if (/^isc|sitiocirurgic|feridaoperatoria/.test(t)) return 'isc';
+  return t;
+}
+
+function mesmoCasoIras(a, b, janelaDias) {
+  if (normalizarProntuario(a.Prontuario) !== normalizarProntuario(b.Prontuario)) return false;
+  const grupo = grupoTopografia(a.Topografia);
+  if (!grupo || grupo !== grupoTopografia(b.Topografia)) return false;
+  const dataA = Date.parse(String(a.DataInfeccao || '').slice(0, 10) + 'T00:00:00Z');
+  const dataB = Date.parse(String(b.DataInfeccao || '').slice(0, 10) + 'T00:00:00Z');
+  /* Data ilegível não desfaz o par: paciente + topografia já dizem muito, e um caso sem
+     data fundido com um datado sai GANHANDO uma data. */
+  if (!isFinite(dataA) || !isFinite(dataB)) return true;
+  const janela = (janelaDias === undefined ? IRAS_JANELA_DUPLICATA_DIAS : janelaDias) * 86400000;
+  return Math.abs(dataA - dataB) <= janela;
+}
+
+/* Registra um caso vindo de qualquer momento de detecção SEM duplicar: se o episódio já
+   existe, só completa os campos vazios do registro existente (status, autoria e decisão
+   da segunda assinatura ficam como estão). Devolve { caso, novo }. */
+function registrarCasoIras(casos, candidato, gerarID) {
+  const existente = casos.find(k => mesmoCasoIras(k, candidato));
+  if (!existente) {
+    const novo = { ID_IRAS: gerarID(), ...candidato };
+    casos.push(novo);
+    return { caso: novo, novo: true };
+  }
+  for (const campo of Object.keys(candidato)) {
+    if (['ID_IRAS', 'DataInfeccao', 'StatusInvestigacao', 'CriadoPor', 'CriadoEm'].includes(campo)) continue;
+    if (!String(existente[campo] || '').trim() && String(candidato[campo] || '').trim()) {
+      existente[campo] = candidato[campo];
+    }
+  }
+  /* A data que fica é a mais precoce: é quando a infecção começou a ser vista. */
+  if (String(candidato.DataInfeccao || '').trim()
+    && (!String(existente.DataInfeccao || '').trim() || String(candidato.DataInfeccao) < String(existente.DataInfeccao))) {
+    existente.DataInfeccao = candidato.DataInfeccao;
+  }
+  return { caso: existente, novo: false };
+}
+
+/* Agrupa os casos do banco que são o mesmo episódio, encadeando pela data (A~B e B~C
+   juntam A, B e C mesmo com A e C além da janela — o mesmo encadeamento dos episódios
+   de culturas da aba Infecções). Devolve só os grupos com 2+ casos. */
+function agruparCasosIrasDuplicados(casos, janelaDias) {
+  const porChave = new Map();
+  for (const caso of casos) {
+    const pront = normalizarProntuario(caso.Prontuario);
+    const grupo = grupoTopografia(caso.Topografia);
+    if (!pront || !grupo) continue;
+    const chave = pront + '|' + grupo;
+    if (!porChave.has(chave)) porChave.set(chave, []);
+    porChave.get(chave).push(caso);
+  }
+  const duplicatas = [];
+  for (const lista of porChave.values()) {
+    if (lista.length < 2) continue;
+    lista.sort((a, b) => String(a.DataInfeccao || '').localeCompare(String(b.DataInfeccao || '')));
+    let atual = [lista[0]];
+    for (let i = 1; i < lista.length; i++) {
+      if (mesmoCasoIras(atual[atual.length - 1], lista[i], janelaDias)) atual.push(lista[i]);
+      else {
+        if (atual.length > 1) duplicatas.push(atual);
+        atual = [lista[i]];
+      }
+    }
+    if (atual.length > 1) duplicatas.push(atual);
+  }
+  return duplicatas;
+}
+
+/* Funde um grupo de duplicatas num caso só. Fica o registro mais forte — decisão da
+   segunda assinatura vale mais que suspeita aberta; empate se resolve por quem tem mais
+   campos preenchidos e depois pelo mais antigo — e os campos vazios dele são completados
+   com o que os outros sabiam. Devolve os IDs removidos para reapontar quem os referencia. */
+function fundirCasosIras(grupo) {
+  const CAMPOS_FUNDIVEIS = ['Topografia', 'CriterioDiagnostico', 'Setor', 'DispositivoAssociado',
+    'Microrganismo', 'AgenteOriginal', 'ID_CulturaAgente', 'Desfecho', 'NotificadoANVISA',
+    'ConfirmadoPor', 'ConfirmadoEm', 'Observacoes'];
+  const preenchidos = c => CAMPOS_FUNDIVEIS.filter(campo => String(c[campo] || '').trim()).length;
+  const forca = c => (c.StatusInvestigacao === 'confirmado' ? 200
+    : c.StatusInvestigacao === 'descartado' ? 100 : 0) + preenchidos(c);
+  const ordenado = grupo.slice().sort((a, b) => forca(b) - forca(a)
+    || String(a.CriadoEm || '').localeCompare(String(b.CriadoEm || '')));
+  const principal = ordenado[0];
+  for (const outro of ordenado.slice(1)) {
+    for (const campo of CAMPOS_FUNDIVEIS) {
+      if (!String(principal[campo] || '').trim() && String(outro[campo] || '').trim()) {
+        principal[campo] = outro[campo];
+      }
+    }
+    if (String(outro.DataInfeccao || '').trim()
+      && (!String(principal.DataInfeccao || '').trim() || String(outro.DataInfeccao) < String(principal.DataInfeccao))) {
+      principal.DataInfeccao = outro.DataInfeccao;
+    }
+  }
+  const removidos = ordenado.slice(1).map(c => c.ID_IRAS);
+  /* Rastro da fusão fica no caso que sobrou — nada some sem explicação. */
+  const nota = `Fundido com ${removidos.join(', ')} (duplicata do mesmo episódio).`;
+  principal.Observacoes = [String(principal.Observacoes || '').trim(), nota].filter(Boolean).join('\n');
+  return { principal, removidos };
+}
+
+/* Deduplica o banco inteiro de casos: devolve a lista limpa, o mapa removido→mantido
+   (para reapontar cirurgias que referenciam o caso) e os grupos, para a tela mostrar
+   o que vai acontecer antes de gravar. */
+function deduplicarCasosIras(casos, janelaDias) {
+  const grupos = agruparCasosIrasDuplicados(casos, janelaDias);
+  const remover = new Map();
+  for (const grupo of grupos) {
+    const { principal, removidos } = fundirCasosIras(grupo);
+    removidos.forEach(id => remover.set(id, principal.ID_IRAS));
+  }
+  return { casos: casos.filter(c => !remover.has(c.ID_IRAS)), remover, grupos };
 }
 
 /* ---- Protocolo de sepse: normalização da ficha preenchida pelos enfermeiros ---- */
@@ -3235,6 +3382,8 @@ if (typeof module !== 'undefined' && module.exports) {
     principioAtivo, aplicarObitos,
     classificarParaVigilancia, categoriaDeVigilancia, CATEGORIAS_VIGILANCIA, CATEGORIAS_VIGILANCIA_PADRAO,
     diasDesde, telefoneWhatsApp, mensagemVigilancia, linkWhatsApp, JANELA_VIGILANCIA,
-    prescricaoAtiva, analisarDose, cursosDeAntibiotico, alertasDeAntibioticos, DIAS_CURSO_PROLONGADO, TETO_DOSE_DIARIA_MG
+    prescricaoAtiva, analisarDose, cursosDeAntibiotico, alertasDeAntibioticos, DIAS_CURSO_PROLONGADO, TETO_DOSE_DIARIA_MG,
+    grupoTopografia, mesmoCasoIras, registrarCasoIras, agruparCasosIrasDuplicados,
+    fundirCasosIras, deduplicarCasosIras, IRAS_JANELA_DUPLICATA_DIAS
   };
 }

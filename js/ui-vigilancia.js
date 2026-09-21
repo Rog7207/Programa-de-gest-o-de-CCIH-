@@ -420,20 +420,21 @@ async function montarVigilancia(conteudo) {
           const atualIras = await lerBanco('iras');
           const alvo = atualCir.cirurgias.find(x => x.ID_Cirurgia === c.ID_Cirurgia);
           if (!alvo) throw new Error('Cirurgia não encontrada.');
-          const idIras = proximoIDLista(atualIras.casos, 'ID_IRAS', 'IRA');
           /* A IRAS nasce "em investigação": o caso só vira oficial quando um segundo
-             profissional valida — é a dupla assinatura que o processo pede. */
-          atualIras.casos.push({
-            ID_IRAS: idIras, Prontuario: alvo.Prontuario, DataInfeccao: campoData.value,
+             profissional valida — é a dupla assinatura que o processo pede. Episódio
+             que já tem caso aberto por outro caminho não duplica — a cirurgia aponta
+             para o caso existente. */
+          const { caso } = registrarCasoIras(atualIras.casos, {
+            Prontuario: alvo.Prontuario, DataInfeccao: campoData.value,
             Topografia: TIPOS_ISC[selTipo.value], CriterioDiagnostico: 'Vigilância pós-alta (contato telefônico)',
             Setor: setorPadraoISC(alvo.Procedimento), DispositivoAssociado: '', Microrganismo: '',
             Desfecho: '', StatusInvestigacao: 'em investigação', NotificadoANVISA: '',
             CriadoPor: app.usuario, CriadoEm: agoraCurto()
-          });
+          }, () => proximoIDLista(atualIras.casos, 'ID_IRAS', 'IRA'));
           alvo.StatusVigilancia = 'em investigação';
           alvo.ISC = 'S';
           alvo.TipoISC = selTipo.value;
-          alvo.ID_IRAS = idIras;
+          alvo.ID_IRAS = caso.ID_IRAS;
           alvo.InvestigadoPor = app.usuario;
           registrarDiario(alvo);
           await gravarBanco('iras', atualIras);

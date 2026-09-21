@@ -3,6 +3,14 @@
 
 const SURTO_JANELA_DIAS = 14;
 const SURTO_MINIMO_PACIENTES = 3;
+/* Comparação de antibiogramas na detecção de surto: mínimo de antibióticos testados em
+   comum para a comparação valer e concordância exigida entre os resultados. Só S e R
+   contam — intermediário não separa clones. */
+const SURTO_MIN_ATB_COMUNS = 3;
+const SURTO_CONCORDANCIA_MINIMA = 0.8;
+/* Eixo "mesmo procedimento": cultura colhida até 90 dias depois da cirurgia (janela
+   máxima de vigilância de ISC do NHSN) conta para o grupo daquele procedimento. */
+const SURTO_CIRURGIA_DIAS = 90;
 const MDR_JANELA_DIAS = 30;
 /* O painel mostra uma janela mais curta: ali interessa o que ainda está acontecendo e
    pede conduta hoje. A janela de 30 dias continua valendo para as pendências de
@@ -157,21 +165,110 @@ function correlacionarSurto(prontuarios, bancos) {
   };
 }
 
-/* Suspeita de surto: pacientes distintos com o mesmo microrganismo no mesmo setor dentro da janela. */
-function detectarSurtos(culturas, janelaDias, minimoPacientes) {
-  janelaDias = janelaDias || SURTO_JANELA_DIAS;
-  minimoPacientes = minimoPacientes || SURTO_MINIMO_PACIENTES;
+/* Portas de entrada (pronto atendimento, pronto-socorro, emergência, ambulatórios): a
+   flora chega da comunidade e o giro de pacientes é enorme — num hospital grande, 3
+   pacientes com o mesmo germe em 14 dias ali é rotina, não sinal de transmissão cruzada. */
+function ehSetorPortaDeEntrada(setor) {
+  return /prontoatendimento|prontosocorro|emergenc|ambulat/.test(normalizarTexto(setor));
+}
+
+/* Perfil S/R de uma cultura a partir do antibiograma. 'I' fica de fora: intermediário
+   não ajuda a separar clones. Devolve Map antibiótico→resultado, ou null sem itens. */
+function perfilAntibiograma(itensSensibilidade) {
+  const perfil = new Map();
+  for (const s of itensSensibilidade || []) {
+    const atb = normalizarTexto(s.Antibiotico);
+    if (!atb || (s.Resultado !== 'S' && s.Resultado !== 'R')) continue;
+    perfil.set(atb, s.Resultado);
+  }
+  return perfil.size ? perfil : null;
+}
+
+/* Dois antibiogramas são "semelhantes" quando testaram antibióticos suficientes em comum
+   e quase não discordam. É triagem fenotípica, não tipagem molecular: serve para separar
+   3 E. coli da comunidade de 3 isolados provavelmente clonais. */
+function antibiogramasSemelhantes(a, b) {
+  if (!a || !b) return false;
+  let comuns = 0, concordantes = 0;
+  for (const [atb, resultado] of a) {
+    const outro = b.get(atb);
+    if (!outro) continue;
+    comuns++;
+    if (outro === resultado) concordantes++;
+  }
+  return comuns >= SURTO_MIN_ATB_COMUNS && concordantes / comuns >= SURTO_CONCORDANCIA_MINIMA;
+}
+
+/* Maior subgrupo da janela cujos antibiogramas casam com o de alguma cultura-semente.
+   Janela sem nenhum antibiograma comparável (fungos, germes sem painel, painéis muito
+   curtos) mantém o comportamento antigo — a exigência só vale quando há o que comparar. */
+function maiorGrupoSemelhante(itens) {
+  const sementes = itens.filter(it => it.perfil && it.perfil.size >= SURTO_MIN_ATB_COMUNS);
+  if (!sementes.length) return itens;
+  let melhor = [];
+  let melhorPacientes = 0;
+  for (const semente of sementes) {
+    const grupo = itens.filter(it => antibiogramasSemelhantes(semente.perfil, it.perfil));
+    const pacientes = new Set(grupo.map(g => g.prontuario)).size;
+    if (pacientes > melhorPacientes) { melhor = grupo; melhorPacientes = pacientes; }
+  }
+  return melhor;
+}
+
+/* Suspeita de surto: pacientes distintos com o mesmo microrganismo E antibiograma
+   semelhante, no mesmo setor OU depois do mesmo procedimento cirúrgico, dentro da janela.
+   opcoes: { janelaDias, minimoPacientes, sensibilidade, cirurgias } — sem sensibilidade
+   a comparação de antibiogramas não roda; sem cirurgias o eixo procedimento não roda. */
+function detectarSurtos(culturas, opcoes) {
+  opcoes = opcoes || {};
+  const janelaDias = opcoes.janelaDias || SURTO_JANELA_DIAS;
+  const minimoPacientes = opcoes.minimoPacientes || SURTO_MINIMO_PACIENTES;
+  const sensibilidadePorCultura = {};
+  for (const s of opcoes.sensibilidade || []) {
+    (sensibilidadePorCultura[s.ID_Cultura] = sensibilidadePorCultura[s.ID_Cultura] || []).push(s);
+  }
+  const cirurgiasPorPaciente = {};
+  for (const cir of opcoes.cirurgias || []) {
+    if (!cir.DataCirurgia || !String(cir.ProcedimentoNHSN || cir.Procedimento || '').trim()) continue;
+    const pront = normalizarProntuario(cir.Prontuario);
+    (cirurgiasPorPaciente[pront] = cirurgiasPorPaciente[pront] || []).push(cir);
+  }
+
   const grupos = {};
+  const juntar = (chave, rotulo, criterio, c) => {
+    (grupos[chave] = grupos[chave] || { rotulo, criterio, micro: c.Microrganismo, itens: [] })
+      .itens.push({
+        data: c.DataColeta, prontuario: normalizarProntuario(c.Prontuario), cultura: c.ID_Cultura,
+        perfil: perfilAntibiograma(sensibilidadePorCultura[c.ID_Cultura])
+      });
+  };
   for (const c of culturas) {
-    if (!c.Microrganismo || !c.DataColeta || !c.Setor || c.StatusRevisao === 'descartada') continue;
+    if (!c.Microrganismo || !c.DataColeta || c.StatusRevisao === 'descartada') continue;
     if (c.AvaliacaoCCIH === 'Água' || c.AvaliacaoCCIH === 'Leite') continue;
     if (normalizarTexto(c.Material).includes('swab')) continue;
     /* "Acinetobacter" e "Acinetobacter spp" são o MESMO sinal: o sufixo spp/sp sai da
        chave — no banco real as duas grafias dividiram o surto do CTI em grupos menores. */
-    const chave = normalizarTexto(c.Setor) + '|' + normalizarTexto(c.Microrganismo).replace(/spp?$/, '');
-    (grupos[chave] = grupos[chave] || { setor: c.Setor, micro: c.Microrganismo, itens: [] })
-      .itens.push({ data: c.DataColeta, prontuario: normalizarProntuario(c.Prontuario), cultura: c.ID_Cultura });
+    const micro = normalizarTexto(c.Microrganismo).replace(/spp?$/, '');
+    if (c.Setor && !ehSetorPortaDeEntrada(c.Setor)) {
+      juntar('setor|' + normalizarTexto(c.Setor) + '|' + micro, c.Setor, 'setor', c);
+    }
+    /* Eixo procedimento: a ISC de um mesmo time cirúrgico aparece espalhada pelos setores
+       (e volta pela emergência) — o que liga os pacientes é a cirurgia, não o leito. */
+    const coleta = Date.parse(String(c.DataColeta).slice(0, 10) + 'T00:00:00Z');
+    const vistos = new Set();
+    for (const cir of cirurgiasPorPaciente[normalizarProntuario(c.Prontuario)] || []) {
+      const dia = Date.parse(String(cir.DataCirurgia).slice(0, 10) + 'T00:00:00Z');
+      if (!isFinite(dia) || !isFinite(coleta)) continue;
+      const dias = (coleta - dia) / 86400000;
+      if (dias < 0 || dias > SURTO_CIRURGIA_DIAS) continue;
+      const procedimento = String(cir.ProcedimentoNHSN || cir.Procedimento).trim();
+      const chave = 'proc|' + normalizarTexto(procedimento) + '|' + micro;
+      if (vistos.has(chave)) continue;   /* paciente reoperado não duplica a cultura no grupo */
+      vistos.add(chave);
+      juntar(chave, 'Procedimento: ' + procedimento, 'procedimento', c);
+    }
   }
+
   const alertas = [];
   for (const grupo of Object.values(grupos)) {
     const itens = grupo.itens.sort((a, b) => a.data.localeCompare(b.data));
@@ -180,22 +277,23 @@ function detectarSurtos(culturas, janelaDias, minimoPacientes) {
        única por grupo, a continuação ficava invisível para sempre. */
     let i = 0;
     while (i < itens.length) {
-      const pacientes = new Set();
-      const culturas = [];
-      let fim = itens[i].data;
+      const janela = [];
       let j = i;
       for (; j < itens.length && diasEntre(itens[i].data, itens[j].data) <= janelaDias; j++) {
-        pacientes.add(itens[j].prontuario);
-        culturas.push({ ID_Cultura: itens[j].cultura, Prontuario: itens[j].prontuario, DataColeta: itens[j].data });
-        fim = itens[j].data;
+        janela.push(itens[j]);
       }
+      /* Dentro da janela só conta o subgrupo de antibiograma semelhante: 3 pacientes com
+         perfis discordantes são flora de hospital grande, não suspeita de clone. */
+      const semelhantes = maiorGrupoSemelhante(janela);
+      const pacientes = new Set(semelhantes.map(s => s.prontuario));
       if (pacientes.size >= minimoPacientes) {
         /* Os prontuários vão junto: são eles que a tela de investigação cruza com internações,
            cirurgias e dispositivos para procurar o que os pacientes têm em comum. */
         alertas.push({
-          Setor: grupo.setor, Microrganismo: grupo.micro, Pacientes: pacientes.size,
-          Prontuarios: [...pacientes], Culturas: culturas,
-          Inicio: itens[i].data, Fim: fim
+          Setor: grupo.rotulo, Criterio: grupo.criterio, Microrganismo: grupo.micro,
+          Pacientes: pacientes.size, Prontuarios: [...pacientes],
+          Culturas: semelhantes.map(s => ({ ID_Cultura: s.cultura, Prontuario: s.prontuario, DataColeta: s.data })),
+          Inicio: semelhantes[0].data, Fim: semelhantes[semelhantes.length - 1].data
         });
         i = j;   /* janela emitida: a próxima começa depois dela */
       } else {
@@ -203,7 +301,15 @@ function detectarSurtos(culturas, janelaDias, minimoPacientes) {
       }
     }
   }
-  return alertas.sort((a, b) => b.Pacientes - a.Pacientes);
+  /* O mesmo grupo de pacientes alertando pelo setor E pelo procedimento é UM sinal: fica
+     o alerta do setor — o cruzamento da investigação mostra o procedimento em comum. */
+  const chaveMicro = m => normalizarTexto(m).replace(/spp?$/, '');
+  const porSetor = alertas.filter(a => a.Criterio === 'setor');
+  return alertas
+    .filter(a => a.Criterio !== 'procedimento'
+      || !porSetor.some(s => chaveMicro(s.Microrganismo) === chaveMicro(a.Microrganismo)
+        && a.Prontuarios.every(p => s.Prontuarios.includes(p))))
+    .sort((a, b) => b.Pacientes - a.Pacientes);
 }
 
 /* Pendências de isolamento: multirresistente recente sem precaução ativa e sem decisão registrada. */
@@ -232,6 +338,7 @@ function isolamentosParaNotificar(precaucoes, dia) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { detectarSurtos, detectarMultirresistentes, inferirMecanismo, pendenciasIsolamento,
     mesmaSuspeita, correlacionarSurto, resumoParaVisitaUTI, ehSetorDeUTI, iniciaisDe, isolamentosParaNotificar,
+    ehSetorPortaDeEntrada, perfilAntibiograma, antibiogramasSemelhantes,
     GENEROS_GRAM_NEGATIVOS };
 }
 

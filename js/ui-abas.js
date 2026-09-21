@@ -237,15 +237,15 @@ async function montarCulturas(conteudo) {
       await gravarBanco('culturas', bancoAtual);
       if (avaliacao === 'IRAS') {
         const bancoIras = await lerBanco('iras');
-        bancoIras.casos.push({
-          ID_IRAS: proximoIDLista(bancoIras.casos, 'ID_IRAS', 'IRA'),
+        /* Nasce como suspeita: a notificação oficial só existe depois que um segundo
+           profissional confirmar na aba Infecções. Se o MESMO episódio já tem caso
+           aberto (outra cultura, pós-alta, visita da UTI), não duplica — só completa. */
+        registrarCasoIras(bancoIras.casos, {
           Prontuario: c.Prontuario, DataInfeccao: c.DataColeta, Topografia: topografia,
           CriterioDiagnostico: '', Setor: c.Setor, DispositivoAssociado: dispositivo,
-          /* Nasce como suspeita: a notificação oficial só existe depois que um segundo
-             profissional confirmar na aba Infecções. */
           Microrganismo: c.Microrganismo, Desfecho: '', StatusInvestigacao: 'em investigação',
           NotificadoANVISA: '', CriadoPor: app.usuario, CriadoEm: agoraCurto()
-        });
+        }, () => proximoIDLista(bancoIras.casos, 'ID_IRAS', 'IRA'));
         await gravarBanco('iras', bancoIras);
       }
     });
@@ -1101,13 +1101,12 @@ async function montarCirurgias(conteudo) {
           await gravarBanco('cirurgias', bancoAtual);
           if (isISC) {
             const bancoIras = await lerBanco('iras');
-            bancoIras.casos.push({
-              ID_IRAS: proximoIDLista(bancoIras.casos, 'ID_IRAS', 'IRA'),
+            registrarCasoIras(bancoIras.casos, {
               Prontuario: c.Prontuario, DataInfeccao: campoData.value, Topografia: TIPOS_ISC[selTipo.value],
               CriterioDiagnostico: 'Vigilância pós-alta', Setor: setorPadraoISC(c.Procedimento), DispositivoAssociado: 'Nenhum',
               Microrganismo: '', Desfecho: '', StatusInvestigacao: 'em investigação',
               NotificadoANVISA: '', CriadoPor: app.usuario, CriadoEm: agoraCurto()
-            });
+            }, () => proximoIDLista(bancoIras.casos, 'ID_IRAS', 'IRA'));
             await gravarBanco('iras', bancoIras);
           }
         });

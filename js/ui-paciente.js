@@ -255,10 +255,11 @@ async function montarPaciente(conteudo) {
     const notificarIras = async () => {
       try {
         if (!selTopoNova.value) { msgNova.textContent = 'Escolha a topografia.'; return; }
+        let repetida = false;
         await comTrava(['iras'], async () => {
           const atual = await lerBanco('iras');
-          atual.casos.push({
-            ID_IRAS: proximoIDLista(atual.casos, 'ID_IRAS', 'IRA'),
+          /* Episódio já notificado por outro caminho não duplica — completa o existente. */
+          const { novo } = registrarCasoIras(atual.casos, {
             Prontuario: cadastro.Prontuario, DataInfeccao: campoDataNova.value,
             Topografia: selTopoNova.value, CriterioDiagnostico: 'Notificação manual (ficha do paciente)',
             Setor: selSetorNova.value, DispositivoAssociado: selDispNova.value,
@@ -266,9 +267,11 @@ async function montarPaciente(conteudo) {
             StatusInvestigacao: 'em investigação', NotificadoANVISA: '',
             Observacoes: acrescentarObservacao('', '', campoObsNova.value, app.usuario, agoraCurto()),
             CriadoPor: app.usuario, CriadoEm: agoraCurto()
-          });
+          }, () => proximoIDLista(atual.casos, 'ID_IRAS', 'IRA'));
+          repetida = !novo;
           await gravarBanco('iras', atual);
         });
+        if (repetida) alert('Este episódio já tinha um caso registrado — nada foi duplicado; os campos vazios do caso existente foram completados.');
         abrirPaciente(cadastro.Prontuario);
       } catch (e) { msgNova.textContent = e.message; }
     };

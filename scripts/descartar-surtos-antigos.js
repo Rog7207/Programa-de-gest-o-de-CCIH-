@@ -33,14 +33,18 @@ const ler = arquivo => {
   return dados;
 };
 
-const culturas = ler(ESQUEMAS.culturas.arquivo).culturas;
+const bancoCulturas = ler(ESQUEMAS.culturas.arquivo);
+const culturas = bancoCulturas.culturas;
+const cirurgias = fs.existsSync(path.join(PASTA, ESQUEMAS.cirurgias.arquivo))
+  ? ler(ESQUEMAS.cirurgias.arquivo).cirurgias : [];
 const arquivoSurtos = path.join(PASTA, ESQUEMAS.surtos.arquivo);
 const banco = fs.existsSync(arquivoSurtos)
   ? ler(ESQUEMAS.surtos.arquivo)
   : { investigacoes: [], documentos: [], pacientes_surto: [] };
 banco.investigacoes = banco.investigacoes || [];
 
-const suspeitas = alertas.detectarSurtos(culturas);
+const suspeitas = alertas.detectarSurtos(culturas,
+  { sensibilidade: bancoCulturas.sensibilidade, cirurgias });
 const antigas = suspeitas.filter(s => String(s.Fim) <= CORTE);
 console.log(`suspeitas detectadas: ${suspeitas.length}`);
 console.log(`com período terminando até ${CORTE}: ${antigas.length}`);

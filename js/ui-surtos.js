@@ -69,7 +69,8 @@ async function montarSurtos(conteudo) {
   const investigacoes = bancoSurtos.investigacoes || [];
   const documentos = bancoSurtos.documentos || [];
   const nomes = new Map(pacientes.pacientes.map(p => [normalizarProntuario(p.Prontuario), p.Nome]));
-  const suspeitas = detectarSurtos(culturas.culturas);
+  const suspeitas = detectarSurtos(culturas.culturas,
+    { sensibilidade: culturas.sensibilidade, cirurgias: cirurgias.cirurgias });
 
   /* Suspeitas ativas + investigações já registradas que não aparecem mais na detecção
      (o surto passou, mas a investigação continua valendo). */
@@ -90,8 +91,10 @@ async function montarSurtos(conteudo) {
   const area = el('div', {});
   selSituacao.addEventListener('change', listar);
   conteudo.append(el('div', { class: 'cartao' },
-    el('p', { class: 'texto-suave' }, 'Suspeitas levantadas pelo painel: mesmo microrganismo, mesmo setor, '
-      + `${SURTO_MINIMO_PACIENTES} pacientes ou mais em ${SURTO_JANELA_DIAS} dias (swabs de vigilância não entram). `
+    el('p', { class: 'texto-suave' }, 'Suspeitas levantadas pelo painel: mesmo microrganismo com antibiograma '
+      + 'semelhante, no mesmo setor ou após o mesmo procedimento cirúrgico, '
+      + `${SURTO_MINIMO_PACIENTES} pacientes ou mais em ${SURTO_JANELA_DIAS} dias. Swabs de vigilância, `
+      + 'pronto atendimento, emergência e ambulatórios não entram. '
       + 'Marcar "não é surto" tira a suspeita do painel sem apagar o registro.'),
     el('div', { class: 'linha-campos' }, el('label', {}, 'Situação: ', selSituacao))), area);
 

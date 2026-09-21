@@ -116,6 +116,61 @@ async function montarInfeccoes(conteudo) {
   const areaSuspeitas = el('div', {});
   conteudo.insertBefore(areaSuspeitas, area);
 
+  /* ---- Duplicatas: o mesmo episódio aberto por caminhos diferentes ----
+     A prevenção age na entrada (registrarCasoIras, em todas as telas e importações), mas
+     o banco acumulou duplicatas de antes — e fundir REMOVE linhas, então só acontece com
+     clique e confirmação, nunca sozinho. */
+  const areaDuplicatas = el('div', {});
+  conteudo.insertBefore(areaDuplicatas, area);
+
+  function desenharDuplicatas() {
+    const grupos = agruparCasosIrasDuplicados(casos);
+    if (!grupos.length) { areaDuplicatas.replaceChildren(); return; }
+    const redundantes = grupos.reduce((soma, g) => soma + g.length - 1, 0);
+    const linhaDoGrupo = g => el('tr', {},
+      el('td', {}, nomes.get(normalizarProntuario(g[0].Prontuario)) || g[0].Prontuario),
+      el('td', {}, [...new Set(g.map(k => k.Topografia))].join(' / ')),
+      el('td', {}, [...new Set(g.map(k => String(k.DataInfeccao || '').slice(0, 10)))].join(', ')),
+      el('td', {}, g.map(k => `${k.ID_IRAS} (${k.StatusInvestigacao || 'sem status'})`).join(', ')));
+    areaDuplicatas.replaceChildren(el('div', { class: 'aviso-alerta' },
+      el('div', { class: 'alerta-titulo' },
+        `${fmtInt(grupos.length)} episódio(s) com casos duplicados — ${fmtInt(redundantes)} caso(s) redundante(s)`),
+      el('div', { class: 'texto-suave' },
+        'Mesmo paciente, mesma topografia (contando siglas equivalentes) e datas até '
+        + `${IRAS_JANELA_DUPLICATA_DIAS} dias entre si: o episódio foi detectado por mais de um caminho. `
+        + 'Fundir mantém o caso mais forte (decisão da segunda assinatura vale mais que suspeita aberta), '
+        + 'completa os campos vazios com o que os outros sabiam e registra a fusão nas observações.'),
+      el('table', { class: 'tabela' },
+        el('thead', {}, el('tr', {}, ['Paciente', 'Topografia', 'Datas', 'Casos'].map(c => el('th', {}, c)))),
+        el('tbody', {}, grupos.slice(0, 12).map(linhaDoGrupo))),
+      grupos.length > 12 ? el('p', { class: 'texto-suave' }, `… e mais ${fmtInt(grupos.length - 12)} grupo(s).`) : null,
+      el('div', { class: 'linha-botoes' },
+        el('button', { class: 'botao-primario', onclick: fundirDuplicatas }, 'Fundir duplicatas'))));
+  }
+
+  async function fundirDuplicatas() {
+    if (!confirm('Fundir os casos duplicados? Os redundantes saem do banco e o rastro da fusão fica nas observações do caso mantido.')) return;
+    try {
+      await comTrava(['iras', 'cirurgias'], async () => {
+        const atualIras = await lerBanco('iras');
+        const resultado = deduplicarCasosIras(atualIras.casos);
+        if (!resultado.remover.size) return;
+        atualIras.casos = resultado.casos;
+        await gravarBanco('iras', atualIras);
+        /* Cirurgias da pós-alta apontam para o caso pelo ID: reapontam para o mantido. */
+        const atualCir = await lerBanco('cirurgias');
+        let reapontadas = 0;
+        for (const cirurgia of atualCir.cirurgias || []) {
+          const novoID = resultado.remover.get(cirurgia.ID_IRAS);
+          if (novoID) { cirurgia.ID_IRAS = novoID; reapontadas++; }
+        }
+        if (reapontadas) await gravarBanco('cirurgias', atualCir);
+      });
+      navegar('iras', { historico: 'substituir' });
+    } catch (e) { alert(e.message); }
+  }
+  desenharDuplicatas();
+
   function desenharSuspeitas() {
     const suspeitas = casos.filter(k => k.StatusInvestigacao === 'em investigação')
       .sort((a, b) => String(b.DataInfeccao).localeCompare(String(a.DataInfeccao)));

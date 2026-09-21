@@ -191,6 +191,14 @@ notificação oficial só nasce na **aba Infecções**, onde um segundo profissi
 Se você tentar confirmar uma suspeita que você mesmo abriu, o app avisa — não impede,
 mas o ideal é que sejam duas pessoas. Os indicadores contam apenas as confirmadas.
 
+**Sem duplicatas**: o mesmo episódio costuma ser detectado por mais de um caminho (uma
+cultura revisada, o contato da pós-alta, uma planilha importada). O app reconhece o
+episódio — mesmo paciente, mesma topografia (contando siglas como ITU, PAV, IPCS e ISC)
+e datas até 14 dias entre si — e, em vez de abrir um caso novo, completa os campos
+vazios do existente. Duplicatas antigas aparecem no topo da aba Infecções com o botão
+**Fundir duplicatas**: fica o caso mais forte (decisão da segunda assinatura vale mais),
+e a fusão fica registrada nas observações.
+
 ---
 
 ## 8. Vigilância pós-alta (cirurgias)
@@ -219,7 +227,9 @@ A aba Pós-alta acompanha infecção de sítio cirúrgico depois da alta:
 - **Sepse** — indicadores do protocolo (tempos, bundle, desfechos) e perfil
   microbiológico IRAS × admissão.
 - **Surtos** — investigação das suspeitas do painel, com cruzamento automático do que os
-  pacientes têm em comum e anexos.
+  pacientes têm em comum e anexos. A suspeita exige 3+ pacientes com o mesmo germe **e
+  antibiograma semelhante** em 14 dias, no mesmo setor ou após o mesmo procedimento
+  cirúrgico; pronto atendimento, emergência e ambulatórios ficam fora da detecção.
 - **Higiene de mãos** — adesão por momento da OMS, setor e categoria profissional.
 - **Eventos** — séries temporais de qualquer fonte do banco.
 - **Configurações** — vocabulários (com unificação de termos), distribuição dos miniapps.

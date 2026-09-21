@@ -341,7 +341,8 @@ async function montarPainel(conteudo) {
   }
   const hoje = new Date().toISOString().slice(0, 10);
 
-  const todosSurtos = detectarSurtos(culturas.culturas);
+  const todosSurtos = detectarSurtos(culturas.culturas,
+    { sensibilidade: culturas.sensibilidade, cirurgias: cirurgias.cirurgias });
   let investigacoes = [];
   try { investigacoes = (await lerBanco('surtos')).investigacoes || []; } catch (e) { /* banco novo */ }
   /* Suspeita marcada como "não é surto" sai do painel, mas continua registrada na aba Surtos. */
@@ -375,7 +376,9 @@ async function montarPainel(conteudo) {
           el('label', { class: 'rotulo-descartar', title: 'Desconsiderar — não é surto' },
             caixa, el('span', {}, 'não é surto')),
           el('span', { class: 'linha-clicavel', style: 'flex:1', onclick: () => {
-            app.filtroCulturas = { status: 'todas', setor: s.Setor, busca: s.Microrganismo };
+            /* Alerta por procedimento não tem setor para filtrar — vai só pelo germe. */
+            app.filtroCulturas = { status: 'todas', busca: s.Microrganismo };
+            if (s.Criterio !== 'procedimento') app.filtroCulturas.setor = s.Setor;
             navegar('culturas');
           } }, `${s.Setor}: ${s.Microrganismo} — ${s.Pacientes} pacientes entre ${s.Inicio} e ${s.Fim}`),
           el('button', { class: 'botao-secundario botao-investigar', onclick: () => {

@@ -32,7 +32,8 @@ const UNIFICACOES = {
   'Proteus spp.': 'Proteus spp',
   'Pseudomonas': 'Pseudomonas spp',
   'Acinetobacter': 'Acinetobacter spp',
-  'Streptococcus': 'Streptococcus spp'
+  'Streptococcus': 'Streptococcus spp',
+  'Chryseobacterium': 'Chryseobacterium spp'
 };
 
 const cache = {};

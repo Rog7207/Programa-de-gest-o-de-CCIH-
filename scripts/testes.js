@@ -397,6 +397,48 @@ console.log('\n== 14. Unificação de pacientes ==');
   verificar('sem correspondente não sugere', !sug.some(s => s.de === '02022000-BX'), sug);
 }
 
+console.log('\n== 14b. Unificação por nome com PROVA de internação ==');
+{
+  const pacientes = [
+    { Prontuario: '184684', Nome: 'Maria Teste' },          /* órfão: número antigo, sem internação */
+    { Prontuario: '293816', Nome: 'Maria Teste' },          /* real: tem internação no censo */
+    { Prontuario: '500', Nome: 'João Ambíguo' }, { Prontuario: '501', Nome: 'João Ambíguo' }, { Prontuario: '502', Nome: 'João Ambíguo' },
+    { Prontuario: '700', Nome: 'Pedro Sem Prova' }, { Prontuario: '701', Nome: 'Pedro Sem Prova' },
+    { Prontuario: '227807', Nome: 'Ceomar Teste' },         /* número = atendimento de internação do homônimo, mas tem internação própria */
+    { Prontuario: '915660', Nome: 'Ceomar Teste' },
+    { Prontuario: '800', Nome: 'Ana Espera' }, { Prontuario: '801', Nome: 'Ana Espera' }
+  ];
+  const internacoes = [
+    { Prontuario: '293816', Atendimento: '181473', DataInternacao: '2023-11-09', DataAlta: '2023-11-23' },
+    { Prontuario: '501', Atendimento: '1', DataInternacao: '2024-01-01', DataAlta: '2024-01-10' },
+    { Prontuario: '502', Atendimento: '2', DataInternacao: '2024-01-01', DataAlta: '2024-01-10' },
+    { Prontuario: '701', Atendimento: '3', DataInternacao: '2024-05-01', DataAlta: '2024-05-10' },
+    { Prontuario: '915660', Atendimento: '227807', DataInternacao: '2023-12-06', DataAlta: '2023-12-20' },
+    { Prontuario: '227807', Atendimento: '546396', DataInternacao: '2024-07-16', DataAlta: '2024-07-25' },
+    { Prontuario: '801', Atendimento: '4', DataInternacao: '2025-10-03', DataAlta: '2025-10-28' }
+  ];
+  const culturas = [
+    { Prontuario: '184684', DataColeta: '2023-11-12' },
+    { Prontuario: '184684', DataColeta: '2020-01-01' },     /* fora de qualquer internação: não conta */
+    { Prontuario: '500', DataColeta: '2024-01-05' },
+    { Prontuario: '700', DataColeta: '2024-09-09' },        /* homônimo internado, mas em outra data */
+    { Prontuario: '800', DataColeta: '2025-10-01' }         /* 2 dias ANTES da entrada: espera obstétrica */
+  ];
+  const sug = imp.sugerirUnificacoesPorInternacao(pacientes, internacoes, culturas);
+  const por = de => sug.find(s => s.de === de);
+  verificar('órfão com cultura dentro da internação do homônimo → sugerido, com evidência',
+    por('184684') && por('184684').para === '293816' && /1 de 2/.test(por('184684').motivo), por('184684'));
+  verificar('dois homônimos com internação → ambíguo, não sugere', !por('500'), por('500'));
+  verificar('nome igual SEM cultura na internação do outro → não sugere (pode ser outra pessoa)', !por('700'), por('700'));
+  verificar('número que é o ATENDIMENTO de internação do homônimo → sugerido mesmo tendo internação própria',
+    por('227807') && por('227807').para === '915660' && /atendimento/.test(por('227807').motivo), por('227807'));
+  verificar('coleta poucos dias antes da entrada (espera) conta com a folga', por('800') && por('800').para === '801', por('800'));
+  verificar('sugerirUnificacoes com culturas inclui estes pares sem repetir',
+    imp.sugerirUnificacoes(pacientes, internacoes, culturas).filter(s => s.de === '184684').length === 1);
+  verificar('sem culturas, sugerirUnificacoes segue como antes (nada por nome+prova)',
+    !imp.sugerirUnificacoes(pacientes, internacoes).some(s => s.de === '184684'));
+}
+
 console.log('\n== 15. Reimportação de internações (upsert) ==');
 {
   const existentes = [

@@ -473,7 +473,9 @@ async function montarPacientes(conteudo) {
   catch (e) { conteudo.append(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message)); return; }
   const pseudos = banco.pacientes.filter(p => ehPseudoProntuario(p.Prontuario) && p.Descartado !== 'S');
   const descartados = banco.pacientes.filter(p => ehPseudoProntuario(p.Prontuario) && p.Descartado === 'S');
-  const sugestoes = sugerirUnificacoes(banco.pacientes, banco.internacoes || []);
+  /* Com as culturas, entram também os homônimos com PROVA de internação (cultura do
+     registro órfão colhida dentro de uma internação do outro número). */
+  const sugestoes = sugerirUnificacoes(banco.pacientes, banco.internacoes || [], (bancosBusca.culturas || {}).culturas || []);
   const msg = el('p', { class: 'aviso-erro-texto' });
 
   /* "Não é paciente internado": descarte reversível do registro provisório — o cadastro
@@ -633,16 +635,17 @@ async function montarPacientes(conteudo) {
 
     conteudo.append(el('div', { class: 'cartao' },
       el('h2', {}, `Unificações sugeridas — mesmo nome (${fmtInt(sugestoes.length)})`),
-      el('p', { class: 'texto-suave' }, 'O pseudo-registro é substituído pelo prontuário verdadeiro em todos os arquivos do banco. '
-        + 'Desmarque as linhas em que os nomes iguais forem pacientes diferentes.'),
+      el('p', { class: 'texto-suave' }, 'O registro duplicado é substituído pelo prontuário verdadeiro em todos os arquivos do banco. '
+        + 'A coluna "Evidência" diz por que o app acha que é a mesma pessoa; desmarque as linhas em que forem pacientes diferentes.'),
       el('table', { class: 'tabela' },
         el('thead', {}, el('tr', {},
           el('th', {}, marcarTodas),
-          ['Paciente', 'Pseudo-registro', 'Prontuário verdadeiro', ''].map(c => el('th', {}, c)))),
+          ['Paciente', 'Registro duplicado', 'Prontuário verdadeiro', 'Evidência', ''].map(c => el('th', {}, c)))),
         el('tbody', {}, sugestoes.map((s, i) => el('tr', {},
           el('td', {}, caixas[i]),
           el('td', { class: 'linha-clicavel', onclick: () => { caixas[i].checked = !caixas[i].checked; atualizarBotao(); } }, s.nome),
           el('td', {}, s.de), el('td', {}, s.para),
+          el('td', { class: 'texto-suave' }, s.motivo || (ehPseudoProntuario(s.de) ? 'registro provisório com o mesmo nome' : 'número é atendimento de internação')),
           el('td', {}, el('button', { class: 'botao-secundario', title: 'Descarta o registro provisório (reversível)',
             onclick: () => descartarPseudo(s.de) }, 'não é internado')))))),
       el('div', { class: 'linha-botoes' }, botao)));

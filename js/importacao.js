@@ -3264,7 +3264,78 @@ function corrigirProntuarioAtendimento(registros, internacoes) {
   return corrigidos;
 }
 
-function sugerirUnificacoes(pacientes, internacoes) {
+/* Identidade fragmentada com PROVA de internação (achado de 22/09/2026: 9% das culturas de
+   setores de internação não tinham internação cobrindo a coleta, e 7 em 10 delas eram só
+   isto): o mesmo nome existe sob dois números — um sem internação nenhuma (veio de uma
+   leva de culturas anterior ao censo, com nº de atendimento ou número antigo no lugar do
+   prontuário) e outro com internações no censo. A sugestão só sai quando (a) o registro
+   órfão não tem internação própria, (b) há EXATAMENTE um homônimo com internações e (c) ao
+   menos uma cultura do órfão cai dentro de uma internação do homônimo (folga de alguns
+   dias antes da entrada: coleta na espera/emergência antecede a internação formal). Nome
+   igual sem cultura coincidente NÃO basta — pode ser outra pessoa. */
+function sugerirUnificacoesPorInternacao(pacientes, internacoes, culturas, opcoes) {
+  const folga = (opcoes && opcoes.folgaDias != null) ? opcoes.folgaDias : 3;
+  const intsPorPront = new Map(), atendimentosPorPront = new Map();
+  for (const i of (internacoes || [])) {
+    const p = normalizarProntuario(i.Prontuario);
+    const d = String(i.DataInternacao || '').slice(0, 10);
+    if (!p || !/^\d{4}-/.test(d)) continue;
+    if (!intsPorPront.has(p)) { intsPorPront.set(p, []); atendimentosPorPront.set(p, new Set()); }
+    intsPorPront.get(p).push({ inicio: d, fim: String(i.DataAlta || '').slice(0, 10) });
+    if (normalizarProntuario(i.Atendimento)) atendimentosPorPront.get(p).add(normalizarProntuario(i.Atendimento));
+  }
+  const datasPorPront = new Map();
+  for (const c of (culturas || [])) {
+    const p = normalizarProntuario(c.Prontuario);
+    const d = String(c.DataColeta || '').slice(0, 10);
+    if (!p || !/^\d{4}-/.test(d)) continue;
+    if (!datasPorPront.has(p)) datasPorPront.set(p, []);
+    datasPorPront.get(p).push(d);
+  }
+  const porNome = new Map();
+  for (const p of (pacientes || [])) {
+    const nome = normalizarTexto(p.Nome);
+    if (!nome || p.Descartado === 'S') continue;
+    if (!porNome.has(nome)) porNome.set(nome, []);
+    porNome.get(nome).push(p);
+  }
+  const cobre = (ints, d) => ints.some(i => {
+    const limite = new Date(Date.parse(i.inicio + 'T00:00:00Z') - folga * 864e5).toISOString().slice(0, 10);
+    return limite <= d && (!i.fim || i.fim >= d);
+  });
+  const sugestoes = [];
+  for (const lista of porNome.values()) {
+    if (lista.length < 2) continue;
+    const comInternacao = lista.filter(p => intsPorPront.has(normalizarProntuario(p.Prontuario)));
+    /* Caso à parte: o número do homônimo A é o Nº DE ATENDIMENTO de uma internação do
+       homônimo B — o censo prova que A é um atendimento de B, mesmo que A também tenha
+       internações próprias (o censo traz a mesma pessoa sob os dois números). */
+    for (const a of lista) {
+      const ka = normalizarProntuario(a.Prontuario);
+      const donos = comInternacao.filter(b => b !== a && atendimentosPorPront.get(normalizarProntuario(b.Prontuario)).has(ka));
+      if (donos.length === 1) {
+        sugestoes.push({ de: a.Prontuario, para: donos[0].Prontuario, nome: a.Nome,
+          motivo: 'número é o atendimento de uma internação do homônimo' });
+      }
+    }
+    if (comInternacao.length !== 1) continue;
+    const alvo = comInternacao[0];
+    const intsAlvo = intsPorPront.get(normalizarProntuario(alvo.Prontuario));
+    for (const orfao of lista) {
+      if (orfao === alvo || sugestoes.some(x => x.de === orfao.Prontuario)) continue;
+      const datas = datasPorPront.get(normalizarProntuario(orfao.Prontuario)) || [];
+      const cobertas = datas.filter(d => cobre(intsAlvo, d)).length;
+      if (!cobertas) continue;
+      sugestoes.push({ de: orfao.Prontuario, para: alvo.Prontuario, nome: orfao.Nome,
+        motivo: `${cobertas} de ${datas.length} cultura(s) dentro de internação do homônimo` });
+    }
+  }
+  return sugestoes;
+}
+
+/* culturas (opcional): com elas, entram também as unificações por nome + prova de
+   internação (sugerirUnificacoesPorInternacao). */
+function sugerirUnificacoes(pacientes, internacoes, culturas) {
   const pseudos = pacientes.filter(p => ehPseudoProntuario(p.Prontuario) && String(p.Nome || '').trim()
     && p.Descartado !== 'S');
   const reais = pacientes.filter(p => !ehPseudoProntuario(p.Prontuario) && String(p.Nome || '').trim());
@@ -3285,7 +3356,12 @@ function sugerirUnificacoes(pacientes, internacoes) {
   if (internacoes && internacoes.length) {
     const vistos = new Set(sugestoes.map(s => normalizarProntuario(s.de)));
     for (const par of paresAtendimentoProntuario(pacientes, internacoes).pares) {
-      if (!vistos.has(normalizarProntuario(par.de))) sugestoes.push(par);
+      if (!vistos.has(normalizarProntuario(par.de))) { vistos.add(normalizarProntuario(par.de)); sugestoes.push(par); }
+    }
+    if (culturas && culturas.length) {
+      for (const par of sugerirUnificacoesPorInternacao(pacientes, internacoes, culturas)) {
+        if (!vistos.has(normalizarProntuario(par.de))) { vistos.add(normalizarProntuario(par.de)); sugestoes.push(par); }
+      }
     }
   }
   return sugestoes;
@@ -3617,7 +3693,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     normalizarData, normalizarProntuario, normalizarValorAntibiograma,
     sugerirMapeamento, normalizarLinhas, validar, deduplicar, chaveNaturalDe, proximoID,
-    analisarPDFCulturas, ehPseudoProntuario, sugerirUnificacoes, paresAtendimentoProntuario, corrigirProntuarioAtendimento, sugerirUnificacoesVocabulario, auditarVocabulario, distanciaEdicao,
+    analisarPDFCulturas, ehPseudoProntuario, sugerirUnificacoes, sugerirUnificacoesPorInternacao, paresAtendimentoProntuario, corrigirProntuarioAtendimento, sugerirUnificacoesVocabulario, auditarVocabulario, distanciaEdicao,
     indiceDeObitos, faleceuAposCirurgia, acrescentarObservacao,
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome,

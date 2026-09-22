@@ -56,7 +56,7 @@ function detectarMultirresistentes(culturas, sensibilidade, hoje, janelaDias, me
     if (!c.Microrganismo || !c.DataColeta || c.StatusRevisao === 'descartada') continue;
     /* Água e leite não são pacientes: uma pseudomonas na osmose não pede isolamento.
        Colonização FICA — portador de ERC em swab precisa de precaução de contato. */
-    if (c.AvaliacaoCCIH === 'Água' || c.AvaliacaoCCIH === 'Leite') continue;
+    if (c.AvaliacaoCCIH === 'Água' || c.AvaliacaoCCIH === 'Leite' || c.AvaliacaoCCIH === 'Controle ambiental/alimentar') continue;
     if (hoje && diasEntre(c.DataColeta, hoje) > janelaDias) continue;
     const declarado = String(c.MecanismoResistencia || '').trim();
     const inferido = inferirMecanismo(c.Microrganismo, porCultura[c.ID_Cultura] || []);
@@ -249,7 +249,7 @@ function detectarSurtos(culturas, opcoes) {
   };
   for (const c of culturas) {
     if (!c.Microrganismo || !c.DataColeta || c.StatusRevisao === 'descartada') continue;
-    if (c.AvaliacaoCCIH === 'Água' || c.AvaliacaoCCIH === 'Leite') continue;
+    if (c.AvaliacaoCCIH === 'Água' || c.AvaliacaoCCIH === 'Leite' || c.AvaliacaoCCIH === 'Controle ambiental/alimentar') continue;
     if (normalizarTexto(c.Material).includes('swab')) continue;
     /* "Acinetobacter" e "Acinetobacter spp" são o MESMO sinal: o sufixo spp/sp sai da
        chave — no banco real as duas grafias dividiram o surto do CTI em grupos menores. */

@@ -1495,6 +1495,12 @@ const MATERIAIS_COLONIZACAO = /swab|vigilancia|rastreio|pesquisadesgb|streptococ
    "Leite humano (controle)" chega como "leitehumanocontrole". */
 const MATERIAIS_AGUA = /agua|dialisato|osmose|hemodialise/;
 const MATERIAIS_LEITE = /leite|lactario/;
+/* Coliforme (fecal/total) é parâmetro de qualidade de água/alimento, nunca de espécime
+   clínico — o laboratório de um paciente reporta a espécie, não "coliformes". Serve para
+   pegar o controle mesmo quando o material vem genérico ("Outros"), fora do regex de água/
+   leite. Vale tanto para o positivo ("Coliformes fecais") quanto para o negativo
+   ("Ausência de coliformes fecais na amostra analisada"). */
+const RESULTADO_COLIFORME = /coliforme/;
 /* Testado contra normalizarTexto, que tira os espaços — as alternativas têm de vir sem eles. */
 const RESULTADO_NEGATIVO = /^(negativ|semcrescimento|ausenciadecrescimento|naohouvecrescimento)/;
 
@@ -1517,6 +1523,9 @@ function preClassificarCultura(cultura) {
   const material = normalizarTexto(cultura.Material) + ' ' + normalizarTexto(cultura.Sitio);
   if (MATERIAIS_AGUA.test(material)) return 'Água';
   if (MATERIAIS_LEITE.test(material)) return 'Leite';
+  /* Resultado de coliforme = controle de vigilância alimentar/ambiental, não infecção —
+     mesmo com material genérico. Vem antes de tratar o texto como germe. */
+  if (RESULTADO_COLIFORME.test(normalizarTexto(cultura.Microrganismo))) return 'Controle ambiental/alimentar';
   const germe = germeDaCultura(cultura.Microrganismo);
   const resultado = normalizarTexto(cultura.Resultado);
   if (!germe && (!resultado || RESULTADO_NEGATIVO.test(resultado))) return 'Negativa';

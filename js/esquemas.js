@@ -210,14 +210,15 @@ const VOCAB_APLICACAO = {
    revisão de culturas, página remota dos médicos e importação de relatórios já classificados. */
 const CLASSIFICACOES_CULTURA = [
   'Presente na admissão', 'IRAS', 'Bacteremia secundária', 'Colonização', 'Contaminação',
-  'Repetição', 'Informativa', 'Negativa', 'Água', 'Leite', 'Não é cultura'
+  'Repetição', 'Informativa', 'Negativa', 'Água', 'Leite', 'Controle ambiental/alimentar', 'Não é cultura'
 ];
 
 /* Classificações que o app atribui sozinho na triagem (ver preClassificarCultura) e que,
    por não representarem infecção do paciente, ficam fora do painel e dos relatórios até
    que se peça para incluí-las. Nenhuma delas depende de julgamento clínico: ou a cultura
-   não cresceu, ou o material é de vigilância, ou nem é do paciente (água, leite). */
-const CLASSES_TRIAGEM = ['Negativa', 'Colonização', 'Água', 'Leite'];
+   não cresceu, ou o material é de vigilância, ou nem é do paciente (água, leite, e os
+   controles de vigilância alimentar/ambiental — ex.: resultado de coliformes). */
+const CLASSES_TRIAGEM = ['Negativa', 'Colonização', 'Água', 'Leite', 'Controle ambiental/alimentar'];
 
 /* Como cada relatório de origem escreve as classificações acima. */
 const SINONIMOS_CLASSIFICACAO = {

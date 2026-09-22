@@ -860,6 +860,13 @@ console.log('\n== 31. Triagem automática das culturas ==');
   verificar('leite pelo sítio de controle',
     t({ Material: 'Outros', Sitio: 'Leite humano (controle)', Resultado: 'Negativa', Microrganismo: '' }) === 'Leite');
   verificar('água vira Água', t({ Material: 'Água de osmose reversa', Resultado: 'Positiva', Microrganismo: 'Pseudomonas' }) === 'Água');
+  /* Coliforme é controle de vigilância alimentar/ambiental — pega mesmo com material genérico. */
+  verificar('coliformes fecais (material Outros) vira Controle ambiental/alimentar',
+    t({ Material: 'Outros', Resultado: 'Positiva', Microrganismo: 'Coliformes fecais' }) === 'Controle ambiental/alimentar');
+  verificar('ausência de coliformes também é controle (não negativa clínica)',
+    t({ Material: 'Outros', Resultado: 'Negativa', Microrganismo: 'Ausência de coliformes fecais na amostra analisada' }) === 'Controle ambiental/alimentar');
+  verificar('material de leite tem precedência sobre a regra de coliforme',
+    t({ Material: 'Leite materno', Resultado: 'Positiva', Microrganismo: 'Coliformes fecais' }) === 'Leite');
   verificar('hemocultura positiva fica para a CCIH decidir',
     t({ Material: 'Hemocultura', Resultado: 'Positiva', Microrganismo: 'Staphylococcus aureus' }) === '');
 
@@ -3388,6 +3395,10 @@ console.log('\n== 80. Detecção de surtos: antibiograma semelhante, portas de e
   verificar('ambulatório não alerta', al.detectarSurtos(naPorta('Ambulatório de Feridas')).length === 0);
   /* Esperas seguram pacientes JÁ INTERNADOS (conferido no banco) — entram na detecção. */
   verificar('sala vermelha (espera) entra na detecção', al.detectarSurtos(naPorta('Unidade de Espera - Sala Vermelha')).length === 1);
+  /* Controle ambiental/alimentar (coliformes) nunca vira surto — não é do paciente. */
+  verificar('controle ambiental/alimentar fora do surto',
+    al.detectarSurtos([1, 2, 3].map(n => cultura('A' + n, String(n), '2026-06-0' + n,
+      { Microrganismo: 'Coliformes fecais', AvaliacaoCCIH: 'Controle ambiental/alimentar' }))).length === 0);
   verificar('espera de leitos - emergência entra na detecção', al.detectarSurtos(naPorta('Unidade de Espera de Leitos - Emergência')).length === 1);
   verificar('reconhecimento de porta de entrada', al.ehSetorPortaDeEntrada('PRONTO-SOCORRO')
     && al.ehSetorPortaDeEntrada('Emergência')

@@ -50,7 +50,7 @@ const banco = fs.existsSync(arquivoSurtos)
 banco.investigacoes = banco.investigacoes || [];
 
 const suspeitas = alertas.detectarSurtos(culturas,
-  { sensibilidade: bancoCulturas.sensibilidade, cirurgias, identidadeDe });
+  { sensibilidade: bancoCulturas.sensibilidade, cirurgias, identidadeDe, investigacoes: banco.investigacoes });
 const antigas = suspeitas.filter(s => String(s.Fim) <= CORTE);
 console.log(`suspeitas detectadas: ${suspeitas.length}`);
 console.log(`com período terminando até ${CORTE}: ${antigas.length}`);
@@ -69,7 +69,7 @@ for (const s of antigas) {
   }
   banco.investigacoes.push({
     ID_Surto: imp.proximoID(banco.investigacoes, 'ID_Surto', 'SUR')(),
-    Setor: s.Setor, Microrganismo: s.Microrganismo,
+    Setor: s.Setor, Microrganismo: s.Microrganismo, Mecanismo: s.Mecanismo || '',
     DataInicio: s.Inicio, DataFim: s.Fim, PacientesEnvolvidos: String(s.Pacientes),
     Situacao: 'descartado', Hipotese: '', FonteProvavel: '', MedidasAdotadas: '',
     Conclusao: `Descartado em revisão do histórico: suspeitas encerradas até ${CORTE} não permanecem no painel.`,

@@ -346,16 +346,21 @@ async function montarPainel(conteudo) {
   const nomePorProntuario = new Map(pacientes.pacientes.map(p =>
     [normalizarProntuario(p.Prontuario), normalizarTexto(p.Nome)]));
   const identidadeDe = pr => nomePorProntuario.get(pr) || pr;
-  const todosSurtos = detectarSurtos(culturas.culturas,
-    { sensibilidade: culturas.sensibilidade, cirurgias: cirurgias.cirurgias, identidadeDe });
   let investigacoes = [];
   try { investigacoes = (await lerBanco('surtos')).investigacoes || []; } catch (e) { /* banco novo */ }
-  /* Suspeita marcada como "não é surto" sai do painel, mas continua registrada na aba Surtos. */
+  const todosSurtos = detectarSurtos(culturas.culturas,
+    { sensibilidade: culturas.sensibilidade, cirurgias: cirurgias.cirurgias, identidadeDe, investigacoes });
+  /* Suspeita marcada como "não é surto" sai do painel, mas continua registrada na aba Surtos;
+     suspeita ANTIGA (mais de 6 meses) sem avaliação também sai — vive na aba Surtos, com
+     descarte em lote. */
+  let antigos = 0;
   const surtos = todosSurtos.filter(s => {
     const inv = investigacoes.find(i => mesmaSuspeita(s, i));
-    return !inv || inv.Situacao !== 'descartado';
+    if (inv) return inv.Situacao !== 'descartado';
+    if (ehSurtoAntigo(s, hoje)) { antigos++; return false; }
+    return true;
   });
-  const descartados = todosSurtos.length - surtos.length;
+  const descartados = todosSurtos.length - surtos.length - antigos;
   const mdr = detectarMultirresistentes(culturas.culturas, culturas.sensibilidade, hoje,
     MDR_JANELA_PAINEL_DIAS, config.rotina.mdrMonitorados);
   const areaAlertas = el('div', {});
@@ -369,7 +374,7 @@ async function montarPainel(conteudo) {
           caixa.disabled = true;
           try {
             await salvarInvestigacao({
-              ID_Surto: inv ? inv.ID_Surto : '', Setor: s.Setor, Microrganismo: s.Microrganismo,
+              ID_Surto: inv ? inv.ID_Surto : '', Setor: s.Setor, Microrganismo: s.Microrganismo, Mecanismo: s.Mecanismo || '',
               DataInicio: s.Inicio, DataFim: s.Fim, PacientesEnvolvidos: String(s.Pacientes),
               Situacao: caixa.checked ? 'descartado' : 'em investigação'
             });
@@ -385,14 +390,18 @@ async function montarPainel(conteudo) {
             app.filtroCulturas = { status: 'todas', busca: s.Microrganismo };
             if (s.Criterio !== 'procedimento') app.filtroCulturas.setor = s.Setor;
             navegar('culturas');
-          } }, `${s.Setor}: ${s.Microrganismo} — ${s.Pacientes} pacientes entre ${s.Inicio} e ${s.Fim}`),
+          } }, `${s.Setor}: ${s.Microrganismo}${s.Mecanismo ? ' (' + s.Mecanismo + ')' : ''} — ${s.Pacientes} pacientes entre ${s.Inicio} e ${s.Fim}`
+            + (s.Limiar > SURTO_MINIMO_PACIENTES ? ` · limiar do setor: ${s.Limiar}` : '')),
           el('button', { class: 'botao-secundario botao-investigar', onclick: () => {
             app.surtoParaAbrir = { Setor: s.Setor, Microrganismo: s.Microrganismo };
             navegar('surtos');
           } }, inv ? 'Ver investigação' : 'Investigar'));
       }),
-      descartados ? el('p', { class: 'texto-suave' },
-        `${fmtInt(descartados)} suspeita(s) marcada(s) como "não é surto" — visíveis na aba Surtos.`) : null));
+      descartados || antigos ? el('p', { class: 'texto-suave' },
+        (descartados ? `${fmtInt(descartados)} suspeita(s) marcada(s) como "não é surto"` : '')
+        + (descartados && antigos ? '; ' : '')
+        + (antigos ? `${fmtInt(antigos)} antiga(s) (mais de ${SURTO_ANTIGO_DIAS} dias) sem avaliação` : '')
+        + ' — visíveis na aba Surtos.') : null));
   }
   if (mdr.length) {
     areaAlertas.append(el('div', { class: 'aviso-alerta' },

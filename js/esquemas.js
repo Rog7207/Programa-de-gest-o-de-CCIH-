@@ -19,7 +19,7 @@ const ESQUEMAS = {
   surtos: {
     arquivo: 'surtos.xlsx',
     abas: {
-      investigacoes: ['ID_Surto', 'Setor', 'Microrganismo', 'DataInicio', 'DataFim', 'PacientesEnvolvidos',
+      investigacoes: ['ID_Surto', 'Setor', 'Microrganismo', 'Mecanismo', 'DataInicio', 'DataFim', 'PacientesEnvolvidos',
         'Situacao', 'Hipotese', 'FonteProvavel', 'MedidasAdotadas', 'Conclusao', 'Responsavel',
         'DataAbertura', 'DataEncerramento', 'CriadoPor', 'CriadoEm', 'AtualizadoPor', 'AtualizadoEm'],
       documentos: ['ID_Surto', 'Arquivo', 'Descricao', 'CriadoPor', 'CriadoEm'],

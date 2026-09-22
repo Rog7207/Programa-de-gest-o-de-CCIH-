@@ -73,7 +73,8 @@ async function montarSurtos(conteudo) {
      prontuários/atendimentos não pode virar vários "pacientes" no surto. */
   const identidadeDe = pr => normalizarTexto(nomes.get(pr)) || pr;
   const suspeitas = detectarSurtos(culturas.culturas,
-    { sensibilidade: culturas.sensibilidade, cirurgias: cirurgias.cirurgias, identidadeDe });
+    { sensibilidade: culturas.sensibilidade, cirurgias: cirurgias.cirurgias, identidadeDe, investigacoes });
+  const hoje = hojeISO();
 
   /* Suspeitas ativas + investigações já registradas que não aparecem mais na detecção
      (o surto passou, mas a investigação continua valendo). */
@@ -83,44 +84,69 @@ async function montarSurtos(conteudo) {
     itens.push({
       suspeita: {
         Setor: inv.Setor, Microrganismo: inv.Microrganismo, Pacientes: Number(inv.PacientesEnvolvidos) || 0,
-        Inicio: inv.DataInicio, Fim: inv.DataFim, Prontuarios: [], Culturas: []
+        Mecanismo: inv.Mecanismo || '', Inicio: inv.DataInicio, Fim: inv.DataFim, Prontuarios: [], Culturas: []
       },
       investigacao: inv, historica: true
     });
   }
 
+  /* Situação de cada item: a da investigação, ou "sem registro" / "antigo não avaliado"
+     (terminou há mais de 6 meses e ninguém olhou — fora do painel, descartável em lote). */
+  const situacaoDe = item => item.historica ? (item.investigacao.Situacao || 'em investigação')
+    : situacaoDaSuspeita(item.suspeita, item.investigacao, hoje);
+  const antigos = itens.filter(i => situacaoDe(i) === 'antigo não avaliado');
   const selSituacao = el('select', {}, el('option', { value: '' }, 'todas as situações'),
-    ['sem registro'].concat(SITUACOES_SURTO).map(s => el('option', { value: s }, s)));
+    ['sem registro', 'antigo não avaliado'].concat(SITUACOES_SURTO).map(s => el('option', { value: s }, s)));
   const area = el('div', {});
+  const msgLote = el('p', { class: 'aviso-erro-texto' });
+  const botaoLote = el('button', { class: 'botao-secundario', disabled: antigos.length ? null : '',
+    title: `Grava "descartado" para as ${fmtInt(antigos.length)} suspeitas com mais de ${SURTO_ANTIGO_DIAS} dias sem avaliação`,
+    onclick: async () => {
+      if (!confirm(`Descartar em lote ${fmtInt(antigos.length)} suspeita(s) antiga(s) não avaliada(s)?\n\nCada uma ganha uma investigação "descartado" assinada por você; nada é apagado.`)) return;
+      botaoLote.disabled = true;
+      try {
+        for (const item of antigos) {
+          const s = item.suspeita;
+          await salvarInvestigacao({
+            Setor: s.Setor, Microrganismo: s.Microrganismo, Mecanismo: s.Mecanismo || '',
+            DataInicio: s.Inicio, DataFim: s.Fim, PacientesEnvolvidos: String(s.Pacientes),
+            Situacao: 'descartado', Conclusao: `Antigo não avaliado (mais de ${SURTO_ANTIGO_DIAS} dias) — descartado em lote.`,
+            Responsavel: app.usuario, DataEncerramento: hojeISO()
+          });
+        }
+        app.avisoSurtos = `${fmtInt(antigos.length)} suspeita(s) antiga(s) descartada(s).`;
+        navegar('surtos');
+      } catch (e) { botaoLote.disabled = false; msgLote.textContent = e.message; }
+    } }, `Descartar antigos não avaliados (${fmtInt(antigos.length)})`);
   selSituacao.addEventListener('change', listar);
   conteudo.append(el('div', { class: 'cartao' },
     el('p', { class: 'texto-suave' }, 'Suspeitas levantadas pelo painel: mesmo microrganismo com antibiograma '
-      + 'semelhante, no mesmo setor ou após o mesmo procedimento cirúrgico, '
-      + `${SURTO_MINIMO_PACIENTES} pacientes ou mais em ${SURTO_JANELA_DIAS} dias. Swabs de vigilância, `
-      + 'pronto atendimento, emergência e ambulatórios não entram. '
+      + `semelhante, no mesmo setor ou após o mesmo procedimento cirúrgico, em ${SURTO_JANELA_DIAS} dias — `
+      + `${SURTO_MINIMO_PACIENTES} pacientes para germe esporádico ou clone resistente; germe endêmico no setor só acima `
+      + 'da própria linha de base dos 24 meses anteriores (o limiar aparece na tabela). Ocorrência contínua é um surto só, '
+      + 'que se estende. Estafilococo coagulase-negativo e identificações preliminares só entram depois de classificados como '
+      + 'infecção. Swabs de vigilância, pronto atendimento, emergência e ambulatórios não entram. '
       + 'Marcar "não é surto" tira a suspeita do painel sem apagar o registro.'),
-    el('div', { class: 'linha-campos' }, el('label', {}, 'Situação: ', selSituacao))), area);
+    el('div', { class: 'linha-campos' }, el('label', {}, 'Situação: ', selSituacao), botaoLote), msgLote), area);
 
   function listar() {
     const filtro = selSituacao.value;
-    const visiveis = itens.filter(({ investigacao }) => {
-      if (!filtro) return true;
-      if (filtro === 'sem registro') return !investigacao;
-      return investigacao && investigacao.Situacao === filtro;
-    });
+    const visiveis = itens.filter(item => !filtro || situacaoDe(item) === filtro);
     area.replaceChildren(visiveis.length
       ? el('table', { class: 'tabela' },
-          el('thead', {}, el('tr', {}, ['Setor', 'Microrganismo', 'Pacientes', 'Período', 'Situação', 'Documentos'].map(c => el('th', {}, c)))),
+          el('thead', {}, el('tr', {}, ['Setor', 'Microrganismo', 'Pacientes', 'Limiar', 'Período', 'Situação', 'Documentos'].map(c => el('th', {}, c)))),
           el('tbody', {}, visiveis.map(item => {
             const inv = item.investigacao;
             const nDocs = inv ? documentos.filter(d => d.ID_Surto === inv.ID_Surto).length : 0;
             return el('tr', { class: 'linha-clicavel', onclick: e => abrirInvestigacao(item, e.currentTarget) },
               el('td', {}, item.suspeita.Setor + (item.historica ? ' (encerrada)' : '')),
-              el('td', {}, el('strong', {}, item.suspeita.Microrganismo)),
+              el('td', {}, el('strong', {}, item.suspeita.Microrganismo),
+                item.suspeita.Mecanismo ? el('span', { class: 'aviso-erro-texto' }, ` · ${item.suspeita.Mecanismo}`) : null),
               el('td', {}, fmtInt(item.suspeita.Pacientes)),
+              el('td', { class: 'texto-suave' }, item.suspeita.Limiar ? String(item.suspeita.Limiar) : '—'),
               el('td', {}, `${item.suspeita.Inicio} a ${item.suspeita.Fim}`),
               el('td', { class: inv && inv.Situacao === 'descartado' ? 'texto-suave' : inv && inv.Situacao === 'confirmado' ? 'aviso-erro-texto' : '' },
-                inv ? inv.Situacao : 'sem registro'),
+                situacaoDe(item)),
               el('td', {}, nDocs ? fmtInt(nDocs) + ' anexo(s)' : '—'));
           })))
       : el('p', { class: 'texto-suave' }, 'Nenhuma suspeita nesta situação.'));
@@ -208,7 +234,7 @@ async function montarSurtos(conteudo) {
         msg.className = 'texto-suave';
         msg.textContent = 'Gravando…';
         const salvo = await salvarInvestigacao({
-          ID_Surto: inv.ID_Surto, Setor: suspeita.Setor, Microrganismo: suspeita.Microrganismo,
+          ID_Surto: inv.ID_Surto, Setor: suspeita.Setor, Microrganismo: suspeita.Microrganismo, Mecanismo: suspeita.Mecanismo || inv.Mecanismo || '',
           DataInicio: suspeita.Inicio, DataFim: suspeita.Fim, PacientesEnvolvidos: String(suspeita.Pacientes),
           Situacao: selSit.value, Hipotese: fHipotese.entrada.value.trim(),
           FonteProvavel: fFonte.entrada.value.trim(), MedidasAdotadas: fMedidas.entrada.value.trim(),
@@ -231,7 +257,7 @@ async function montarSurtos(conteudo) {
         let id = inv.ID_Surto;
         if (!id) {
           const salvo = await salvarInvestigacao({
-            Setor: suspeita.Setor, Microrganismo: suspeita.Microrganismo,
+            Setor: suspeita.Setor, Microrganismo: suspeita.Microrganismo, Mecanismo: suspeita.Mecanismo || '',
             DataInicio: suspeita.Inicio, DataFim: suspeita.Fim,
             PacientesEnvolvidos: String(suspeita.Pacientes), Situacao: selSit.value
           });

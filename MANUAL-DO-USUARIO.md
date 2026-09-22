@@ -320,9 +320,17 @@ A aba Pós-alta acompanha infecção de sítio cirúrgico depois da alta:
 - **Sepse** — indicadores do protocolo (tempos, bundle, desfechos) e perfil
   microbiológico IRAS × admissão.
 - **Surtos** — investigação das suspeitas do painel, com cruzamento automático do que os
-  pacientes têm em comum e anexos. A suspeita exige 3+ pacientes com o mesmo germe **e
+  pacientes têm em comum e anexos. A suspeita exige pacientes com o mesmo germe **e
   antibiograma semelhante** em 14 dias, no mesmo setor ou após o mesmo procedimento
-  cirúrgico; pronto atendimento, emergência e ambulatórios ficam fora da detecção.
+  cirúrgico: **3** para germe esporádico ou **clone resistente** (MRSA, VRE,
+  carbapenem-resistente — sempre grupo à parte); germe **endêmico** no setor só alerta
+  acima da própria linha de base dos 24 meses anteriores (o limiar aparece no alerta).
+  Ocorrência contínua (caso novo em até 14 dias do anterior) é **um surto só**, que se
+  estende; um descarte da CCIH corta a sequência. Estafilococo coagulase-negativo e
+  identificações preliminares só entram depois de classificados como infecção. Suspeita
+  com mais de 6 meses sem avaliação vira **"antigo não avaliado"** — sai do painel e
+  pode ser descartada em lote na aba. Pronto atendimento, emergência e ambulatórios
+  ficam fora da detecção.
 - **Higiene de mãos** — adesão por momento da OMS, setor e categoria profissional.
 - **Eventos** — séries temporais de qualquer fonte do banco.
 - **Configurações** — usuário, equipe e funções, grupos de setores, rotina da instituição,

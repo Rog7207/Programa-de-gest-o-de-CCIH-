@@ -208,7 +208,10 @@ console.log('\n== 8. Motor de alertas (surtos e multirresistentes) ==');
   const alertas = require(path.join(__dirname, '..', 'js', 'alertas.js'));
   const culturas = [
     { ID_Cultura: 'CUL-1', Prontuario: '1', Setor: 'UTI', DataColeta: '2026-08-01', Material: 'Hemocultura', Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: '' },
+    /* KPC no laudo: para o SURTO é grupo à parte (clone resistente ≠ sensível), por isso o
+       trio sensível precisa de um 3º paciente sensível (CUL-7). */
     { ID_Cultura: 'CUL-2', Prontuario: '2', Setor: 'UTI', DataColeta: '2026-08-05', Material: 'Urocultura', Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: 'KPC' },
+    { ID_Cultura: 'CUL-7', Prontuario: '7', Setor: 'UTI', DataColeta: '2026-08-06', Material: 'Urocultura', Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: '' },
     { ID_Cultura: 'CUL-3', Prontuario: '3', Setor: 'UTI', DataColeta: '2026-08-10', Material: 'Secreção traqueal', Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: '' },
     { ID_Cultura: 'CUL-4', Prontuario: '1', Setor: 'UTI', DataColeta: '2026-08-11', Material: 'Hemocultura', Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: '' },
     { ID_Cultura: 'CUL-5', Prontuario: '4', Setor: 'Clínica', DataColeta: '2026-08-02', Material: 'Hemocultura', Microrganismo: 'Staphylococcus aureus', MecanismoResistencia: '' },
@@ -1174,6 +1177,89 @@ console.log('\n== 84b. Classificador ligado à importação, à dedup e ao vocab
     porNome['Colecistectomia'].Codigo === 'CHOL' && porNome['Colecistectomia'].TempoCorteHoras === '2,5', porNome['Colecistectomia']);
   verificar('categoria nova entra com o corte padrão da semente', porNome['Cirurgia de mama'].TempoCorteHoras === '3' && porNome['Cirurgia de mama'].Codigo === 'BRST');
   verificar('lista de nomes do vocabulário acompanha', cfg.vocabulario.procedimentos_nhsn.includes('Desbridamento') && cfg.vocabulario.procedimentos_nhsn.length === cfg.procedimentosNHSN.length);
+}
+
+console.log('\n== 80c. Surtos em hospital grande: linha de base endêmica, clone resistente, CoNS espera, continuidade ==');
+{
+  const al = require(path.join(__dirname, '..', 'js', 'alertas.js'));
+  const cultura = (id, pront, data, extras) => ({ ID_Cultura: id, Prontuario: pront, DataColeta: data,
+    Setor: 'CTI', Material: 'Hemocultura', Microrganismo: 'Escherichia coli', StatusRevisao: 'avaliada', AvaliacaoCCIH: 'IRAS', ...extras });
+  const dia = (base, n) => new Date(Date.parse(base + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+
+  /* (1) E. coli endêmica no CTI: 2 anos com ~4 pacientes por quinzena. Uma quinzena com 4
+     não é surto (está na base); com 8 é. Sem história, 3 bastam. */
+  const historia = [];
+  let k = 0;
+  for (let q = 0; q < 48; q++) for (let i = 0; i < 4; i++) historia.push(cultura('H' + (k++), 'H' + k, dia('2024-01-01', q * 14 + i * 3)));
+  const quinzenaNormal = [0, 1, 2, 3].map(i => cultura('N' + i, 'N' + i, dia('2026-02-10', i * 3)));
+  const quinzenaAlta = [0, 1, 2, 3, 4, 5, 6, 7].map(i => cultura('A' + i, 'A' + i, dia('2026-02-10', i)));
+  const soNormal = al.detectarSurtos(historia.concat(quinzenaNormal)).filter(s => s.Inicio >= '2026-02-01');
+  verificar('germe endêmico: 4 pacientes na quinzena (dentro da base) NÃO alertam', soNormal.length === 0, JSON.stringify(soNormal));
+  const alta = al.detectarSurtos(historia.concat(quinzenaAlta)).filter(s => s.Inicio >= '2026-02-01');
+  verificar('germe endêmico: 8 pacientes na quinzena alertam, com o limiar informado',
+    alta.length === 1 && alta[0].Pacientes === 8 && alta[0].Limiar > 3, JSON.stringify(alta.map(a => [a.Pacientes, a.Limiar])));
+  verificar('sem história (germe esporádico), 3 pacientes bastam',
+    al.detectarSurtos(quinzenaNormal.slice(0, 3)).length === 1);
+  verificar('historicoDias: 0 desliga a linha de base (comportamento antigo)',
+    al.detectarSurtos(historia.concat(quinzenaNormal), { historicoDias: 0 }).filter(s => s.Inicio >= '2026-02-01').length === 1);
+
+  /* (2) Clone resistente é grupo próprio e nunca usa a base: 3 K. pneumoniae ERC alertam
+     mesmo com Klebsiella sensível endêmica; laudo "KPC" e antibiograma inferido somam. */
+  const kleb = (id, pront, data, extras) => cultura(id, pront, data, { Microrganismo: 'Klebsiella pneumoniae', ...extras });
+  const klebHist = [];
+  k = 0;
+  for (let q = 0; q < 48; q++) for (let i = 0; i < 5; i++) klebHist.push(kleb('KH' + (k++), 'KH' + k, dia('2024-01-01', q * 14 + i * 2)));
+  const resistentes = [
+    kleb('R1', 'R1', '2026-02-10', { MecanismoResistencia: 'KPC' }),
+    kleb('R2', 'R2', '2026-02-12', { MecanismoResistencia: 'ERC' }),
+    kleb('R3', 'R3', '2026-02-14')
+  ];
+  const sens = [{ ID_Cultura: 'R3', Antibiotico: 'Meropenem', Resultado: 'R' }];
+  const mdr = al.detectarSurtos(klebHist.concat(resistentes), { sensibilidade: sens }).filter(s => s.Inicio >= '2026-02-01');
+  verificar('3 Klebsiella carbapenem-R alertam apesar da Klebsiella sensível endêmica',
+    mdr.length === 1 && mdr[0].Pacientes === 3 && mdr[0].Mecanismo === 'Resistente a carbapenêmicos' && mdr[0].Limiar === 3, JSON.stringify(mdr));
+  verificar('Microrganismo do alerta fica puro (o fenótipo vai em Mecanismo)', mdr[0].Microrganismo === 'Klebsiella pneumoniae');
+  const invSens = { Setor: 'CTI', Microrganismo: 'Klebsiella pneumoniae', Mecanismo: '', DataInicio: '2026-02-10', DataFim: '2026-02-14' };
+  const invRes = { ...invSens, Mecanismo: 'KPC' };
+  verificar('investigação com mecanismo só casa com a suspeita do mesmo fenótipo',
+    al.mesmaSuspeita(mdr[0], invRes) && al.mesmaSuspeita(mdr[0], invSens) /* sem mecanismo: casa (compatível com o histórico) */);
+  verificar('fenótipos normalizados (KPC, NDM, ERC, carbapen → um só)',
+    ['KPC', 'NDM', 'ERC', 'Enterobactéria resistente a carbapenêmicos'].every(m => al.fenotipoResistencia(m) === 'Resistente a carbapenêmicos'));
+
+  /* (3) CoNS e preliminares esperam a classificação da CCIH. */
+  const cons = (id, pront, data, extras) => cultura(id, pront, data, { Microrganismo: 'Staphylococcus coagulase-negativo', StatusRevisao: 'pendente', AvaliacaoCCIH: '', ...extras });
+  const trioCons = [cons('S1', 'S1', '2026-03-01'), cons('S2', 'S2', '2026-03-03'), cons('S3', 'S3', '2026-03-05')];
+  verificar('CoNS pendente NÃO alerta', al.detectarSurtos(trioCons).length === 0);
+  verificar('CoNS classificado como IRAS alerta',
+    al.detectarSurtos(trioCons.map(c => ({ ...c, StatusRevisao: 'avaliada', AvaliacaoCCIH: 'IRAS — ICS' }))).length === 1);
+  verificar('CoNS classificado como contaminação não alerta',
+    al.detectarSurtos(trioCons.map(c => ({ ...c, StatusRevisao: 'avaliada', AvaliacaoCCIH: 'Contaminação' }))).length === 0);
+  verificar('"Coco Gram positivo" e "BGN não identificado" também esperam',
+    al.detectarSurtos(trioCons.map(c => ({ ...c, Microrganismo: 'Coco Gram positivo' }))).length === 0
+    && al.detectarSurtos(trioCons.map(c => ({ ...c, Microrganismo: 'Bacilo Gram negativo (não identificado)' }))).length === 0);
+  verificar('esperarClassificacao: false volta ao antigo', al.detectarSurtos(trioCons, { esperarClassificacao: false }).length === 1);
+
+  /* (4) Continuidade: caso novo em até 14 dias do anterior estende o mesmo surto; um
+     descarte da CCIH corta a cadeia. */
+  const seq = [0, 2, 4, 15, 26, 37].map((d, i) => cultura('Q' + i, 'Q' + i, dia('2026-04-01', d)));
+  const um = al.detectarSurtos(seq);
+  verificar('sequência com intervalos ≤ 14 d é UM surto de 6 pacientes', um.length === 1 && um[0].Pacientes === 6 && um[0].Fim === dia('2026-04-01', 37), JSON.stringify(um));
+  const comBuraco = seq.concat([cultura('Q9', 'Q9', dia('2026-04-01', 60)), cultura('Q10', 'Q10', dia('2026-04-01', 62)), cultura('Q11', 'Q11', dia('2026-04-01', 64))]);
+  verificar('intervalo > 14 d separa: dois surtos', al.detectarSurtos(comBuraco).length === 2);
+  /* Depois do descarte (encerrado no dia 10) vêm 4 casos: 3 em 14 dias reabrem a suspeita
+     e o 4º, em até 14 d do anterior, estende — sem o corte, seriam todos o surto antigo. */
+  const descarte = [{ Setor: 'CTI', Microrganismo: 'Escherichia coli', Situacao: 'descartado', DataInicio: dia('2026-04-01', 0), DataFim: dia('2026-04-01', 4), DataEncerramento: dia('2026-04-01', 10) }];
+  const depois = [0, 2, 4, 15, 20, 26, 37].map((d, i) => cultura('D' + i, 'D' + i, dia('2026-04-01', d)));
+  verificar('sem descarte, a sequência inteira é um surto só', al.detectarSurtos(depois).length === 1);
+  const cortado = al.detectarSurtos(depois, { investigacoes: descarte });
+  verificar('descarte da CCIH corta a cadeia: o que vem depois é suspeita nova',
+    cortado.length === 2 && cortado.some(s => s.Inicio === dia('2026-04-01', 15) && s.Pacientes === 4), JSON.stringify(cortado.map(s => [s.Inicio, s.Fim, s.Pacientes])));
+
+  /* Situação "antigo não avaliado". */
+  const velho = { Setor: 'CTI', Microrganismo: 'X', Inicio: '2025-01-01', Fim: '2025-01-10' };
+  verificar('suspeita com mais de 180 dias sem investigação é "antigo não avaliado"',
+    al.situacaoDaSuspeita(velho, null, '2026-09-22') === 'antigo não avaliado' && al.situacaoDaSuspeita({ ...velho, Fim: '2026-09-01' }, null, '2026-09-22') === 'sem registro');
+  verificar('com investigação, vale a situação dela', al.situacaoDaSuspeita(velho, { Situacao: 'confirmado' }, '2026-09-22') === 'confirmado');
 }
 
 console.log('\n== 32. Culturas do protocolo de sepse ==');
@@ -3608,8 +3694,12 @@ console.log('\n== 78. Detecção de surtos: grafias spp, janelas múltiplas e de
     contínuo.push(cultura('K' + d, 'P' + d, '2026-06-' + String(d).padStart(2, '0'), 'Klebsiella pneumoniae'));
   }
   const surtos2 = al.detectarSurtos(contínuo);
-  verificar('surto de 28 dias vira 2 janelas de 14', surtos2.length === 2
-    && surtos2.every(s => s.Pacientes >= 3), JSON.stringify(surtos2.map(s => s.Inicio + '..' + s.Fim)));
+  /* Desde 22/09/2026 a ocorrência contínua é UM surto que se estende (regra 4 da CCIH);
+     sem encadear, vale o comportamento antigo de janelas sucessivas. */
+  verificar('surto contínuo de 28 dias é UM surto que se estende', surtos2.length === 1
+    && surtos2[0].Pacientes === 28 && surtos2[0].Fim === '2026-06-28', JSON.stringify(surtos2.map(s => s.Inicio + '..' + s.Fim)));
+  const surtos2b = al.detectarSurtos(contínuo, { encadear: false });
+  verificar('sem encadear: 28 dias viram 2 janelas de 14', surtos2b.length === 2, JSON.stringify(surtos2b.map(s => s.Inicio + '..' + s.Fim)));
 
   /* Descarte só silencia o que veio ANTES do encerramento. */
   const invDescartada = { Setor: 'CTI', Microrganismo: 'Acinetobacter', Situacao: 'descartado',

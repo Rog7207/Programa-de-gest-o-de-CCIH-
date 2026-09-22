@@ -80,6 +80,10 @@ function mesmaSuspeita(surto, investigacao, toleranciaDias) {
      com a suspeita do grupo "Acinetobacter spp" — é o mesmo sinal. */
   const semSpp = m => normalizarTexto(m).replace(/spp?$/, '');
   if (semSpp(surto.Microrganismo) !== semSpp(investigacao.Microrganismo)) return false;
+  /* Suspeita do clone RESISTENTE e do sensível são sinais diferentes; investigação antiga
+     sem a coluna (ou vazia) casa com qualquer um dos dois. */
+  if (String(investigacao.Mecanismo || '').trim()
+    && fenotipoResistencia(investigacao.Mecanismo) !== fenotipoResistencia(surto.Mecanismo || '')) return false;
   const tolerancia = toleranciaDias === undefined ? 30 : toleranciaDias;
   const inicioA = Date.parse(String(surto.Inicio) + 'T00:00:00Z');
   const fimA = Date.parse(String(surto.Fim) + 'T00:00:00Z');
@@ -229,10 +233,73 @@ function maiorGrupoSemelhante(itens) {
    não roda; identidadeDe(prontuarioNormalizado) devolve a IDENTIDADE do paciente (nome),
    para o mesmo paciente com vários prontuários/atendimentos não contar como vários — sem
    ela, cai no próprio prontuário (comportamento antigo). */
+/* ---- Regras da CCIH do HNSC para hospital grande (22/09/2026) ----
+   (1) germe ENDÊMICO no setor só alerta acima da própria linha de base: o limiar da janela é
+       o percentil 90 do nº de pacientes das janelas de 14 dias dos 24 meses anteriores (+1),
+       nunca abaixo do mínimo; sem história suficiente vale o mínimo (germe esporádico = 3);
+   (2) fenótipo multirresistente (MRSA, VRE, carbapenem-R) é grupo à parte e NUNCA usa a linha
+       de base — 3 pacientes bastam ("Klebsiella sensível é tolerada, resistente não");
+   (3) CoNS e identificações preliminares só entram depois que a CCIH classificou a cultura
+       como infecção (são contaminante/colonizante na maioria das vezes);
+   (4) ocorrência contínua (caso novo em até 14 dias do anterior) é UM surto que se estende,
+       não vários; um descarte da CCIH corta a cadeia — o que vem depois é suspeita nova. */
+const SURTO_HISTORICO_DIAS = 730;
+const SURTO_BASE_PERCENTIL = 0.9;
+const SURTO_BASE_MIN_JANELAS = 10;
+const SURTO_ANTIGO_DIAS = 180;
+const GERME_ESPERA_CLASSIFICACAO = /coagulase|^staphylococcus(spp?)?$|^cocogrampositivo|^bacilogramnegativo|naoidentificad|^levedura/;
+
+/* Fenótipo de resistência normalizado: o laudo diz "KPC", "NDM", "ERC"; o antibiograma
+   infere "Resistente a carbapenêmicos" — para o surto é o MESMO sinal (senão o clone se
+   dividia em grupos por grafia do mecanismo). */
+function fenotipoResistencia(mecanismo) {
+  const m = normalizarTexto(mecanismo);
+  if (!m) return '';
+  if (/kpc|ndm|oxa|carbapen|\berc\b|^erc|mbl|vim|imp\b|enterobact.*resist/.test(m)) return 'Resistente a carbapenêmicos';
+  if (/mrsa|oxacilina|meticilina/.test(m)) return 'MRSA';
+  if (/vre|vancomicina/.test(m)) return 'VRE';
+  if (/esbl|blee/.test(m)) return 'ESBL';
+  return String(mecanismo).trim();
+}
+
+function percentil(valores, p) {
+  if (!valores.length) return 0;
+  const v = valores.slice().sort((a, b) => a - b);
+  return v[Math.min(v.length - 1, Math.floor(v.length * p))];
+}
+
+/* Classificação da cultura já é infecção? (para os germes que esperam a CCIH) */
+function classificadaComoInfeccao(c) {
+  const a = normalizarTexto(c.AvaliacaoCCIH);
+  return c.StatusRevisao === 'avaliada' && (a.startsWith('iras') || a.startsWith('bacteremia'));
+}
+
+/* Suspeita "antiga não avaliada": terminou há mais de SURTO_ANTIGO_DIAS e ninguém registrou
+   investigação. Sai do painel e ganha situação própria na aba Surtos (descarte em lote). */
+function ehSurtoAntigo(surto, hoje, dias) {
+  const limite = dias === undefined ? SURTO_ANTIGO_DIAS : dias;
+  const d = diasEntre(surto.Fim, hoje);
+  return d !== null && d > limite;
+}
+function situacaoDaSuspeita(surto, investigacao, hoje) {
+  if (investigacao) return investigacao.Situacao || 'em investigação';
+  return ehSurtoAntigo(surto, hoje) ? 'antigo não avaliado' : 'sem registro';
+}
+
+/* Suspeita de surto: pacientes distintos com o mesmo microrganismo E antibiograma
+   semelhante, no mesmo setor OU depois do mesmo procedimento cirúrgico, dentro da janela.
+   opcoes: { janelaDias, minimoPacientes, sensibilidade, cirurgias, identidadeDe,
+   investigacoes, historicoDias (0 = sem linha de base), esperarClassificacao, encadear } —
+   sem sensibilidade a comparação de antibiogramas (e o fenótipo MDR) não roda; sem cirurgias
+   o eixo procedimento não roda; identidadeDe(prontuarioNormalizado) devolve a IDENTIDADE do
+   paciente (nome); investigacoes descartadas cortam a cadeia de continuidade. */
 function detectarSurtos(culturas, opcoes) {
   opcoes = opcoes || {};
   const janelaDias = opcoes.janelaDias || SURTO_JANELA_DIAS;
   const minimoPacientes = opcoes.minimoPacientes || SURTO_MINIMO_PACIENTES;
+  const historicoDias = opcoes.historicoDias === undefined ? SURTO_HISTORICO_DIAS : opcoes.historicoDias;
+  const esperar = opcoes.esperarClassificacao !== false;
+  const encadear = opcoes.encadear !== false;
   const idDe = opcoes.identidadeDe || (p => p);
   const sensibilidadePorCultura = {};
   for (const s of opcoes.sensibilidade || []) {
@@ -244,15 +311,25 @@ function detectarSurtos(culturas, opcoes) {
     const pront = normalizarProntuario(cir.Prontuario);
     (cirurgiasPorPaciente[pront] = cirurgiasPorPaciente[pront] || []).push(cir);
   }
+  const chaveMicro = m => normalizarTexto(m).replace(/spp?$/, '');
+  /* Descartes da CCIH: [setor normalizado|germe] → datas de corte. */
+  const cortes = {};
+  for (const inv of opcoes.investigacoes || []) {
+    if (normalizarTexto(inv.Situacao) !== 'descartado') continue;
+    const d = String(inv.DataEncerramento || inv.DataFim || '').slice(0, 10);
+    if (!/^\d{4}-/.test(d)) continue;
+    const k = normalizarTexto(inv.Setor) + '|' + chaveMicro(inv.Microrganismo);
+    (cortes[k] = cortes[k] || []).push(d);
+  }
 
   const grupos = {};
-  const juntar = (chave, rotulo, criterio, c) => {
+  const juntar = (chave, rotulo, criterio, c, mecanismo) => {
     const pront = normalizarProntuario(c.Prontuario);
-    (grupos[chave] = grupos[chave] || { rotulo, criterio, micro: c.Microrganismo, itens: [] })
-      .itens.push({
-        data: c.DataColeta, prontuario: pront, identidade: idDe(pront), cultura: c.ID_Cultura,
-        perfil: perfilAntibiograma(sensibilidadePorCultura[c.ID_Cultura])
-      });
+    const g = (grupos[chave] = grupos[chave] || { rotulo, criterio, micro: c.Microrganismo, mecanismo, mdr: !!mecanismo, itens: [] });
+    g.itens.push({
+      data: c.DataColeta, prontuario: pront, identidade: idDe(pront), cultura: c.ID_Cultura,
+      perfil: perfilAntibiograma(sensibilidadePorCultura[c.ID_Cultura])
+    });
   };
   for (const c of culturas) {
     if (!c.Microrganismo || !c.DataColeta || c.StatusRevisao === 'descartada') continue;
@@ -260,9 +337,14 @@ function detectarSurtos(culturas, opcoes) {
     if (normalizarTexto(c.Material).includes('swab')) continue;
     /* "Acinetobacter" e "Acinetobacter spp" são o MESMO sinal: o sufixo spp/sp sai da
        chave — no banco real as duas grafias dividiram o surto do CTI em grupos menores. */
-    const micro = normalizarTexto(c.Microrganismo).replace(/spp?$/, '');
+    const micro = chaveMicro(c.Microrganismo);
+    if (esperar && GERME_ESPERA_CLASSIFICACAO.test(micro) && !classificadaComoInfeccao(c)) continue;
+    /* Fenótipo resistente forma grupo próprio (e nunca usa linha de base). */
+    const mecanismo = fenotipoResistencia(String(c.MecanismoResistencia || '').trim()
+      || inferirMecanismo(c.Microrganismo, sensibilidadePorCultura[c.ID_Cultura] || []));
+    const sufixo = mecanismo ? '|mdr:' + normalizarTexto(mecanismo) : '';
     if (c.Setor && !ehSetorPortaDeEntrada(c.Setor)) {
-      juntar('setor|' + normalizarTexto(c.Setor) + '|' + micro, c.Setor, 'setor', c);
+      juntar('setor|' + normalizarTexto(c.Setor) + '|' + micro + sufixo, c.Setor, 'setor', c, mecanismo);
     }
     /* Eixo procedimento: a ISC de um mesmo time cirúrgico aparece espalhada pelos setores
        (e volta pela emergência) — o que liga os pacientes é a cirurgia, não o leito. */
@@ -274,52 +356,88 @@ function detectarSurtos(culturas, opcoes) {
       const dias = (coleta - dia) / 86400000;
       if (dias < 0 || dias > SURTO_CIRURGIA_DIAS) continue;
       const procedimento = String(cir.ProcedimentoNHSN || cir.Procedimento).trim();
-      const chave = 'proc|' + normalizarTexto(procedimento) + '|' + micro;
+      const chave = 'proc|' + normalizarTexto(procedimento) + '|' + micro + sufixo;
       if (vistos.has(chave)) continue;   /* paciente reoperado não duplica a cultura no grupo */
       vistos.add(chave);
-      juntar(chave, 'Procedimento: ' + procedimento, 'procedimento', c);
+      juntar(chave, 'Procedimento: ' + procedimento, 'procedimento', c, mecanismo);
     }
   }
 
+  const pacientesDe = lista => new Set(maiorGrupoSemelhante(lista).map(s => s.identidade)).size;
   const alertas = [];
   for (const grupo of Object.values(grupos)) {
-    const itens = grupo.itens.sort((a, b) => a.data.localeCompare(b.data));
-    /* TODAS as janelas que atingem o mínimo, não só a melhor: um surto que continua
-       depois de uma investigação descartada precisa virar alerta NOVO — com uma janela
-       única por grupo, a continuação ficava invisível para sempre. */
-    let i = 0;
-    while (i < itens.length) {
-      const janela = [];
-      let j = i;
-      for (; j < itens.length && diasEntre(itens[i].data, itens[j].data) <= janelaDias; j++) {
-        janela.push(itens[j]);
+    const todos = grupo.itens.sort((a, b) => a.data.localeCompare(b.data));
+    /* Linha de base do grupo: nº de pacientes (antibiograma semelhante) de cada janela de
+       14 dias iniciada em cada cultura da história. Calculada uma vez por grupo. */
+    let base = [];
+    if (historicoDias > 0 && !grupo.mdr) {
+      for (let i = 0; i < todos.length; i++) {
+        const janela = [];
+        for (let j = i; j < todos.length && diasEntre(todos[i].data, todos[j].data) <= janelaDias; j++) janela.push(todos[j]);
+        base.push({ data: todos[i].data, pacientes: pacientesDe(janela) });
       }
-      /* Dentro da janela só conta o subgrupo de antibiograma semelhante: 3 pacientes com
-         perfis discordantes são flora de hospital grande, não suspeita de clone. */
-      const semelhantes = maiorGrupoSemelhante(janela);
-      /* Conta PACIENTE real (identidade); os prontuários (que podem ser vários por paciente)
-         vão junto para a tela de investigação cruzar com internações, cirurgias e dispositivos. */
-      const pacientes = new Set(semelhantes.map(s => s.identidade));
-      if (pacientes.size >= minimoPacientes) {
-        alertas.push({
-          Setor: grupo.rotulo, Criterio: grupo.criterio, Microrganismo: grupo.micro,
-          Pacientes: pacientes.size, Prontuarios: [...new Set(semelhantes.map(s => s.prontuario))],
-          Culturas: semelhantes.map(s => ({ ID_Cultura: s.cultura, Prontuario: s.prontuario, DataColeta: s.data })),
-          Inicio: semelhantes[0].data, Fim: semelhantes[semelhantes.length - 1].data
-        });
-        i = j;   /* janela emitida: a próxima começa depois dela */
-      } else {
-        i++;
+    }
+    const limiarEm = data => {
+      if (!base.length) return minimoPacientes;
+      const historia = base.filter(b => {
+        const d = diasEntre(b.data, data);
+        return d !== null && d > janelaDias && d <= historicoDias;
+      }).map(b => b.pacientes);
+      if (historia.length < SURTO_BASE_MIN_JANELAS) return minimoPacientes;
+      return Math.max(minimoPacientes, percentil(historia, SURTO_BASE_PERCENTIL) + 1);
+    };
+    /* Descarte da CCIH corta a sequência: o que vem depois do encerramento é sinal novo. */
+    const datasCorte = (cortes[normalizarTexto(grupo.rotulo) + '|' + chaveMicro(grupo.micro)] || []).sort();
+    const segmentos = [];
+    let atual = [];
+    let corteIdx = 0;
+    for (const it of todos) {
+      while (corteIdx < datasCorte.length && it.data > datasCorte[corteIdx]) {
+        if (atual.length) segmentos.push(atual);
+        atual = []; corteIdx++;
+      }
+      atual.push(it);
+    }
+    if (atual.length) segmentos.push(atual);
+
+    for (const itens of segmentos) {
+      let i = 0;
+      while (i < itens.length) {
+        const janela = [];
+        let j = i;
+        for (; j < itens.length && diasEntre(itens[i].data, itens[j].data) <= janelaDias; j++) janela.push(itens[j]);
+        /* Dentro da janela só conta o subgrupo de antibiograma semelhante: 3 pacientes com
+           perfis discordantes são flora de hospital grande, não suspeita de clone. */
+        let semelhantes = maiorGrupoSemelhante(janela);
+        const limiar = limiarEm(itens[i].data);
+        if (new Set(semelhantes.map(s => s.identidade)).size >= limiar) {
+          /* Continuidade: enquanto o caso seguinte chega em até janelaDias do anterior, é o
+             MESMO surto — a suspeita se estende em vez de virar outra. */
+          let fim = j;
+          if (encadear) {
+            while (fim < itens.length && diasEntre(itens[fim - 1].data, itens[fim].data) <= janelaDias) fim++;
+            if (fim > j) semelhantes = maiorGrupoSemelhante(itens.slice(i, fim));
+          }
+          const pacientes = new Set(semelhantes.map(s => s.identidade));
+          alertas.push({
+            Setor: grupo.rotulo, Criterio: grupo.criterio, Microrganismo: grupo.micro, Mecanismo: grupo.mecanismo || '',
+            Pacientes: pacientes.size, Limiar: limiar, Prontuarios: [...new Set(semelhantes.map(s => s.prontuario))],
+            Culturas: semelhantes.map(s => ({ ID_Cultura: s.cultura, Prontuario: s.prontuario, DataColeta: s.data })),
+            Inicio: semelhantes[0].data, Fim: semelhantes[semelhantes.length - 1].data
+          });
+          i = fim;   /* surto emitido: a próxima janela começa depois dele */
+        } else {
+          i++;
+        }
       }
     }
   }
   /* O mesmo grupo de pacientes alertando pelo setor E pelo procedimento é UM sinal: fica
      o alerta do setor — o cruzamento da investigação mostra o procedimento em comum. */
-  const chaveMicro = m => normalizarTexto(m).replace(/spp?$/, '');
   const porSetor = alertas.filter(a => a.Criterio === 'setor');
   return alertas
     .filter(a => a.Criterio !== 'procedimento'
-      || !porSetor.some(s => chaveMicro(s.Microrganismo) === chaveMicro(a.Microrganismo)
+      || !porSetor.some(s => chaveMicro(s.Microrganismo) === chaveMicro(a.Microrganismo) && s.Mecanismo === a.Mecanismo
         && a.Prontuarios.every(p => s.Prontuarios.includes(p))))
     .sort((a, b) => b.Pacientes - a.Pacientes);
 }
@@ -537,7 +655,7 @@ function rotinaDaEquipe(profissionais, bancos, referencia, opcoes) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { detectarSurtos, detectarMultirresistentes, inferirMecanismo, pendenciasIsolamento, agruparPendenciasIsolamento,
+  module.exports = { detectarSurtos, ehSurtoAntigo, situacaoDaSuspeita, fenotipoResistencia, SURTO_ANTIGO_DIAS, SURTO_HISTORICO_DIAS, detectarMultirresistentes, inferirMecanismo, pendenciasIsolamento, agruparPendenciasIsolamento,
     mesmaSuspeita, correlacionarSurto, resumoParaVisitaUTI, ehSetorDeUTI, iniciaisDe, isolamentosParaNotificar,
     ehSetorPortaDeEntrada, perfilAntibiograma, antibiogramasSemelhantes,
     rotinaDaEquipe, diasCorridos, diasUteis, dataDaUltimaCarga,

@@ -542,7 +542,7 @@ async function montarPainel(conteudo) {
   desenhar();
 }
 
-async /* Termos "oficiais" de um vocabulário (base das sugestões de unificação): a semente do
+/* Termos "oficiais" de um vocabulário (base das sugestões de unificação): a semente do
    esquema e, para procedimentos, as categorias do classificador (próprias e por
    especialidade não estão na semente — só as NHSN com tempo de corte). */
 function vocabularioOficial(vocab) {
@@ -551,7 +551,7 @@ function vocabularioOficial(vocab) {
   return [...new Set([...base, ...categoriasDeProcedimento().map(c => c.Nome)])];
 }
 
-function montarConfiguracoes(conteudo) {
+async function montarConfiguracoes(conteudo) {
   conteudo.append(el('h1', {}, 'Configurações'));
   const campoNome = el('input', { type: 'text', value: app.usuario });
   conteudo.append(el('div', { class: 'cartao' },

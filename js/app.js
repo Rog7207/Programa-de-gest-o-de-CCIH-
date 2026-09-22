@@ -341,8 +341,13 @@ async function montarPainel(conteudo) {
   }
   const hoje = new Date().toISOString().slice(0, 10);
 
+  /* Identidade do paciente (nome) para o surto contar paciente real, não prontuário: o mesmo
+     paciente com vários números de prontuário/atendimento inflava a contagem (surtos falsos). */
+  const nomePorProntuario = new Map(pacientes.pacientes.map(p =>
+    [normalizarProntuario(p.Prontuario), normalizarTexto(p.Nome)]));
+  const identidadeDe = pr => nomePorProntuario.get(pr) || pr;
   const todosSurtos = detectarSurtos(culturas.culturas,
-    { sensibilidade: culturas.sensibilidade, cirurgias: cirurgias.cirurgias });
+    { sensibilidade: culturas.sensibilidade, cirurgias: cirurgias.cirurgias, identidadeDe });
   let investigacoes = [];
   try { investigacoes = (await lerBanco('surtos')).investigacoes || []; } catch (e) { /* banco novo */ }
   /* Suspeita marcada como "não é surto" sai do painel, mas continua registrada na aba Surtos. */

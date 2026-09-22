@@ -3382,6 +3382,23 @@ console.log('\n== 80. Detecção de surtos: antibiograma semelhante, portas de e
   /* Sem NENHUM antibiograma (fungos, germe sem painel) vale a regra antiga. */
   verificar('grupo sem antibiograma continua alertando', al.detectarSurtos(trio).length === 1);
 
+  /* Identidade: mesmo paciente com prontuários diferentes não vira vários pacientes. */
+  const doisPacientesQuatroProntuarios = [
+    cultura('X1', '10', '2026-06-01'), cultura('X2', '11', '2026-06-02'),   /* mesma pessoa "ana" */
+    cultura('X3', '20', '2026-06-03'), cultura('X4', '21', '2026-06-04')    /* mesma pessoa "bia" */
+  ];
+  const identidade = { 10: 'ana', 11: 'ana', 20: 'bia', 21: 'bia' };
+  const idDe = pr => identidade[pr] || pr;
+  verificar('4 prontuários de 2 pacientes reais NÃO viram surto',
+    al.detectarSurtos(doisPacientesQuatroProntuarios, { identidadeDe: idDe }).length === 0);
+  verificar('sem identidade, os 4 prontuários ainda contam como 4 (comportamento antigo)',
+    al.detectarSurtos(doisPacientesQuatroProntuarios).length === 1);
+  const tresReais = al.detectarSurtos(
+    doisPacientesQuatroProntuarios.concat([cultura('X5', '30', '2026-06-05')]),
+    { identidadeDe: pr => ({ 10: 'ana', 11: 'ana', 20: 'bia', 21: 'bia', 30: 'cid' })[pr] || pr });
+  verificar('3 pacientes reais (mesmo com prontuários repetidos) viram surto',
+    tresReais.length === 1 && tresReais[0].Pacientes === 3, JSON.stringify(tresReais));
+
   /* 2 semelhantes + 1 sem antibiograma: quando há o que comparar, quem não tem painel não soma. */
   const soDois = ['E1', 'E2'].flatMap(id =>
     painel(id, { Amicacina: 'S', Ceftriaxona: 'R', Ciprofloxacino: 'R', Meropenem: 'S' }));

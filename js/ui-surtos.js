@@ -69,8 +69,11 @@ async function montarSurtos(conteudo) {
   const investigacoes = bancoSurtos.investigacoes || [];
   const documentos = bancoSurtos.documentos || [];
   const nomes = new Map(pacientes.pacientes.map(p => [normalizarProntuario(p.Prontuario), p.Nome]));
+  /* Identidade (nome) para contar paciente real, não prontuário — mesmo paciente com vários
+     prontuários/atendimentos não pode virar vários "pacientes" no surto. */
+  const identidadeDe = pr => normalizarTexto(nomes.get(pr)) || pr;
   const suspeitas = detectarSurtos(culturas.culturas,
-    { sensibilidade: culturas.sensibilidade, cirurgias: cirurgias.cirurgias });
+    { sensibilidade: culturas.sensibilidade, cirurgias: cirurgias.cirurgias, identidadeDe });
 
   /* Suspeitas ativas + investigações já registradas que não aparecem mais na detecção
      (o surto passou, mas a investigação continua valendo). */

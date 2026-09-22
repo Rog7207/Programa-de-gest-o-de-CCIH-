@@ -37,6 +37,12 @@ const bancoCulturas = ler(ESQUEMAS.culturas.arquivo);
 const culturas = bancoCulturas.culturas;
 const cirurgias = fs.existsSync(path.join(PASTA, ESQUEMAS.cirurgias.arquivo))
   ? ler(ESQUEMAS.cirurgias.arquivo).cirurgias : [];
+/* Identidade (nome) para o surto contar paciente real, não prontuário. */
+const pacientes = fs.existsSync(path.join(PASTA, ESQUEMAS.pacientes.arquivo))
+  ? (ler(ESQUEMAS.pacientes.arquivo).pacientes || []) : [];
+const nomePorProntuario = new Map(pacientes.map(p =>
+  [imp.normalizarProntuario(p.Prontuario), leitura.normalizarTexto(p.Nome)]));
+const identidadeDe = pr => nomePorProntuario.get(pr) || pr;
 const arquivoSurtos = path.join(PASTA, ESQUEMAS.surtos.arquivo);
 const banco = fs.existsSync(arquivoSurtos)
   ? ler(ESQUEMAS.surtos.arquivo)
@@ -44,7 +50,7 @@ const banco = fs.existsSync(arquivoSurtos)
 banco.investigacoes = banco.investigacoes || [];
 
 const suspeitas = alertas.detectarSurtos(culturas,
-  { sensibilidade: bancoCulturas.sensibilidade, cirurgias });
+  { sensibilidade: bancoCulturas.sensibilidade, cirurgias, identidadeDe });
 const antigas = suspeitas.filter(s => String(s.Fim) <= CORTE);
 console.log(`suspeitas detectadas: ${suspeitas.length}`);
 console.log(`com período terminando até ${CORTE}: ${antigas.length}`);

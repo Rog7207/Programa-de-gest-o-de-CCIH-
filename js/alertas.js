@@ -214,7 +214,9 @@ function maiorGrupoSemelhante(itens) {
   let melhorPacientes = 0;
   for (const semente of sementes) {
     const grupo = itens.filter(it => antibiogramasSemelhantes(semente.perfil, it.perfil));
-    const pacientes = new Set(grupo.map(g => g.prontuario)).size;
+    /* Conta paciente REAL (identidade), não prontuário — o mesmo paciente com dois números
+       de prontuário/atendimento não pode virar dois "pacientes". */
+    const pacientes = new Set(grupo.map(g => g.identidade)).size;
     if (pacientes > melhorPacientes) { melhor = grupo; melhorPacientes = pacientes; }
   }
   return melhor;
@@ -222,12 +224,16 @@ function maiorGrupoSemelhante(itens) {
 
 /* Suspeita de surto: pacientes distintos com o mesmo microrganismo E antibiograma
    semelhante, no mesmo setor OU depois do mesmo procedimento cirúrgico, dentro da janela.
-   opcoes: { janelaDias, minimoPacientes, sensibilidade, cirurgias } — sem sensibilidade
-   a comparação de antibiogramas não roda; sem cirurgias o eixo procedimento não roda. */
+   opcoes: { janelaDias, minimoPacientes, sensibilidade, cirurgias, identidadeDe } — sem
+   sensibilidade a comparação de antibiogramas não roda; sem cirurgias o eixo procedimento
+   não roda; identidadeDe(prontuarioNormalizado) devolve a IDENTIDADE do paciente (nome),
+   para o mesmo paciente com vários prontuários/atendimentos não contar como vários — sem
+   ela, cai no próprio prontuário (comportamento antigo). */
 function detectarSurtos(culturas, opcoes) {
   opcoes = opcoes || {};
   const janelaDias = opcoes.janelaDias || SURTO_JANELA_DIAS;
   const minimoPacientes = opcoes.minimoPacientes || SURTO_MINIMO_PACIENTES;
+  const idDe = opcoes.identidadeDe || (p => p);
   const sensibilidadePorCultura = {};
   for (const s of opcoes.sensibilidade || []) {
     (sensibilidadePorCultura[s.ID_Cultura] = sensibilidadePorCultura[s.ID_Cultura] || []).push(s);
@@ -241,9 +247,10 @@ function detectarSurtos(culturas, opcoes) {
 
   const grupos = {};
   const juntar = (chave, rotulo, criterio, c) => {
+    const pront = normalizarProntuario(c.Prontuario);
     (grupos[chave] = grupos[chave] || { rotulo, criterio, micro: c.Microrganismo, itens: [] })
       .itens.push({
-        data: c.DataColeta, prontuario: normalizarProntuario(c.Prontuario), cultura: c.ID_Cultura,
+        data: c.DataColeta, prontuario: pront, identidade: idDe(pront), cultura: c.ID_Cultura,
         perfil: perfilAntibiograma(sensibilidadePorCultura[c.ID_Cultura])
       });
   };
@@ -290,13 +297,13 @@ function detectarSurtos(culturas, opcoes) {
       /* Dentro da janela só conta o subgrupo de antibiograma semelhante: 3 pacientes com
          perfis discordantes são flora de hospital grande, não suspeita de clone. */
       const semelhantes = maiorGrupoSemelhante(janela);
-      const pacientes = new Set(semelhantes.map(s => s.prontuario));
+      /* Conta PACIENTE real (identidade); os prontuários (que podem ser vários por paciente)
+         vão junto para a tela de investigação cruzar com internações, cirurgias e dispositivos. */
+      const pacientes = new Set(semelhantes.map(s => s.identidade));
       if (pacientes.size >= minimoPacientes) {
-        /* Os prontuários vão junto: são eles que a tela de investigação cruza com internações,
-           cirurgias e dispositivos para procurar o que os pacientes têm em comum. */
         alertas.push({
           Setor: grupo.rotulo, Criterio: grupo.criterio, Microrganismo: grupo.micro,
-          Pacientes: pacientes.size, Prontuarios: [...pacientes],
+          Pacientes: pacientes.size, Prontuarios: [...new Set(semelhantes.map(s => s.prontuario))],
           Culturas: semelhantes.map(s => ({ ID_Cultura: s.cultura, Prontuario: s.prontuario, DataColeta: s.data })),
           Inicio: semelhantes[0].data, Fim: semelhantes[semelhantes.length - 1].data
         });

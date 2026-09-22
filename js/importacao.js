@@ -11,6 +11,20 @@ const VAZIOS_ANTIBIOGRAMA = ['', '-', '--', 'nt', 'naotestado', 'na', 'nr'];
 /* Marcador de procedimento excluído da vigilância (memorizado como sinônimo). */
 const NAO_CIRURGIA = '__NAO_CIRURGIA__';
 const NAO_CULTURA = '__NAO_CULTURA__';
+/* Prescrição que não é antimicrobiano de interesse da CCIH (albendazol, pirimetamina…) —
+   decisão da CCIH do HNSC (22/09/2026): sai da importação, memorizado como sinônimo. */
+const NAO_ANTIMICROBIANO = '__NAO_ANTIMICROBIANO__';
+
+/* O relatório de antibióticos do Tasy quebra o nome da apresentação em linhas e às vezes
+   só a primeira chega ("CLORIDRATO DE", "AMPICILINA 2G +", "SOL INJ 100ML"). Não dá para
+   saber o fármaco: a linha é recusada na validação em vez de virar termo do vocabulário. */
+function pareceNomeTruncado(nome) {
+  const t = String(nome || '').trim();
+  if (!t) return false;
+  if (/(\bde|\+|\(min|\(min da|\bda)$/i.test(t)) return true;
+  if (/^\d/.test(t)) return true;                              /* começa pela dose: "2ML", "150MG/ML AMP 4ML" */
+  return /^(fa|comp rev|sol inj\b.*|sodica\b.*|saude\))$/i.test(t);
+}
 const PALAVRAS_NAO_CIRURGIA = ['partonormal', 'partovaginal', 'cateterismo', 'colonoscopia',
   'gastroduodenoscopia', 'broncoscopia', 'retossigmoidoscopia', 'curativo',
   /* Procedimentos de beira-leito/anestesia que o mapa NHSN chama de "implante de cateter"
@@ -1805,6 +1819,10 @@ function validar(registros, tipo, vocabulario) {
       if (campo.obrigatorio && !valor) {
         erros.push({ linha: registro._linha, campo: campo.id, motivo: `${campo.rotulo} vazio` });
       }
+      if (campo.tipo === 'vocab' && campo.vocab === 'antibioticos' && valor && pareceNomeTruncado(valor)) {
+        erros.push({ linha: registro._linha, campo: campo.id, motivo: `nome do antimicrobiano cortado no relatório ("${valor}")` });
+        continue;
+      }
       if (campo.tipo === 'vocab' && valor && !valor.startsWith('__')) {
         /* Procedimento que o classificador resolve sozinho não é "termo novo": a categoria
            já é o vocabulário. Só o que ele não decide (Sem classificação) ou o que parece
@@ -1823,6 +1841,7 @@ function validar(registros, tipo, vocabulario) {
     }
     const antibioticosConhecidos = vocabNormalizado.antibioticos || new Set();
     for (const item of registro._antibiograma || []) {
+      if (String(item.Antibiotico || '').startsWith('__')) continue;
       if (!antibioticosConhecidos.has(normalizarTexto(item.Antibiotico))) {
         termosNovos.antibioticos = termosNovos.antibioticos || new Map();
         const n = normalizarTexto(item.Antibiotico);
@@ -3744,7 +3763,7 @@ if (typeof module !== 'undefined' && module.exports) {
     analisarPDFCulturas, ehPseudoProntuario, sugerirUnificacoes, sugerirUnificacoesPorInternacao, paresAtendimentoProntuario, corrigirProntuarioAtendimento, sugerirUnificacoesVocabulario, auditarVocabulario, distanciaEdicao,
     indiceDeObitos, faleceuAposCirurgia, acrescentarObservacao,
     descartarRegistroProvisorio, reverterDescarteProvisorio,
-    analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome, resolverProntuarioPorNomeEData,
+    analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome, resolverProntuarioPorNomeEData, NAO_ANTIMICROBIANO, pareceNomeTruncado,
     enriquecerCirurgia, classificarProcedimentoNHSN, NHSN_CATEGORIAS, categoriasDeProcedimento, categoriaDoProcedimento, CATEGORIA_SEM_CLASSIFICACAO, contaminacaoPresumida, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
     textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,

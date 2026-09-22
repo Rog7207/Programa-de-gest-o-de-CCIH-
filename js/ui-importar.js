@@ -115,6 +115,7 @@ async function importarArquivoAutomatico(arquivo) {
     validos = validos.filter(r => r.Procedimento !== NAO_CIRURGIA);
     naoCirurgias = antes - validos.length;
   }
+  if (tipo === 'antibioticos') validos = validos.filter(r => r.Antibiotico !== NAO_ANTIMICROBIANO);
   Object.entries(validacao.termosNovos).forEach(([vocab, termos]) =>
     termos.forEach(t => config.acrescentarVocabulario(vocab, t)));
   const agora = new Date().toISOString().slice(0, 16).replace('T', ' ');
@@ -184,6 +185,7 @@ async function importarArquivoAutomatico(arquivo) {
       const linha = montarLinhaImportada(registro, tipo, id, app.usuario, agora, tempoCorte);
       existentes.push(linha);
       for (const item of registro._antibiograma || []) {
+        if (item.Antibiotico === NAO_ANTIMICROBIANO) continue;
         linhasSensibilidade.push({ ID_Cultura: id, Antibiotico: item.Antibiotico, Resultado: item.Resultado });
       }
       /* Relatório que traz prescrição e parecer na mesma linha alimenta as duas abas. */
@@ -239,6 +241,11 @@ async function importarArquivoAutomatico(arquivo) {
    a ter um paciente real com o mesmo nome. É o caso típico do relatório de internações que
    chega dias depois da cultura — sem esta conferência, o órfão só apareceria se alguém
    abrisse a aba Pacientes por acaso. */
+/* Marcador que o sinônimo "excluir" grava para cada vocabulário. */
+function marcadorExclusao(vocab) {
+  return vocab === 'microrganismos' ? NAO_CULTURA : vocab === 'antibioticos' ? NAO_ANTIMICROBIANO : NAO_CIRURGIA;
+}
+
 function novasUnificacoesPossiveis(bancoPacientes) {
   try { return sugerirUnificacoes(bancoPacientes.pacientes || [], bancoPacientes.internacoes || []).length; }
   catch (e) { return 0; }
@@ -1091,7 +1098,8 @@ async function renderPasso3() {
            germe nem negativa, é uma linha que nem é exame de cultura. Mesma ideia do "não é
            cirurgia" dos procedimentos — o núcleo já sabe descartar (ver NAO_CULTURA). */
         const ehMicrorganismo = vocab === 'microrganismos';
-        const podeExcluir = ehProcedimento || ehMicrorganismo;
+        const ehAntibiotico = vocab === 'antibioticos';
+        const podeExcluir = ehProcedimento || ehMicrorganismo || ehAntibiotico;
         const sugestao = sugerirEquivalente(termo, config.vocabulario[vocab], vocab);
         const suspeitaNaoCirurgia = ehProcedimento && !sugestao && pareceNaoCirurgia(termo);
         imp.decisoes[vocab][chave] = sugestao ? { acao: 'alias', termo, para: sugestao }
@@ -1127,7 +1135,7 @@ async function renderPasso3() {
           el('label', {}, radioNovo, ehProcedimento ? ` deixar em "${CATEGORIA_SEM_CLASSIFICACAO}"` : ' termo novo'),
           el('label', {}, radioAlias, ' é o mesmo que: ', seletorExistente),
           radioExcluir ? el('label', { class: 'aviso-erro-texto' }, radioExcluir,
-            ehMicrorganismo ? ' não é cultura (descartar)' : ' não é cirurgia (excluir)') : null,
+            ehMicrorganismo ? ' não é cultura (descartar)' : ehAntibiotico ? ' não é antimicrobiano (excluir)' : ' não é cirurgia (excluir)') : null,
           radioRenomear ? el('label', {}, radioRenomear, ' dar nome padrão: ', campoNovoNome) : null));
       }
       cartaoTermos.append(secao);
@@ -1159,7 +1167,7 @@ function aplicarDecisoes(linhasComErro) {
     aliasPorVocab[vocab] = {};
     for (const decisao of Object.values(imp.decisoes[vocab])) {
       if (decisao.acao === 'alias' || decisao.acao === 'renomear') aliasPorVocab[vocab][normalizarTexto(decisao.termo)] = decisao.para;
-      else if (decisao.acao === 'excluir') aliasPorVocab[vocab][normalizarTexto(decisao.termo)] = vocab === 'microrganismos' ? NAO_CULTURA : NAO_CIRURGIA;
+      else if (decisao.acao === 'excluir') aliasPorVocab[vocab][normalizarTexto(decisao.termo)] = marcadorExclusao(vocab);
     }
   }
   const registros = imp.normalizado.registros.filter(r => !linhasComErro.has(r._linha));
@@ -1181,6 +1189,7 @@ function aplicarDecisoes(linhasComErro) {
   imp.excluidasNaoCirurgia = 0;
   imp.excluidasSemIdentificacao = 0;
   let registrosFinais = registros;
+  if (imp.tipo === 'antibioticos') registrosFinais = registros.filter(r => r.Antibiotico !== NAO_ANTIMICROBIANO);
   if (imp.tipo === 'cirurgias') {
     registrosFinais = registros.filter(r => {
       if (r.Procedimento === NAO_CIRURGIA) { imp.excluidasNaoCirurgia++; return false; }
@@ -1361,6 +1370,7 @@ async function renderPasso5() {
         const linha = montarLinhaImportada(registro, imp.tipo, id, app.usuario, agora, tempoCorte);
         existentes.push(linha);
         for (const item of registro._antibiograma || []) {
+          if (item.Antibiotico === NAO_ANTIMICROBIANO) continue;
           linhasSensibilidade.push({ ID_Cultura: id, Antibiotico: item.Antibiotico, Resultado: item.Resultado });
         }
       }
@@ -1435,7 +1445,7 @@ async function renderPasso5() {
     for (const vocab of Object.keys(imp.decisoes || {})) {
       for (const decisao of Object.values(imp.decisoes[vocab])) {
         if (decisao.acao === 'novo') config.acrescentarVocabulario(vocab, decisao.termo);
-        else if (decisao.acao === 'excluir') config.registrarAlias(vocab, decisao.termo, vocab === 'microrganismos' ? NAO_CULTURA : NAO_CIRURGIA);
+        else if (decisao.acao === 'excluir') config.registrarAlias(vocab, decisao.termo, marcadorExclusao(vocab));
         else if (decisao.acao === 'renomear') {
           config.acrescentarVocabulario(vocab, decisao.para);
           config.registrarAlias(vocab, decisao.termo, decisao.para);

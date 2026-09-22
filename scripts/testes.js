@@ -473,6 +473,21 @@ console.log('\n== 14c. Laudo do laboratório: paciente resolvido por nome + data
   verificar('sem nome não resolve', registros[6].Prontuario === '80000016');
 }
 
+console.log('\n== 14d. Antibióticos: nome cortado recusado e marcador "não é antimicrobiano" ==');
+{
+  const t = imp.pareceNomeTruncado;
+  verificar('"CLORIDRATO DE" é nome cortado', t('CLORIDRATO DE') && t('FOSFATO DE') && t('AMPICILINA 2G +'));
+  verificar('fragmentos de apresentação são cortados', t('2ML') && t('150MG/ML AMP 4ML') && t('COMP REV') && t('FA') && t('SOL INJ 100ML') && t('SAUDE)'));
+  verificar('nomes de fármaco não são', !t('Cefepima') && !t('Ampicilina + Sulbactam') && !t('Piperacilina tazobactam') && !t('Polimixina B'));
+  const v = imp.validar([
+    { _linha: 1, Prontuario: '1', Antibiotico: 'CLORIDRATO DE', DataInicio: '2026-08-01' },
+    { _linha: 2, Prontuario: '1', Antibiotico: imp.NAO_ANTIMICROBIANO, DataInicio: '2026-08-01' },
+    { _linha: 3, Prontuario: '1', Antibiotico: 'Cefepima', DataInicio: '2026-08-01', _antibiograma: [{ Antibiotico: imp.NAO_ANTIMICROBIANO, Resultado: 'S' }] }
+  ], 'antibioticos', { antibioticos: ['Cefepima'] });
+  verificar('validação recusa a linha com nome cortado', v.erros.some(e => e.linha === 1 && /cortado/.test(e.motivo)), v.erros);
+  verificar('marcador não vira termo novo (nem no antibiograma)', !(v.termosNovos.antibioticos || []).length, v.termosNovos);
+}
+
 console.log('\n== 15. Reimportação de internações (upsert) ==');
 {
   const existentes = [

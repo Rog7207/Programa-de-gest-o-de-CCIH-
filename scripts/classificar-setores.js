@@ -46,7 +46,8 @@ const TIPOS = {
   'Unidade 12 - Sao Lucas': 'Internação',
   'Unidade 19 - Sao Vicente de Paula': 'Internação',
   'Unidade 21 - Provida': 'Internação',
-  'Alta Complexidade - 01': 'Internação',
+  /* Ambulatório (ortopedia, neurocirurgia, pré-natal de alto risco) — confirmado por ele em 22/09/2026. */
+  'Alta Complexidade - 01': 'Ambulatório',
   'Berçário RN': 'Internação',
 
   /* Só a entrada de verdade é porta de entrada (fora da detecção de surto). As esperas

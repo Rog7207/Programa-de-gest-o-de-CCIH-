@@ -125,6 +125,11 @@ async function importarArquivoAutomatico(arquivo) {
     /* Relatório que traz o ATENDIMENTO no campo de prontuário (ex.: leva de culturas de
        ago/2026) criaria um paciente novo por internação — corrige antes de tudo. */
     prontuariosCorrigidos = corrigirProntuarioAtendimento(validos, bancoPac.internacoes || []);
+    /* Laudo do laboratório: o número que vem não é prontuário nem atendimento — resolve o
+       paciente por nome + data de coleta contra o censo. */
+    if (tipo === 'culturas') {
+      prontuariosCorrigidos += resolverProntuarioPorNomeEData(validos, bancoPac.pacientes || [], bancoPac.internacoes || []);
+    }
     /* Tipos identificados só pelo atendimento (análise de ATB do Tasy): resolve o
        prontuário pelo censo; quem não resolver fica com prontuário vazio, sem pseudo. */
     if (TIPOS_RELATORIO[tipo].resolvePorAtendimento) {
@@ -222,7 +227,7 @@ async function importarArquivoAutomatico(arquivo) {
         + (internacoesAtualizadas ? `, ${fmtInt(internacoesAtualizadas)} internações atualizadas` : '')
         + (naoCirurgias ? `, ${fmtInt(naoCirurgias)} não-cirurgias excluídas` : '')
         + (semIdentificacao ? `, ${fmtInt(semIdentificacao)} sem identificação excluídas` : '')
-        + (prontuariosCorrigidos ? `, ${fmtInt(prontuariosCorrigidos)} prontuários corrigidos pelo atendimento` : '')
+        + (prontuariosCorrigidos ? `, ${fmtInt(prontuariosCorrigidos)} prontuários corrigidos pelo atendimento ou pelo nome + data` : '')
         + (reparadasAntigas ? `, ${fmtInt(reparadasAntigas)} registros antigos reparados` : '')
         + (casaveis ? `, ${fmtInt(casaveis)} registros do laboratório passíveis de unificação` : '')
     };
@@ -1201,6 +1206,10 @@ function aplicarDecisoes(linhasComErro) {
      deduplicação (senão a mesma linha entraria com duas identidades diferentes). */
   imp.prontuariosCorrigidos = imp.bancoPacientes
     ? corrigirProntuarioAtendimento(registrosFinais, imp.bancoPacientes.internacoes || []) : 0;
+  if (imp.tipo === 'culturas' && imp.bancoPacientes) {
+    imp.prontuariosCorrigidos += resolverProntuarioPorNomeEData(registrosFinais,
+      imp.bancoPacientes.pacientes || [], imp.bancoPacientes.internacoes || []);
+  }
   if (TIPOS_RELATORIO[imp.tipo].resolvePorAtendimento && imp.bancoPacientes) {
     resolverProntuarioPorAtendimento(registrosFinais, imp.bancoPacientes.internacoes || []);
   }
@@ -1223,7 +1232,7 @@ async function renderPasso4() {
     ['Duplicados no próprio arquivo', d.duplicadosInternos.length],
     ['Excluídos por erro', imp.excluidosPorErro]
   ];
-  if (imp.prontuariosCorrigidos) cartoes.push(['Prontuário corrigido pelo atendimento', imp.prontuariosCorrigidos]);
+  if (imp.prontuariosCorrigidos) cartoes.push(['Prontuário corrigido (atendimento ou nome + data)', imp.prontuariosCorrigidos]);
   if (definicao.permiteAntibiograma) cartoes.push(['Linhas de antibiograma', totalAntibiograma]);
   if (imp.tipo === 'cirurgias' && imp.excluidasNaoCirurgia) cartoes.push(['Não é cirurgia (excluídas)', imp.excluidasNaoCirurgia]);
   if (imp.tipo === 'cirurgias' && imp.identificadasProvisorias) cartoes.push(['Sem internação — registro provisório pelo nome', imp.identificadasProvisorias]);

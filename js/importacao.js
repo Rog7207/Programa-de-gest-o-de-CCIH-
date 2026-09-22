@@ -3068,6 +3068,54 @@ function resolverProntuarioPorAtendimento(registros, internacoes) {
   return resolvidos;
 }
 
+/* Laudos do laboratório trazem um número PRÓPRIO no campo de prontuário (série 8000xxxx,
+   confirmado por ele em 22/09/2026: "não é o da internação"). Sem isto, cada leva criava um
+   paciente novo por laudo. Resolve pelo NOME + DATA: o registro cujo prontuário não é um
+   prontuário conhecido do censo (ou está vazio) e cujo nome tem EXATAMENTE um paciente com
+   internação cobrindo a data (folga de alguns dias antes da entrada — coleta na espera/
+   emergência antecede a internação formal) passa a esse prontuário. O número do laudo fica
+   em _originais.Prontuario. Ambiguidade (dois homônimos internados) não resolve: fica
+   como veio, para a unificação com prova decidir depois. */
+function resolverProntuarioPorNomeEData(registros, pacientes, internacoes, opcoes) {
+  opcoes = opcoes || {};
+  const campoData = opcoes.campoData || 'DataColeta';
+  const folga = opcoes.folgaDias != null ? opcoes.folgaDias : 3;
+  const intsPorPront = new Map();
+  for (const i of (internacoes || [])) {
+    const p = normalizarProntuario(i.Prontuario);
+    const d = String(i.DataInternacao || '').slice(0, 10);
+    if (!p || !/^\d{4}-/.test(d)) continue;
+    if (!intsPorPront.has(p)) intsPorPront.set(p, []);
+    intsPorPront.get(p).push({ inicio: d, fim: String(i.DataAlta || '').slice(0, 10) });
+  }
+  const prontsPorNome = new Map();
+  for (const p of (pacientes || [])) {
+    const k = normalizarProntuario(p.Prontuario), nome = normalizarTexto(p.Nome);
+    if (!k || !nome || !intsPorPront.has(k)) continue;
+    if (!prontsPorNome.has(nome)) prontsPorNome.set(nome, new Set());
+    prontsPorNome.get(nome).add(k);
+  }
+  const cobre = (ints, d) => ints.some(i => {
+    const limite = new Date(Date.parse(i.inicio + 'T00:00:00Z') - folga * 864e5).toISOString().slice(0, 10);
+    return limite <= d && (!i.fim || i.fim >= d);
+  });
+  let resolvidos = 0;
+  for (const r of (registros || [])) {
+    const atual = normalizarProntuario(r.Prontuario);
+    if (atual && intsPorPront.has(atual)) continue;            /* prontuário de verdade: não mexe */
+    const nome = normalizarTexto(r.NomePaciente || r.Nome);
+    const d = String(r[campoData] || '').slice(0, 10);
+    if (!nome || !/^\d{4}-/.test(d)) continue;
+    const candidatos = [...(prontsPorNome.get(nome) || [])].filter(k => cobre(intsPorPront.get(k), d));
+    if (candidatos.length !== 1 || candidatos[0] === atual) continue;
+    r._originais = r._originais || {};
+    if (r._originais.Prontuario === undefined) r._originais.Prontuario = r.Prontuario;
+    r.Prontuario = candidatos[0];
+    resolvidos++;
+  }
+  return resolvidos;
+}
+
 function resolverProntuarioPorNome(registros, pacientes) {
   const porNome = new Map();
   for (const p of pacientes) {
@@ -3696,7 +3744,7 @@ if (typeof module !== 'undefined' && module.exports) {
     analisarPDFCulturas, ehPseudoProntuario, sugerirUnificacoes, sugerirUnificacoesPorInternacao, paresAtendimentoProntuario, corrigirProntuarioAtendimento, sugerirUnificacoesVocabulario, auditarVocabulario, distanciaEdicao,
     indiceDeObitos, faleceuAposCirurgia, acrescentarObservacao,
     descartarRegistroProvisorio, reverterDescarteProvisorio,
-    analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome,
+    analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome, resolverProntuarioPorNomeEData,
     enriquecerCirurgia, classificarProcedimentoNHSN, NHSN_CATEGORIAS, categoriasDeProcedimento, categoriaDoProcedimento, CATEGORIA_SEM_CLASSIFICACAO, contaminacaoPresumida, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
     textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,

@@ -439,6 +439,40 @@ console.log('\n== 14b. Unificação por nome com PROVA de internação ==');
     !imp.sugerirUnificacoes(pacientes, internacoes).some(s => s.de === '184684'));
 }
 
+console.log('\n== 14c. Laudo do laboratório: paciente resolvido por nome + data ==');
+{
+  const pacientes = [
+    { Prontuario: '293816', Nome: 'Maria Teste' },
+    { Prontuario: '501', Nome: 'João Ambíguo' }, { Prontuario: '502', Nome: 'João Ambíguo' },
+    { Prontuario: '900', Nome: 'Ana Espera' }
+  ];
+  const internacoes = [
+    { Prontuario: '293816', Atendimento: '181473', DataInternacao: '2023-11-09', DataAlta: '2023-11-23' },
+    { Prontuario: '501', Atendimento: '1', DataInternacao: '2024-01-01', DataAlta: '2024-01-10' },
+    { Prontuario: '502', Atendimento: '2', DataInternacao: '2024-01-01', DataAlta: '2024-01-10' },
+    { Prontuario: '900', Atendimento: '4', DataInternacao: '2025-10-03', DataAlta: '' }
+  ];
+  const registros = [
+    { Prontuario: '80000012', NomePaciente: 'MARIA TESTE', DataColeta: '2023-11-12' },   /* número do lab → prontuário real */
+    { Prontuario: '', NomePaciente: 'Maria Teste', DataColeta: '2023-11-12' },           /* sem número → idem */
+    { Prontuario: '80000013', NomePaciente: 'Maria Teste', DataColeta: '2022-01-01' },   /* fora de internação: fica como veio */
+    { Prontuario: '80000014', NomePaciente: 'João Ambíguo', DataColeta: '2024-01-05' },  /* dois homônimos internados: ambíguo */
+    { Prontuario: '293816', NomePaciente: 'Maria Teste', DataColeta: '2023-11-12' },     /* prontuário de verdade: não mexe */
+    { Prontuario: '80000015', NomePaciente: 'Ana Espera', DataColeta: '2025-10-01' },    /* 2 d antes da entrada, internação aberta */
+    { Prontuario: '80000016', NomePaciente: '', DataColeta: '2023-11-12' }               /* sem nome: nada a fazer */
+  ];
+  const n = imp.resolverProntuarioPorNomeEData(registros, pacientes, internacoes);
+  verificar('resolve 3 (lab, vazio, espera) e deixa o resto', n === 3, n);
+  verificar('número do laboratório vira o prontuário real e o original fica guardado',
+    registros[0].Prontuario === '293816' && registros[0]._originais.Prontuario === '80000012', registros[0]);
+  verificar('prontuário vazio também resolve', registros[1].Prontuario === '293816');
+  verificar('coleta fora de qualquer internação do homônimo não resolve', registros[2].Prontuario === '80000013');
+  verificar('dois homônimos internados na data: ambíguo, não resolve', registros[3].Prontuario === '80000014');
+  verificar('prontuário conhecido do censo não é tocado', registros[4].Prontuario === '293816' && !registros[4]._originais);
+  verificar('coleta poucos dias antes da entrada, internação sem alta: resolve', registros[5].Prontuario === '900');
+  verificar('sem nome não resolve', registros[6].Prontuario === '80000016');
+}
+
 console.log('\n== 15. Reimportação de internações (upsert) ==');
 {
   const existentes = [

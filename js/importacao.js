@@ -2013,6 +2013,222 @@ function registrarCasoIras(casos, candidato, gerarID, identidadeDe) {
   return { caso: existente, novo: false };
 }
 
+/* ---- Conciliação com o Tasy (decisão da CCIH do HNSC, 22/09/2026) ----
+   A infecção confirmada aqui é digitada no prontuário (Tasy); depois o export do Tasy volta e
+   é conciliado: o caso daqui que tem par no Tasy vira "digitado" (a confirmação última de que
+   o processo aconteceu) e guarda o id do Tasy; o que existe só no Tasy entra aqui já como
+   digitado; o que está confirmado aqui e não está no Tasy é a fila "falta digitar". Regras:
+   - par = mesmo paciente (identidade) + data em até `janelaDias` (7) + mesmo grupo de
+     topografia (quando os dois lados têm topografia legível);
+   - reentrada não duplica: a linha do Tasy com id já guardado casa por id; sem id, casa pelo
+     episódio; duas linhas do Tasy para o MESMO episódio viram aviso (a divergência está no
+     Tasy e é lá que se corrige) — a segunda não entra;
+   - descartados aqui não casam (se o Tasy tem, a CCIH precisa olhar: fica em "só no Tasy"). */
+function conciliarComTasy(casos, linhasTasy, opcoes) {
+  opcoes = opcoes || {};
+  const idDe = opcoes.identidadeDe || (p => p);
+  const janela = opcoes.janelaDias === undefined ? 7 : opcoes.janelaDias;
+  const desde = String(opcoes.desde || '').slice(0, 10);
+  const porIdTasy = new Map();
+  for (const k of casos || []) {
+    const id = String(k.ID_Tasy || '').trim();
+    if (id) porIdTasy.set(id, k);
+  }
+  const mesmoEpisodio = (caso, linha) => {
+    if (normalizarTexto(caso.StatusInvestigacao) === 'descartado') return false;
+    if (idDe(normalizarProntuario(caso.Prontuario)) !== idDe(normalizarProntuario(linha.Prontuario))) return false;
+    const gA = grupoTopografia(caso.Topografia), gB = grupoTopografia(linha.Topografia);
+    if (gA && gB && gA !== gB) return false;
+    const dA = Date.parse(String(caso.DataInfeccao || '').slice(0, 10) + 'T00:00:00Z');
+    const dB = Date.parse(String(linha.DataInfeccao || '').slice(0, 10) + 'T00:00:00Z');
+    if (!isFinite(dA) || !isFinite(dB)) return !!(gA && gB);
+    return Math.abs(dA - dB) / 86400000 <= janela;
+  };
+  const casados = [], soNoTasy = [], duplicadasNoTasy = [];
+  const usados = new Set();
+  const ordenadas = (linhasTasy || []).slice().sort((a, b) => String(a.DataInfeccao).localeCompare(String(b.DataInfeccao)));
+  for (const linha of ordenadas) {
+    const id = String(linha.ID_Tasy || '').trim();
+    let caso = (id && porIdTasy.get(id)) || null;
+    if (!caso) {
+      /* Prefere o caso mais próximo na data. */
+      /* Inclui os já casados nesta rodada: a 2ª linha do Tasy para o mesmo episódio precisa
+         cair em "duplicada", não virar caso novo. */
+      caso = (casos || []).filter(k => mesmoEpisodio(k, linha))
+        .sort((a, b) => Math.abs(Date.parse(a.DataInfeccao) - Date.parse(linha.DataInfeccao))
+          - Math.abs(Date.parse(b.DataInfeccao) - Date.parse(linha.DataInfeccao)))[0] || null;
+    }
+    if (caso) {
+      if (usados.has(caso)) { duplicadasNoTasy.push({ linha, caso }); continue; }
+      usados.add(caso);
+      casados.push({ caso, linha });
+      continue;
+    }
+    const irmao = soNoTasy.find(l => mesmoCasoIras({ Prontuario: l.Prontuario, DataInfeccao: l.DataInfeccao, Topografia: l.Topografia }, linha, janela, idDe));
+    if (irmao) { duplicadasNoTasy.push({ linha, irmao }); continue; }
+    soNoTasy.push(linha);
+  }
+  const soAqui = (casos || []).filter(k => !usados.has(k)
+    && normalizarTexto(k.StatusInvestigacao) === 'confirmado'
+    && (!desde || String(k.DataInfeccao || '').slice(0, 10) >= desde));
+  return { casados, soNoTasy, duplicadasNoTasy, soAqui };
+}
+
+/* Aplica os pares nos casos (objetos do banco): status digitado, id do Tasy, quem/quando; campos
+   vazios daqui ganham o que o Tasy sabia (agente, setor). Devolve quantos mudaram. */
+function aplicarConciliacao(casados, usuario, hoje) {
+  let mudados = 0;
+  for (const { caso, linha } of casados || []) {
+    const id = String(linha.ID_Tasy || '').trim();
+    const jaDigitado = normalizarTexto(caso.StatusInvestigacao) === 'digitado' && String(caso.ID_Tasy || '').trim() === id;
+    if (id) caso.ID_Tasy = id;
+    if (!jaDigitado) {
+      caso.StatusInvestigacao = 'digitado';
+      caso.DigitadoPor = usuario;
+      caso.DigitadoEm = hoje;
+      mudados++;
+    }
+    for (const campo of ['Microrganismo', 'Setor', 'Topografia']) {
+      if (!String(caso[campo] || '').trim() && String(linha[campo] || '').trim()) caso[campo] = linha[campo];
+    }
+  }
+  return mudados;
+}
+
+/* Culturas positivas VÁLIDAS do paciente (identidade) em ±janela da infecção — as candidatas a
+   agente da infecção na confirmação. Contaminação, negativa, água/leite/controle e descartadas
+   ficam fora. Ordenadas pela proximidade da data. */
+function culturasDoEpisodio(culturas, caso, opcoes) {
+  opcoes = opcoes || {};
+  const janela = opcoes.janelaDias === undefined ? 14 : opcoes.janelaDias;
+  const idDe = opcoes.identidadeDe || (p => p);
+  const alvo = idDe(normalizarProntuario(caso.Prontuario));
+  const data = Date.parse(String(caso.DataInfeccao || '').slice(0, 10) + 'T00:00:00Z');
+  const foraDeInfeccao = /^(contamina|negativa|agua|leite|controle|nao e cultura|naoecultura)/;
+  return (culturas || []).filter(c => {
+    if (idDe(normalizarProntuario(c.Prontuario)) !== alvo) return false;
+    if (c.StatusRevisao === 'descartada' || !germeDaCultura(c.Microrganismo)) return false;
+    if (foraDeInfeccao.test(normalizarTexto(c.AvaliacaoCCIH).replace(/\s+/g, ''))) return false;
+    const d = Date.parse(String(c.DataColeta || '').slice(0, 10) + 'T00:00:00Z');
+    if (!isFinite(d) || !isFinite(data)) return false;
+    return Math.abs(d - data) / 86400000 <= janela;
+  }).sort((a, b) => Math.abs(Date.parse(a.DataColeta) - data) - Math.abs(Date.parse(b.DataColeta) - data));
+}
+const SEM_CULTURA_VALIDA = 'Sem cultura positiva válida';
+
+/* ---- Ficha de notificação (para digitar no Tasy) ----
+   Dados principais de UM caso confirmado, tirados do banco: identificação, internação em
+   curso na data da infecção (com passagem por setores, quando o censo de passagens existe),
+   dispositivos invasivos e cirurgias da internação, a infecção e o agente vinculado com o
+   antibiograma resumido (só os R). Função pura: `bancos` = { pacientes, culturas, cirurgias,
+   dispositivos, denominadores }. */
+function fichaDeNotificacao(caso, bancos, opcoes) {
+  opcoes = opcoes || {};
+  bancos = bancos || {};
+  const idDe = opcoes.identidadeDe || (p => p);
+  const pront = normalizarProntuario(caso.Prontuario);
+  const identidade = idDe(pront);
+  const pacientes = (bancos.pacientes || {}).pacientes || [];
+  const paciente = pacientes.find(p => normalizarProntuario(p.Prontuario) === pront)
+    || pacientes.find(p => idDe(normalizarProntuario(p.Prontuario)) === identidade) || {};
+  const dataInf = String(caso.DataInfeccao || '').slice(0, 10);
+  const internacoes = ((bancos.pacientes || {}).internacoes || []).filter(i => idDe(normalizarProntuario(i.Prontuario)) === identidade);
+  const sit = internacaoNaColeta(caso.Prontuario, dataInf, internacoes);
+  const internacao = sit && sit.internacao ? sit.internacao : null;
+  const entrada = internacao ? String(internacao.DataInternacao || '').slice(0, 10) : '';
+  const alta = internacao ? String(internacao.DataAlta || '').slice(0, 10) : '';
+  const dentroDaInternacao = d => {
+    const x = String(d || '').slice(0, 10);
+    if (!/^\d{4}-/.test(x)) return false;
+    if (entrada && x < entrada) return false;
+    if (alta && x > alta) return false;
+    return true;
+  };
+  const passagens = internacao ? (((bancos.denominadores || {}).passagem_setor || [])
+    .filter(p => normalizarProntuario(p.Atendimento) && normalizarProntuario(p.Atendimento) === normalizarProntuario(internacao.Atendimento))
+    .sort((a, b) => String(a.EntradaSetor).localeCompare(String(b.EntradaSetor)))
+    .map(p => ({ setor: p.Setor, entrada: String(p.EntradaSetor || '').slice(0, 10), saida: String(p.SaidaSetor || '').slice(0, 10) }))) : [];
+  const dispositivos = ((bancos.dispositivos || {}).dispositivos || [])
+    .filter(d => idDe(normalizarProntuario(d.Prontuario)) === identidade)
+    .filter(d => !internacao || dentroDaInternacao(d.DataInstalacao) || (!String(d.DataRetirada || '').trim() && String(d.DataInstalacao || '').slice(0, 10) <= dataInf))
+    .map(d => ({ dispositivo: d.Dispositivo, instalacao: String(d.DataInstalacao || '').slice(0, 10), retirada: String(d.DataRetirada || '').slice(0, 10) }));
+  const cirurgias = ((bancos.cirurgias || {}).cirurgias || [])
+    .filter(c => idDe(normalizarProntuario(c.Prontuario)) === identidade)
+    .filter(c => { const d = String(c.DataCirurgia || '').slice(0, 10); return dentroDaInternacao(d) || (isFinite(Date.parse(d)) && isFinite(Date.parse(dataInf)) && (Date.parse(dataInf) - Date.parse(d)) / 86400000 >= 0 && (Date.parse(dataInf) - Date.parse(d)) / 86400000 <= 90); })
+    .map(c => ({ data: String(c.DataCirurgia || '').slice(0, 10), procedimento: c.Procedimento, categoria: c.ProcedimentoNHSN, contaminacao: c.PotencialContaminacao }));
+  const culturas = (bancos.culturas || {}).culturas || [];
+  const sensibilidade = (bancos.culturas || {}).sensibilidade || [];
+  let agente = null;
+  const idCultura = String(caso.ID_CulturaAgente || '').trim();
+  const cultura = idCultura ? culturas.find(c => c.ID_Cultura === idCultura) : null;
+  if (cultura) {
+    const resistentes = sensibilidade.filter(s => s.ID_Cultura === cultura.ID_Cultura && s.Resultado === 'R').map(s => s.Antibiotico);
+    agente = { microrganismo: cultura.Microrganismo, material: cultura.Material, coleta: String(cultura.DataColeta || '').slice(0, 10),
+      mecanismo: cultura.MecanismoResistencia || '', resistentes };
+  } else if (String(caso.Microrganismo || '').trim()) {
+    agente = { microrganismo: caso.Microrganismo, material: '', coleta: '', mecanismo: '', resistentes: [] };
+  }
+  return {
+    ID_IRAS: caso.ID_IRAS,
+    paciente: { nome: paciente.Nome || '', prontuario: caso.Prontuario, atendimento: internacao ? internacao.Atendimento || '' : '',
+      nascimento: String(paciente.DataNascimento || '').slice(0, 10), sexo: paciente.Sexo || '' },
+    internacao: internacao ? { entrada, alta, setorEntrada: internacao.SetorAtual || '', desfecho: internacao.Desfecho || (internacao.Obito === 'S' ? 'Óbito' : ''),
+      situacao: sit.situacao, diaDaInternacao: sit.diaDaInternacao || null } : null,
+    passagens, dispositivos, cirurgias,
+    infeccao: { data: dataInf, topografia: caso.Topografia || '', criterio: caso.CriterioDiagnostico || '', setor: caso.Setor || '',
+      dispositivoAssociado: caso.DispositivoAssociado || '', notificadoPor: caso.CriadoPor || '', notificadoEm: String(caso.CriadoEm || '').slice(0, 10),
+      confirmadoPor: caso.ConfirmadoPor || '', confirmadoEm: String(caso.ConfirmadoEm || '').slice(0, 10), observacoes: caso.Observacoes || '' },
+    agente
+  };
+}
+
+/* HTML imprimível das fichas: DUAS por página A4 (decisão dele), com espaço no rodapé para
+   quem digita anotar. Texto escapado; sem dependências. */
+function htmlDasFichas(fichas, opcoes) {
+  opcoes = opcoes || {};
+  const esc = t => String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const br = d => (/^\d{4}-\d{2}-\d{2}$/.test(String(d || '')) ? String(d).split('-').reverse().join('/') : esc(d || '—'));
+  const linha = (rotulo, valor) => `<tr><th>${esc(rotulo)}</th><td>${valor || '—'}</td></tr>`;
+  const blocos = (fichas || []).map(f => {
+    const int = f.internacao;
+    const passagens = f.passagens.length ? f.passagens.map(p => `${esc(p.setor)} (${br(p.entrada)}${p.saida ? ' → ' + br(p.saida) : ''})`).join('; ')
+      : (int ? `entrada por ${esc(int.setorEntrada)}; infecção em ${esc(f.infeccao.setor)}` : esc(f.infeccao.setor));
+    const dispositivos = f.dispositivos.length ? f.dispositivos.map(d => `${esc(d.dispositivo)} ${br(d.instalacao)}${d.retirada ? ' → ' + br(d.retirada) : ' (em uso)'}`).join('; ') : 'nenhum registrado';
+    const cirurgias = f.cirurgias.length ? f.cirurgias.map(c => `${br(c.data)} ${esc(c.procedimento)}${c.categoria ? ' [' + esc(c.categoria) + ']' : ''}${c.contaminacao ? ' — ' + esc(c.contaminacao) : ''}`).join('; ') : 'nenhuma';
+    const agente = f.agente
+      ? `${esc(f.agente.microrganismo)}${f.agente.material ? ' — ' + esc(f.agente.material) + ' de ' + br(f.agente.coleta) : ''}`
+        + (f.agente.mecanismo ? ` · <b>${esc(f.agente.mecanismo)}</b>` : '')
+        + (f.agente.resistentes.length ? `<br><span class="suave">Resistente a: ${esc(f.agente.resistentes.join(', '))}</span>` : '')
+      : esc(SEM_CULTURA_VALIDA);
+    return `<section class="ficha">
+<h2>Notificação de IRAS — ${esc(f.ID_IRAS)}</h2>
+<table>
+${linha('Paciente', `<b>${esc(f.paciente.nome)}</b> · prontuário ${esc(f.paciente.prontuario)}${f.paciente.atendimento ? ' · atendimento ' + esc(f.paciente.atendimento) : ''}${f.paciente.nascimento ? ' · nasc. ' + br(f.paciente.nascimento) : ''}${f.paciente.sexo ? ' · ' + esc(f.paciente.sexo) : ''}`)}
+${linha('Internação', int ? `${br(int.entrada)}${int.alta ? ' → ' + br(int.alta) : ' (em curso)'}${int.desfecho ? ' · ' + esc(int.desfecho) : ''}${int.diaDaInternacao ? ' · infecção no ' + int.diaDaInternacao + 'º dia' : ''}` : 'sem internação cobrindo a data')}
+${linha('Setores', passagens)}
+${linha('Dispositivos invasivos', dispositivos)}
+${linha('Cirurgias', cirurgias)}
+${linha('Infecção', `<b>${esc(f.infeccao.topografia || '(topografia a definir)')}</b> em ${br(f.infeccao.data)}${f.infeccao.dispositivoAssociado ? ' · associada a ' + esc(f.infeccao.dispositivoAssociado) : ''}${f.infeccao.criterio ? ' · ' + esc(f.infeccao.criterio) : ''}`)}
+${linha('Agente', agente)}
+${linha('CCIH', `notificado por ${esc(f.infeccao.notificadoPor)} em ${br(f.infeccao.notificadoEm)}${f.infeccao.confirmadoPor ? '; confirmado por ' + esc(f.infeccao.confirmadoPor) + ' em ' + br(f.infeccao.confirmadoEm) : ''}`)}
+</table>
+<p class="rodape">Digitado no Tasy em ____/____/______ por ______________________</p>
+</section>`;
+  }).join('\n');
+  return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Fichas de notificação de IRAS</title><style>'
+    + 'body{font-family:Arial,sans-serif;margin:0;color:#000;font-size:9.5pt;print-color-adjust:exact;-webkit-print-color-adjust:exact}'
+    + '@page{size:A4;margin:12mm}'
+    + '.cabecalho{font-size:9pt;color:#444;margin:6px 12mm}'
+    + '.ficha{box-sizing:border-box;height:132mm;padding:4mm 6mm;border:1px solid #999;margin:0 0 4mm;page-break-inside:avoid}'
+    + '.ficha:nth-of-type(2n){page-break-after:always}'
+    + 'h2{font-size:11.5pt;margin:0 0 4px;border-bottom:1px solid #999;padding-bottom:2px}'
+    + 'table{border-collapse:collapse;width:100%}th{text-align:left;width:34mm;vertical-align:top;padding:2px 6px 2px 0;font-size:9pt;color:#333}td{padding:2px 0;vertical-align:top}'
+    + '.suave{color:#444}.rodape{margin:6px 0 0;font-size:9pt;color:#333}'
+    + '</style></head><body>'
+    + `<p class="cabecalho">CCIH — fichas de notificação de IRAS para digitação no Tasy · ${esc(fichas.length)} ficha(s) · gerado em ${esc(opcoes.geradoEm || '')}${opcoes.usuario ? ' por ' + esc(opcoes.usuario) : ''}</p>`
+    + blocos + '</body></html>';
+}
+
 /* Agrupa os casos do banco que são o mesmo episódio, encadeando pela data (A~B e B~C
    juntam A, B e C mesmo com A e C além da janela — o mesmo encadeamento dos episódios
    de culturas da aba Infecções). Devolve só os grupos com 2+ casos. */
@@ -3776,7 +3992,7 @@ if (typeof module !== 'undefined' && module.exports) {
     classificarParaVigilancia, categoriaDeVigilancia, CATEGORIAS_VIGILANCIA, CATEGORIAS_VIGILANCIA_PADRAO,
     diasDesde, telefoneWhatsApp, mensagemVigilancia, linkWhatsApp, JANELA_VIGILANCIA,
     prescricaoAtiva, analisarDose, cursosDeAntibiotico, alertasDeAntibioticos, DIAS_CURSO_PROLONGADO, TETO_DOSE_DIARIA_MG,
-    grupoTopografia, mesmoCasoIras, registrarCasoIras, agruparCasosIrasDuplicados, identidadePorNome,
+    grupoTopografia, mesmoCasoIras, registrarCasoIras, agruparCasosIrasDuplicados, identidadePorNome, conciliarComTasy, aplicarConciliacao, culturasDoEpisodio, SEM_CULTURA_VALIDA, fichaDeNotificacao, htmlDasFichas,
     fundirCasosIras, deduplicarCasosIras, IRAS_JANELA_DUPLICATA_DIAS
   };
 }

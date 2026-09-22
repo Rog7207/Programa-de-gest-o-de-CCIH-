@@ -273,7 +273,28 @@ notificação oficial só nasce na **aba Infecções**, onde um segundo profissi
 3. **confirma** (fica registrado quem notificou e quem confirmou) ou **descarta**.
 
 Se você tentar confirmar uma suspeita que você mesmo abriu, o app avisa — não impede,
-mas o ideal é que sejam duas pessoas. Os indicadores contam apenas as confirmadas.
+mas o ideal é que sejam duas pessoas.
+
+**Agente da infecção**: na confirmação, o germe é escolhido entre as **culturas positivas
+válidas do paciente em ±14 dias** (a cultura escolhida fica vinculada ao caso), ou
+"Sem cultura positiva válida", ou outro nome digitado.
+
+**Digitação no Tasy e conciliação** (o passo final do processo):
+
+1. A aba Infecções lista as confirmadas **aguardando digitação**; marque-as e clique
+   **Imprimir fichas** — saem 2 fichas por página (identificação, internação e passagem
+   por setores, dispositivos invasivos, cirurgias, a infecção, o agente com as resistências)
+   e o arquivo fica guardado em `fichas/` na pasta de dados, como registro.
+2. Digite as infecções no prontuário (Tasy).
+3. Importe o export de IRAS do Tasy (aba Importar, tipo **"IRAS digitadas no Tasy"**). A
+   conciliação casa cada linha com o caso daqui (mesmo paciente, data em até 7 dias, mesma
+   topografia) e o marca como **digitado**; o que existe só no Tasy entra aqui já como
+   digitado, para revisão; e se o Tasy tiver **duas linhas para o mesmo episódio**, o app
+   avisa e não deixa entrar a segunda — corrija no Tasy. Reimportar o mesmo export não
+   duplica nada.
+4. A partir da **data de início da conciliação** (Configurações → Rotina; 01/07/2026 no
+   HNSC), **só a infecção digitada conta nos relatórios** — antes dela, a confirmada vale.
+   É o que impede os dois sistemas de divergirem.
 
 **Sem duplicatas**: o mesmo episódio costuma ser detectado por mais de um caminho (uma
 cultura revisada, o contato da pós-alta, uma planilha importada). O app reconhece o

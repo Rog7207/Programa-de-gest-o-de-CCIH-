@@ -166,12 +166,26 @@ function taxasPorDispositivo(bancos, casos, inicio, fim, setoresEscopo) {
   return { linhas, diasContados: denominador.diasContados };
 }
 
+/* Casos que VALEM para relatório (decisão da CCIH do HNSC, 22/09/2026): a partir da data de
+   início da conciliação com o Tasy só conta o caso DIGITADO lá — é o que impede os dois
+   sistemas de divergirem; antes dela, o confirmado (sistema anterior) vale. Sem data, o
+   comportamento antigo (confirmado ou digitado). */
+function casosParaRelatorio(casos, conciliacaoDesde) {
+  const desde = String(conciliacaoDesde || '').slice(0, 10);
+  return (casos || []).filter(k => {
+    const s = normalizarTexto(k.StatusInvestigacao);
+    if (s === 'digitado') return true;
+    const confirmado = s === 'confirmado' || (!s && String(k.ConfirmadoPor || '').trim());
+    if (!confirmado) return false;
+    return !desde || String(k.DataInfeccao || '').slice(0, 10) < desde;
+  });
+}
+
 /* ---- 1. IRAS do período ---- */
 function relatorioIRAS(bancos, setoresEscopo, inicio, fim) {
   const casos = ((bancos.iras || {}).casos || [])
     .filter(k => relPeriodo(k.DataInfeccao, inicio, fim) && relEscopo(k.Setor, setoresEscopo));
-  const confirmadas = casos.filter(k => String(k.ConfirmadoPor || '').trim()
-    || normalizarTexto(k.StatusInvestigacao) === 'confirmado');
+  const confirmadas = casosParaRelatorio(casos, bancos.conciliacaoDesde);
   const comDispositivo = casos.filter(k => String(k.DispositivoAssociado || '').trim());
   /* O censo agregado dá o denominador POR SETOR; sem ele, só o total do hospital, a
      partir do censo individual (ver pacientesDia). */
@@ -1173,7 +1187,7 @@ const BANCOS_RELATORIOS = ['iras', 'culturas', 'higiene_maos', 'antibioticos', '
   'sepse', 'cirurgias', 'pacientes', 'uti'];
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { relatorioIRAS, relatorioMicrobiologico, relatorioHigiene,
+  module.exports = { relatorioIRAS, casosParaRelatorio, relatorioMicrobiologico, relatorioHigiene,
     relatorioAntibioticos, relatorioIsolamentos, relatorioSepse, relatorioPosAlta,
     relatorioResumoExecutivo, RELATORIOS_PADRAO, BANCOS_RELATORIOS, pacientesDia, pacientesDiaDoCenso,
     relMediana, relDiasEntre, mesAnteriorIntervalo,

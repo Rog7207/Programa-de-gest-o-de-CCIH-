@@ -150,6 +150,8 @@ async function montarRelatoriosPadrao(conteudo) {
       await Promise.all(BANCOS_RELATORIOS.map(async n => {
         try { bancos[n] = await lerBanco(n); } catch (e) { bancos[n] = {}; }
       }));
+      /* Data de início da conciliação com o Tasy: a partir dela só o caso digitado conta. */
+      bancos.conciliacaoDesde = config.conciliacaoDesde;
       const valor = selEscopo.value;
       let setoresEscopo = null, escopoRotulo = 'Hospital inteiro';
       if (valor.startsWith('g:')) {

@@ -782,8 +782,22 @@ async function montarConfiguracoes(conteudo) {
     mecanismosConhecidos = [...new Set(mecanismosConhecidos.concat(doBanco))].sort();
   } catch (e) { /* banco ainda não existe */ }
 
+  const campoConciliacao = el('input', { type: 'date', value: config.conciliacaoDesde || '' });
+  const msgConciliacao = el('span', { class: 'texto-suave' });
   conteudo.append(el('div', { class: 'cartao' },
     el('h2', {}, 'Rotina da instituição'),
+    el('div', { class: 'secao-termos' },
+      el('h3', {}, 'Conciliação de IRAS com o Tasy'),
+      el('p', { class: 'texto-suave' }, 'A partir desta data, só a infecção DIGITADA no Tasy (conciliada pela importação do export) conta nos relatórios; antes dela, a confirmada vale. Evita divergência entre os dois sistemas.'),
+      el('div', { class: 'linha-campos' }, el('label', {}, 'Início da conciliação: ', campoConciliacao),
+        el('button', { class: 'botao-secundario', onclick: async () => {
+          try {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(campoConciliacao.value)) throw new Error('Informe uma data.');
+            config.conciliacaoDesde = campoConciliacao.value;
+            await config.salvar();
+            msgConciliacao.textContent = `Salvo: conciliação desde ${campoConciliacao.value.split('-').reverse().join('/')}.`;
+          } catch (e) { msgConciliacao.textContent = e.message; }
+        } }, 'Salvar'), msgConciliacao)),
     grupoRotina('Antibióticos avaliados rotineiramente',
       'Só os marcados entram na fila de avaliação e na página remota dos médicos. Os demais seguem nos indicadores de uso normalmente.',
       (config.vocabulario.antibioticos || []).slice().sort(),

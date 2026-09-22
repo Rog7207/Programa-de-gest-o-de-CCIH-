@@ -171,7 +171,14 @@ async function importarArquivoAutomatico(arquivo) {
       }
     }
     const existentes = banco[definicao.abaDestino] || [];
-    const { novos } = deduplicar(validos, existentes, tipo);
+    let novos, conciliados = 0, conciliacao = null;
+    if (tipo === 'iras_tasy') {
+      conciliacao = conciliarComTasy(existentes, validos, { identidadeDe: identidadePorNome((await lerBanco('pacientes')).pacientes), desde: config.conciliacaoDesde });
+      conciliados = aplicarConciliacao(conciliacao.casados, app.usuario, hojeISO());
+      novos = conciliacao.soNoTasy;
+    } else {
+      novos = deduplicar(validos, existentes, tipo).novos;
+    }
     let internacoesAtualizadas = 0;
     if (tipo === 'internacoes') {
       internacoesAtualizadas = atualizarInternacoesExistentes(existentes, validos);
@@ -183,6 +190,7 @@ async function importarArquivoAutomatico(arquivo) {
     for (const registro of novos) {
       const id = gerarID();
       const linha = montarLinhaImportada(registro, tipo, id, app.usuario, agora, tempoCorte);
+      if (tipo === 'iras_tasy') { linha.DigitadoPor = app.usuario; linha.DigitadoEm = hojeISO(); }
       existentes.push(linha);
       for (const item of registro._antibiograma || []) {
         if (item.Antibiotico === NAO_ANTIMICROBIANO) continue;
@@ -197,7 +205,7 @@ async function importarArquivoAutomatico(arquivo) {
     banco[definicao.abaDestino] = existentes;
     if (definicao.permiteAntibiograma) banco.sensibilidade = (banco.sensibilidade || []).concat(linhasSensibilidade);
     if (linhasAvaliacao.length) banco.avaliacoes = (banco.avaliacoes || []).concat(linhasAvaliacao);
-    if (novos.length || internacoesAtualizadas || reparadasAntigas) await gravarBanco(definicao.destino, banco);
+    if (novos.length || internacoesAtualizadas || reparadasAntigas || conciliados) await gravarBanco(definicao.destino, banco);
 
     const bancoPacientes = await lerBanco('pacientes');
     const porProntuario = new Map(bancoPacientes.pacientes.map(p => [normalizarProntuario(p.Prontuario), p]));
@@ -230,6 +238,7 @@ async function importarArquivoAutomatico(arquivo) {
         + (naoCirurgias ? `, ${fmtInt(naoCirurgias)} não-cirurgias excluídas` : '')
         + (semIdentificacao ? `, ${fmtInt(semIdentificacao)} sem identificação excluídas` : '')
         + (prontuariosCorrigidos ? `, ${fmtInt(prontuariosCorrigidos)} prontuários corrigidos pelo atendimento ou pelo nome + data` : '')
+        + (conciliacao ? `, ${fmtInt(conciliados)} casos conciliados (digitados)` + (conciliacao.duplicadasNoTasy.length ? `, ⚠ ${fmtInt(conciliacao.duplicadasNoTasy.length)} duplicadas no Tasy ignoradas` : '') : '')
         + (reparadasAntigas ? `, ${fmtInt(reparadasAntigas)} registros antigos reparados` : '')
         + (casaveis ? `, ${fmtInt(casaveis)} registros do laboratório passíveis de unificação` : '')
     };
@@ -1223,8 +1232,18 @@ function aplicarDecisoes(linhasComErro) {
     resolverProntuarioPorAtendimento(registrosFinais, imp.bancoPacientes.internacoes || []);
   }
   const existentes = imp.bancoDestino[definicao.abaDestino] || [];
-  imp.dedup = deduplicar(registrosFinais, existentes, imp.tipo,
-    { identidadeDe: identidadePorNome((imp.bancoPacientes || {}).pacientes) });
+  const identidadeDe = identidadePorNome((imp.bancoPacientes || {}).pacientes);
+  if (imp.tipo === 'iras_tasy') {
+    /* Export do Tasy: a linha que casa com um caso daqui NÃO é registro novo — é a prova de
+       que foi digitado. Só o que existe apenas no Tasy entra; duplicata dentro do Tasy vira
+       aviso (corrige-se lá). */
+    imp.conciliacao = conciliarComTasy(existentes, registrosFinais, { identidadeDe, desde: config.conciliacaoDesde });
+    imp.dedup = { novos: imp.conciliacao.soNoTasy, duplicados: imp.conciliacao.casados.map(c => c.linha),
+      duplicadosInternos: imp.conciliacao.duplicadasNoTasy.map(d => d.linha) };
+  } else {
+    imp.conciliacao = null;
+    imp.dedup = deduplicar(registrosFinais, existentes, imp.tipo, { identidadeDe });
+  }
   imp.excluidosPorErro = linhasComErro.size;
 }
 
@@ -1251,8 +1270,19 @@ async function renderPasso4() {
   const amostra = d.novos.slice(0, 10);
 
   const areaTrava = el('div', {});
+  const c = imp.conciliacao;
+  const cartaoConciliacao = c ? el('div', { class: c.duplicadasNoTasy.length ? 'aviso-alerta' : 'cartao' },
+    el('div', { class: 'alerta-titulo' }, 'Conciliação com o Tasy'),
+    el('ul', {},
+      el('li', {}, `${fmtInt(c.casados.length)} caso(s) daqui viram "digitado" (têm par no Tasy).`),
+      el('li', {}, `${fmtInt(c.soNoTasy.length)} infecção(ões) só no Tasy: entram aqui já como digitadas, para revisão.`),
+      el('li', {}, `${fmtInt(c.soAqui.length)} confirmada(s) aqui sem par no Tasy: falta digitar (continuam na aba Infecções).`),
+      c.duplicadasNoTasy.length ? el('li', { class: 'aviso-erro-texto' },
+        `⚠ ${fmtInt(c.duplicadasNoTasy.length)} linha(s) do Tasy são o MESMO episódio de outra linha (duplicada no Tasy) — não entram; corrija no Tasy para os dois sistemas não divergirem: `
+        + c.duplicadasNoTasy.slice(0, 8).map(x => `id ${x.linha.ID_Tasy || '?'} (${x.linha.DataInfeccao} · ${x.linha.Topografia})`).join('; ')
+        + (c.duplicadasNoTasy.length > 8 ? '…' : '')) : null)) : null;
   const botaoConfirmar = el('button', { class: 'botao-primario', onclick: () => irParaPasso(4) },
-    d.novos.length ? 'Confirmar e gravar' : 'Salvar perfil e arquivar (nada novo)');
+    d.novos.length || (c && c.casados.length) ? 'Confirmar e gravar' : 'Salvar perfil e arquivar (nada novo)');
 
   imp.area.append(el('div', { class: 'cartao' },
     el('h2', {}, 'Prévia da importação'),
@@ -1262,6 +1292,7 @@ async function renderPasso4() {
     amostra.length ? el('table', { class: 'tabela' },
       el('thead', {}, el('tr', {}, colunas.map(c => el('th', {}, c)))),
       el('tbody', {}, amostra.map(r => el('tr', {}, colunas.map(c => el('td', {}, String(r[c] || ''))))))) : null,
+    cartaoConciliacao,
     amostra.length ? el('p', { class: 'texto-suave' }, 'Amostra dos primeiros registros novos.') : null,
     imp.identificadasProvisorias ? el('p', { class: 'texto-suave' },
       'Cirurgias sem internação correspondente (ambulatoriais ou período não importado) entram com registro provisório AT-<atendimento>, guardando nome e telefone do relatório — a aba Pacientes as lista para unificação quando o prontuário aparecer.') : null,
@@ -1321,6 +1352,15 @@ async function renderPasso5() {
       }
     }
     const existentes = banco[definicao.abaDestino] || [];
+    /* Conciliação com o Tasy: os casos daqui com par ganham status digitado + id do Tasy. */
+    let conciliados = 0;
+    if (imp.conciliacao) {
+      const porID = new Map(existentes.map(k => [k.ID_IRAS, k]));
+      const pares = imp.conciliacao.casados.map(({ caso, linha }) => ({ caso: porID.get(caso.ID_IRAS) || caso, linha }));
+      conciliados = aplicarConciliacao(pares, app.usuario, hojeISO());
+      anotar(`Conciliação: ${fmtInt(conciliados)} caso(s) marcados como digitados no Tasy`
+        + (imp.conciliacao.duplicadasNoTasy.length ? `; ${fmtInt(imp.conciliacao.duplicadasNoTasy.length)} linha(s) duplicadas no Tasy ignoradas` : '') + '.');
+    }
     if (definicao.modo === 'atualizar_internacoes') {
       const todos = imp.dedup.novos.concat(imp.dedup.duplicados, imp.dedup.duplicadosInternos);
       const resultado = aplicarAltas(banco.internacoes || [], todos);
@@ -1361,13 +1401,14 @@ async function renderPasso5() {
         + `${fmtInt(encerradas)} precauções encerradas por não constarem mais.`);
     }
 
-    if (novos.length || encerradas) {
+    if (novos.length || encerradas || conciliados) {
       const gerarID = proximoID(existentes, definicao.campoID, definicao.prefixoID);
       const tempoCorte = config.tempoCortePorProcedimento();
       const linhasSensibilidade = [];
       for (const registro of novos) {
         const id = gerarID();
         const linha = montarLinhaImportada(registro, imp.tipo, id, app.usuario, agora, tempoCorte);
+        if (imp.tipo === 'iras_tasy') { linha.DigitadoPor = app.usuario; linha.DigitadoEm = hojeISO(); }
         existentes.push(linha);
         for (const item of registro._antibiograma || []) {
           if (item.Antibiotico === NAO_ANTIMICROBIANO) continue;

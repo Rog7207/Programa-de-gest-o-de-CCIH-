@@ -18,6 +18,10 @@ const config = {
   /* Grupos de setores para os relatórios padrão: [{Grupo, Setor}] — uma linha por membro
      (ex.: "UTIs" reúne o CTI e a UTI Neonatal). */
   gruposSetores: [],
+  /* Conciliação com o Tasy (decisão da CCIH do HNSC, 22/09/2026): a partir desta data só o
+     caso DIGITADO no Tasy conta nos relatórios; antes dela, o confirmado vale. Guardada na aba
+     meta do config.xlsx (chave conciliacao_desde). */
+  conciliacaoDesde: '2026-07-01',
 
   async carregar() {
     const dados = await lerBanco('config');
@@ -35,6 +39,8 @@ const config = {
     for (const v of Object.keys(this.vocabulario)) {
       this.vocabulario[v] = (dados[v] || []).map(l => l.Nome).filter(Boolean);
     }
+    const metaConciliacao = (dados.meta || []).find(l => l.Chave === 'conciliacao_desde');
+    if (metaConciliacao && /^\d{4}-\d{2}-\d{2}$/.test(String(metaConciliacao.Valor || ''))) this.conciliacaoDesde = String(metaConciliacao.Valor);
     this.garantirCategoriasDeProcedimento();
   },
 
@@ -92,6 +98,9 @@ const config = {
     if (!meta.some(l => l.Chave === 'versao_vocabulario')) {
       meta.push({ Chave: 'versao_vocabulario', Valor: String(VOCAB_VERSAO) });
     }
+    const linhaConciliacao = meta.find(l => l.Chave === 'conciliacao_desde');
+    if (linhaConciliacao) linhaConciliacao.Valor = this.conciliacaoDesde;
+    else meta.push({ Chave: 'conciliacao_desde', Valor: this.conciliacaoDesde });
     const abas = { perfis: this.perfis, aliases: this.aliases, procedimentos_nhsn: this.procedimentosNHSN,
       antimicrobianos: this.antimicrobianos, meta,
       atb_avaliados: this.rotina.atbAvaliados.map(n => ({ Nome: n })),

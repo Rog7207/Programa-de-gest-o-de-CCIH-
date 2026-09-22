@@ -1266,6 +1266,73 @@ console.log('\n== 80c. Surtos em hospital grande: linha de base endêmica, clone
   verificar('com investigação, vale a situação dela', al.situacaoDaSuspeita(velho, { Situacao: 'confirmado' }, '2026-09-22') === 'confirmado');
 }
 
+console.log('\n== 86. IRAS: conciliação com o Tasy, status digitado, agente da infecção e fichas ==');
+{
+  const rel = require(path.join(__dirname, '..', 'js', 'relatorios.js'));
+  const idNome = imp.identidadePorNome([{ Prontuario: '100', Nome: 'Ana' }, { Prontuario: '80000100', Nome: 'Ana' }, { Prontuario: '200', Nome: 'Beto' }, { Prontuario: '300', Nome: 'Cida' }]);
+  const casos = [
+    { ID_IRAS: 'IRA-1', Prontuario: '100', DataInfeccao: '2026-07-10', Topografia: 'Pneumonia associada à ventilação mecânica (PAV)', StatusInvestigacao: 'confirmado' },
+    { ID_IRAS: 'IRA-2', Prontuario: '200', DataInfeccao: '2026-07-12', Topografia: 'ITU associada a cateter vesical', StatusInvestigacao: 'confirmado' },
+    { ID_IRAS: 'IRA-3', Prontuario: '300', DataInfeccao: '2026-07-15', Topografia: 'ISC incisional superficial', StatusInvestigacao: 'descartado' },
+    { ID_IRAS: 'IRA-4', Prontuario: '100', DataInfeccao: '2026-05-02', Topografia: 'ITU', StatusInvestigacao: 'confirmado' }
+  ];
+  const tasy = [
+    { ID_Tasy: 'T1', Prontuario: '80000100', DataInfeccao: '2026-07-12', Topografia: 'PAV' },        /* IRA-1: outro número da mesma pessoa, 2 d depois */
+    { ID_Tasy: 'T2', Prontuario: '80000100', DataInfeccao: '2026-07-13', Topografia: 'Pneumonia' },  /* duplicada no Tasy (mesmo episódio de T1) */
+    { ID_Tasy: 'T3', Prontuario: '300', DataInfeccao: '2026-07-15', Topografia: 'ISC' },              /* aqui está descartada: fica "só no Tasy" */
+    { ID_Tasy: 'T4', Prontuario: '400', DataInfeccao: '2026-07-20', Topografia: 'IPCS' },             /* só no Tasy */
+    { ID_Tasy: 'T5', Prontuario: '400', DataInfeccao: '2026-07-22', Topografia: 'IPCSL' }             /* duplicada dentro do próprio Tasy */
+  ];
+  const r = imp.conciliarComTasy(casos, tasy, { identidadeDe: idNome, desde: '2026-07-01' });
+  verificar('casa pelo episódio (identidade + 7 d + grupo de topografia)', r.casados.length === 1 && r.casados[0].caso.ID_IRAS === 'IRA-1' && r.casados[0].linha.ID_Tasy === 'T1', r.casados);
+  verificar('segunda linha do Tasy para o mesmo episódio é duplicada (aviso), não caso novo',
+    r.duplicadasNoTasy.length === 2 && r.duplicadasNoTasy.some(d => d.linha.ID_Tasy === 'T2') && r.duplicadasNoTasy.some(d => d.linha.ID_Tasy === 'T5'), r.duplicadasNoTasy.map(d => d.linha.ID_Tasy));
+  verificar('só no Tasy: a descartada aqui e a que não existe aqui', r.soNoTasy.map(l => l.ID_Tasy).sort().join() === 'T3,T4', r.soNoTasy);
+  verificar('só aqui (falta digitar): confirmadas desde a data sem par; a de maio fica de fora', r.soAqui.map(k => k.ID_IRAS).join() === 'IRA-2', r.soAqui);
+  const n = imp.aplicarConciliacao(r.casados, 'Enf', '2026-09-22');
+  verificar('aplicar marca digitado com id do Tasy, quem e quando', n === 1 && casos[0].StatusInvestigacao === 'digitado' && casos[0].ID_Tasy === 'T1' && casos[0].DigitadoPor === 'Enf' && casos[0].DigitadoEm === '2026-09-22');
+  /* Reentrada: o mesmo export de novo casa por id e não muda nada. */
+  const r2 = imp.conciliarComTasy(casos, tasy, { identidadeDe: idNome, desde: '2026-07-01' });
+  verificar('reimportar o mesmo export casa por ID_Tasy e não cria nada', r2.casados.length === 1 && imp.aplicarConciliacao(r2.casados, 'Enf', '2026-09-23') === 0 && casos[0].DigitadoEm === '2026-09-22');
+
+  /* Relatórios: antes da data, confirmado vale; a partir dela, só digitado. */
+  const validos = rel.casosParaRelatorio(casos, '2026-07-01').map(k => k.ID_IRAS);
+  verificar('casosParaRelatorio: IRA-1 (digitado) e IRA-4 (confirmado antes do corte); IRA-2 confirmado depois NÃO conta',
+    validos.sort().join() === 'IRA-1,IRA-4', validos);
+  verificar('sem data de corte, confirmado e digitado contam', rel.casosParaRelatorio(casos, '').length === 3);
+
+  /* Agente da infecção: culturas positivas válidas do paciente em ±14 d. */
+  const culturas = [
+    { ID_Cultura: 'C1', Prontuario: '80000100', DataColeta: '2026-07-09', Material: 'Secreção traqueal', Microrganismo: 'Pseudomonas aeruginosa', StatusRevisao: 'avaliada', AvaliacaoCCIH: 'IRAS' },
+    { ID_Cultura: 'C2', Prontuario: '100', DataColeta: '2026-07-11', Material: 'Hemocultura', Microrganismo: 'Staphylococcus coagulase-negativo', StatusRevisao: 'avaliada', AvaliacaoCCIH: 'Contaminação' },
+    { ID_Cultura: 'C3', Prontuario: '100', DataColeta: '2026-05-01', Material: 'Urocultura', Microrganismo: 'Escherichia coli', StatusRevisao: 'pendente', AvaliacaoCCIH: '' },
+    { ID_Cultura: 'C4', Prontuario: '100', DataColeta: '2026-07-12', Material: 'Hemocultura', Microrganismo: '', StatusRevisao: 'triagem', AvaliacaoCCIH: 'Negativa' }
+  ];
+  const cand = imp.culturasDoEpisodio(culturas, casos[0], { identidadeDe: idNome }).map(c => c.ID_Cultura);
+  verificar('candidatas a agente: só a positiva válida do episódio (outro número da mesma pessoa conta; contaminação/negativa/fora da janela não)',
+    cand.join() === 'C1', cand);
+
+  /* Ficha de notificação: dados principais tirados do banco; HTML com 2 por página. */
+  const bancos = {
+    pacientes: { pacientes: [{ Prontuario: '100', Nome: 'Ana', DataNascimento: '1960-01-01', Sexo: 'F' }],
+      internacoes: [{ Prontuario: '100', Atendimento: 'A1', DataInternacao: '2026-07-01', DataAlta: '2026-07-20', SetorAtual: 'Emergência' }] },
+    culturas: { culturas, sensibilidade: [{ ID_Cultura: 'C1', Antibiotico: 'Meropenem', Resultado: 'R' }, { ID_Cultura: 'C1', Antibiotico: 'Amicacina', Resultado: 'S' }] },
+    cirurgias: { cirurgias: [{ Prontuario: '100', DataCirurgia: '2026-07-03', Procedimento: 'Laparotomia', ProcedimentoNHSN: 'Laparotomia exploradora', PotencialContaminacao: '' }] },
+    dispositivos: { dispositivos: [{ Prontuario: '100', Dispositivo: 'VM', DataInstalacao: '2026-07-02', DataRetirada: '' }] },
+    denominadores: { passagem_setor: [{ Atendimento: 'A1', Setor: 'Emergência', EntradaSetor: '2026-07-01', SaidaSetor: '2026-07-02' }, { Atendimento: 'A1', Setor: 'CTI', EntradaSetor: '2026-07-02', SaidaSetor: '' }] }
+  };
+  const caso = { ...casos[0], ID_CulturaAgente: 'C1', Microrganismo: 'Pseudomonas aeruginosa', Setor: 'CTI', CriadoPor: 'Enf', CriadoEm: '2026-07-11 10:00', ConfirmadoPor: 'Dr', ConfirmadoEm: '2026-07-12' };
+  const f = imp.fichaDeNotificacao(caso, bancos, { identidadeDe: idNome });
+  verificar('ficha: internação cobrindo, 10º dia, passagens, dispositivo, cirurgia e agente com resistentes',
+    f.internacao && f.internacao.entrada === '2026-07-01' && f.internacao.diaDaInternacao === 10 && f.passagens.length === 2
+    && f.dispositivos.length === 1 && f.cirurgias.length === 1 && f.agente.microrganismo === 'Pseudomonas aeruginosa' && f.agente.resistentes.join() === 'Meropenem', JSON.stringify(f).slice(0, 300));
+  const html = imp.htmlDasFichas([f, f, f], { usuario: 'Enf', geradoEm: '2026-09-22 10:00' });
+  verificar('HTML: 3 fichas, quebra de página a cada 2, escapa texto e traz o rodapé para quem digita',
+    (html.match(/class="ficha"/g) || []).length === 3 && /nth-of-type\(2n\)\{page-break-after:always\}/.test(html) && /Digitado no Tasy em/.test(html) && /Resistente a: Meropenem/.test(html));
+  verificar('caso sem cultura vinculada e sem agente mostra "Sem cultura positiva válida"',
+    /Sem cultura positiva válida/.test(imp.htmlDasFichas([imp.fichaDeNotificacao({ ...caso, ID_CulturaAgente: '', Microrganismo: '' }, bancos, { identidadeDe: idNome })])));
+}
+
 console.log('\n== 32. Culturas do protocolo de sepse ==');
 {
   const indice = imp.indiceSepse([

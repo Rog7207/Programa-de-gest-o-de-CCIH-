@@ -147,7 +147,15 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 <li>completa topografia, dispositivo, germe e critério;</li>
 <li><strong>confirma</strong> (fica registrado quem notificou e quem confirmou) ou <strong>descarta</strong>.</li>
 </ul>
-<p>Se você tentar confirmar uma suspeita que você mesmo abriu, o app avisa — não impede, mas o ideal é que sejam duas pessoas. Os indicadores contam apenas as confirmadas.</p>
+<p>Se você tentar confirmar uma suspeita que você mesmo abriu, o app avisa — não impede, mas o ideal é que sejam duas pessoas.</p>
+<p><strong>Agente da infecção</strong>: na confirmação, o germe é escolhido entre as <strong>culturas positivas válidas do paciente em ±14 dias</strong> (a cultura escolhida fica vinculada ao caso), ou "Sem cultura positiva válida", ou outro nome digitado.</p>
+<p><strong>Digitação no Tasy e conciliação</strong> (o passo final do processo):</p>
+<ol>
+<li>A aba Infecções lista as confirmadas <strong>aguardando digitação</strong>; marque-as e clique <strong>Imprimir fichas</strong> — saem 2 fichas por página (identificação, internação e passagem por setores, dispositivos invasivos, cirurgias, a infecção, o agente com as resistências) e o arquivo fica guardado em <code>fichas/</code> na pasta de dados, como registro.</li>
+<li>Digite as infecções no prontuário (Tasy).</li>
+<li>Importe o export de IRAS do Tasy (aba Importar, tipo <strong>"IRAS digitadas no Tasy"</strong>). A conciliação casa cada linha com o caso daqui (mesmo paciente, data em até 7 dias, mesma topografia) e o marca como <strong>digitado</strong>; o que existe só no Tasy entra aqui já como digitado, para revisão; e se o Tasy tiver <strong>duas linhas para o mesmo episódio</strong>, o app avisa e não deixa entrar a segunda — corrija no Tasy. Reimportar o mesmo export não duplica nada.</li>
+<li>A partir da <strong>data de início da conciliação</strong> (Configurações → Rotina; 01/07/2026 no HNSC), <strong>só a infecção digitada conta nos relatórios</strong> — antes dela, a confirmada vale. É o que impede os dois sistemas de divergirem.</li>
+</ol>
 <p><strong>Sem duplicatas</strong>: o mesmo episódio costuma ser detectado por mais de um caminho (uma cultura revisada, o contato da pós-alta, uma planilha importada). O app reconhece o episódio — mesmo paciente, mesma topografia (contando siglas como ITU, PAV, IPCS e ISC) e datas até 14 dias entre si — e, em vez de abrir um caso novo, completa os campos vazios do existente. Duplicatas antigas aparecem no topo da aba Infecções com o botão <strong>Fundir duplicatas</strong>: fica o caso mais forte (decisão da segunda assinatura vale mais), e a fusão fica registrada nas observações.</p>
 <hr>
 <h2>9. Vigilância pós-alta (cirurgias)</h2>

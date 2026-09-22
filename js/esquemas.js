@@ -12,7 +12,7 @@ const ESQUEMAS = {
   culturas: {
     arquivo: 'culturas.xlsx',
     abas: {
-      culturas: ['ID_Cultura', 'IDOrigem', 'Prontuario', 'DataColeta', 'DataResultado', 'Setor', 'Material', 'Sitio', 'Resultado', 'Microrganismo', 'MecanismoResistencia', 'Antibiograma', 'StatusRevisao', 'AvaliacaoCCIH', 'CriadoPor', 'CriadoEm'],
+      culturas: ['ID_Cultura', 'IDOrigem', 'Prontuario', 'DataColeta', 'DataResultado', 'Setor', 'Material', 'Sitio', 'Resultado', 'Microrganismo', 'MecanismoResistencia', 'Antibiograma', 'StatusRevisao', 'AvaliacaoCCIH', 'CriadoPor', 'CriadoEm', 'ID_IRAS'],
       sensibilidade: ['ID_Cultura', 'Antibiotico', 'Resultado']
     }
   },
@@ -94,7 +94,13 @@ const ESQUEMAS = {
          vinculada (scripts/corrigir-agentes-iras.js) — a cultura ligada pode ser a errada,
          então toda correção fica visível e reversível. AgenteOriginal guarda o valor
          PRIMITIVO (nunca sobrescrito por correções posteriores). */
-      casos: ['ID_IRAS', 'Prontuario', 'DataInfeccao', 'Topografia', 'CriterioDiagnostico', 'Setor', 'DispositivoAssociado', 'Microrganismo', 'AgenteOriginal', 'ID_CulturaAgente', 'Desfecho', 'StatusInvestigacao', 'NotificadoANVISA', 'Observacoes', 'ConfirmadoPor', 'ConfirmadoEm', 'CriadoPor', 'CriadoEm']
+      /* Ciclo (CCIH do HNSC, 22/09/2026): em investigação → confirmado → DIGITADO no Tasy.
+         ID_Tasy é o id da linha no export do Tasy (conciliação sem duplicar na reentrada);
+         FichaEm é quando a ficha de notificação foi impressa. */
+      casos: ['ID_IRAS', 'Prontuario', 'DataInfeccao', 'Topografia', 'CriterioDiagnostico', 'Setor', 'DispositivoAssociado', 'Microrganismo', 'AgenteOriginal', 'ID_CulturaAgente', 'Desfecho', 'StatusInvestigacao', 'NotificadoANVISA', 'Observacoes', 'ConfirmadoPor', 'ConfirmadoEm', 'ID_Tasy', 'DigitadoPor', 'DigitadoEm', 'FichaEm', 'CriadoPor', 'CriadoEm'],
+      /* Fichas de notificação impressas: o arquivo fica em fichas/ dentro da pasta de dados
+         (registro do que foi usado na digitação); Casos = IDs separados por ';'. */
+      fichas: ['ID_Ficha', 'Arquivo', 'Casos', 'CriadoPor', 'CriadoEm']
     }
   },
   /* Censo mensal agregado por setor: os denominadores que o censo individual não dá.
@@ -603,6 +609,35 @@ const TIPOS_RELATORIO = {
       { id: 'Desfecho', rotulo: 'Desfecho', tipo: 'texto', sinonimos: ['desfecho', 'evolucao', 'resultado'] }
     ],
     fixos: { StatusInvestigacao: 'confirmado', NotificadoANVISA: '' }
+  },
+  /* Export de IRAS do Tasy (conciliação). A linha do Tasy NÃO vira caso novo quando já
+     existe o episódio aqui: o caso daqui ganha status "digitado" e o id do Tasy (ver
+     conciliarComTasy). Só o que existe apenas no Tasy entra, já como digitado. */
+  iras_tasy: {
+    rotulo: 'IRAS digitadas no Tasy (conciliação)',
+    destino: 'iras',
+    abaDestino: 'casos',
+    prefixoID: 'IRA',
+    campoID: 'ID_IRAS',
+    permiteAntibiograma: false,
+    chaveOrigem: 'ID_Tasy',
+    chaveNatural: ['Prontuario', 'DataInfeccao', 'Topografia'],
+    exigeUmDe: ['Prontuario', 'Atendimento'],
+    resolvePorAtendimento: true,
+    campos: [
+      { id: 'ID_Tasy', rotulo: 'Id da linha no Tasy', tipo: 'texto', sinonimos: ['id', 'nrsequencia', 'sequencia', 'codigo', 'idiras', 'nriras', 'nrinfeccao'] },
+      { id: 'Prontuario', rotulo: 'Prontuário', tipo: 'texto', sinonimos: ['prontuario', 'pront', 'nprontuario', 'numprontuario', 'registro', 'matricula', 'codigopaciente', 'codpaciente'] },
+      { id: 'Atendimento', rotulo: 'Nº do atendimento', tipo: 'texto', sinonimos: ['atendimento', 'nratendimento', 'numerodoatendimento', 'atend'] },
+      { id: 'NomePaciente', rotulo: 'Nome do paciente', tipo: 'texto', paraPacientes: true, sinonimos: ['nome', 'paciente', 'nomepaciente', 'nomedopaciente', 'pacientenome'] },
+      { id: 'DataInfeccao', rotulo: 'Data da infecção', obrigatorio: true, tipo: 'data', sinonimos: ['datainfeccao', 'datadainfeccao', 'datadiagnostico', 'dtinfeccao', 'data'] },
+      { id: 'Topografia', rotulo: 'Topografia', obrigatorio: true, tipo: 'vocab', vocab: 'topografias', sinonimos: ['topografia', 'sitio', 'tipodeinfeccao', 'tipoinfeccao', 'infeccao', 'tipoiras', 'grupoiras'] },
+      { id: 'StatusOrigem', rotulo: 'Situação no Tasy', tipo: 'texto', sinonimos: ['status', 'statusdesc', 'situacao'] },
+      { id: 'Setor', rotulo: 'Setor', tipo: 'vocab', vocab: 'setores', sinonimos: ['setor', 'setordesc', 'unidade'] },
+      { id: 'Microrganismo', rotulo: 'Microrganismo', tipo: 'vocab', vocab: 'microrganismos', sinonimos: ['microrganismo', 'microorganismo', 'culturamicrorganismo', 'germe', 'agente'] },
+      { id: 'MecanismoResistencia', rotulo: 'Resistência', tipo: 'texto', sinonimos: ['culturaresistencia', 'resistencia', 'mecanismo'] },
+      { id: 'Procedimento', rotulo: 'Procedimento cirúrgico', tipo: 'texto', sinonimos: ['cirurgiaprocedimento', 'procedimento'] }
+    ],
+    fixos: { StatusInvestigacao: 'digitado', CriterioDiagnostico: 'Registrado no Tasy', NotificadoANVISA: '' }
   },
   censo_setor: {
     rotulo: 'Censo mensal por setor (denominadores)',

@@ -118,6 +118,71 @@ async function montarInfeccoes(conteudo) {
   const areaSuspeitas = el('div', {});
   conteudo.insertBefore(areaSuspeitas, area);
 
+  /* ---- Digitação no Tasy: fichas e conciliação (CCIH do HNSC, 22/09/2026) ----
+     Confirmada aqui → ficha impressa (2 por página, arquivo guardado em fichas/) → digitada
+     no Tasy → o export do Tasy volta pela aba Importar (tipo "IRAS digitadas no Tasy") e a
+     conciliação marca o caso como DIGITADO. A partir da data de início da conciliação, só o
+     digitado conta nos relatórios. */
+  const areaDigitacao = el('div', {});
+  conteudo.insertBefore(areaDigitacao, area);
+  function desenharDigitacao() {
+    const desde = config.conciliacaoDesde || '';
+    const aguardando = casos.filter(k => k.StatusInvestigacao === 'confirmado' && String(k.DataInfeccao || '').slice(0, 10) >= desde)
+      .sort((a, b) => String(a.DataInfeccao).localeCompare(String(b.DataInfeccao)));
+    const digitadas = casos.filter(k => k.StatusInvestigacao === 'digitado').length;
+    if (!aguardando.length && !digitadas) { areaDigitacao.replaceChildren(); return; }
+    const caixas = aguardando.map(() => el('input', { type: 'checkbox', checked: '' }));
+    const msg = el('p', { class: 'aviso-erro-texto' });
+    const imprimir = async () => {
+      const escolhidos = aguardando.filter((k, i) => caixas[i].checked);
+      if (!escolhidos.length) { msg.textContent = 'Marque ao menos um caso.'; return; }
+      try {
+        msg.className = 'texto-suave'; msg.textContent = 'Montando fichas…';
+        const [bCir, bDisp, bDen] = await Promise.all([
+          lerBanco('cirurgias').catch(() => ({ cirurgias: [] })),
+          lerBanco('dispositivos').catch(() => ({ dispositivos: [] })),
+          lerBanco('denominadores').catch(() => ({ passagem_setor: [] }))]);
+        const bancos = { pacientes: bancoPacientes, culturas: bancoCulturas, cirurgias: bCir, dispositivos: bDisp, denominadores: bDen };
+        const fichas = escolhidos.map(k => fichaDeNotificacao(k, bancos, { identidadeDe }));
+        const html = htmlDasFichas(fichas, { usuario: app.usuario, geradoEm: agoraCurto() });
+        /* Registro: o arquivo fica na pasta de dados (fichas/), e cada caso guarda FichaEm. */
+        const nomeArquivo = `${agoraCurto().replace(/[: ]/g, '-')}_fichas-iras.html`;
+        const dir = await pasta.subpasta('fichas');
+        const fh = await dir.getFileHandle(nomeArquivo, { create: true });
+        const w = await fh.createWritable(); await w.write(html); await w.close();
+        await comTrava(['iras'], async () => {
+          const atual = await lerBanco('iras');
+          atual.fichas = atual.fichas || [];
+          atual.fichas.push({ ID_Ficha: proximoIDLista(atual.fichas, 'ID_Ficha', 'FIC'), Arquivo: 'fichas/' + nomeArquivo,
+            Casos: escolhidos.map(k => k.ID_IRAS).join(';'), CriadoPor: app.usuario, CriadoEm: agoraCurto() });
+          for (const k of escolhidos) { const alvo = atual.casos.find(x => x.ID_IRAS === k.ID_IRAS); if (alvo) alvo.FichaEm = hojeISO(); }
+          await gravarBanco('iras', atual);
+        });
+        const janela = window.open('', '_blank');
+        if (!janela) { msg.className = 'aviso-erro-texto'; msg.textContent = `Fichas gravadas em fichas/${nomeArquivo}, mas o navegador bloqueou a janela de impressão — libere pop-ups.`; return; }
+        janela.document.write(html); janela.document.close(); janela.focus(); janela.print();
+        msg.textContent = `${fmtInt(escolhidos.length)} ficha(s) impressa(s) e guardada(s) em fichas/${nomeArquivo}.`;
+      } catch (e) { msg.className = 'aviso-erro-texto'; msg.textContent = e.message; }
+    };
+    areaDigitacao.replaceChildren(el('div', { class: 'cartao' },
+      el('h2', {}, `Digitação no Tasy — ${fmtInt(aguardando.length)} confirmada(s) aguardando, ${fmtInt(digitadas)} digitada(s)`),
+      el('p', { class: 'texto-suave' },
+        `Desde ${desde.split('-').reverse().join('/')} só a infecção DIGITADA no Tasy conta nos relatórios. Fluxo: imprimir as fichas `
+        + '(2 por página; o arquivo fica em fichas/ na pasta de dados), digitar no Tasy e importar o export do Tasy '
+        + '(aba Importar, tipo "IRAS digitadas no Tasy") — a conciliação marca cada caso como digitado. '
+        + 'Casos com ficha já impressa mostram a data.'),
+      aguardando.length ? el('table', { class: 'tabela' },
+        el('thead', {}, el('tr', {}, el('th', {}), ['Data', 'Paciente', 'Topografia', 'Setor', 'Agente', 'Ficha impressa'].map(c => el('th', {}, c)))),
+        el('tbody', {}, aguardando.map((k, i) => el('tr', {},
+          el('td', {}, caixas[i]),
+          ...[k.DataInfeccao, nomes.get(normalizarProntuario(k.Prontuario)) || k.Prontuario, k.Topografia, k.Setor, k.Microrganismo, k.FichaEm]
+            .map(v => el('td', {}, String(v || ''))))))) : null,
+      aguardando.length ? el('div', { class: 'linha-botoes' },
+        el('button', { class: 'botao-primario', onclick: imprimir }, 'Imprimir fichas selecionadas')) : null,
+      msg));
+  }
+  desenharDigitacao();
+
   /* ---- Duplicatas: o mesmo episódio aberto por caminhos diferentes ----
      A prevenção age na entrada (registrarCasoIras, em todas as telas e importações), mas
      o banco acumulou duplicatas de antes — e fundir REMOVE linhas, então só acontece com
@@ -196,7 +261,21 @@ async function montarInfeccoes(conteudo) {
       topografias.includes(caso.Topografia) ? null : el('option', { value: caso.Topografia, selected: '' }, caso.Topografia));
     const selDisp = el('select', {}, ['', 'CVC', 'VM', 'SVD', 'Nenhum'].map(d =>
       el('option', { value: d, selected: d === (caso.DispositivoAssociado || '') ? '' : null }, d || '—')));
-    const campoMicro = el('input', { type: 'text', value: caso.Microrganismo || '', placeholder: 'microrganismo (opcional)' });
+    /* Agente ↔ infecção (decisão da CCIH, 22/09/2026): escolhe-se a CULTURA que definiu a
+       infecção (positivas válidas do paciente em ±14 dias), ou "Sem cultura positiva válida",
+       ou outro nome digitado. A cultura escolhida ganha o ID_IRAS. */
+    const candidatas = culturasDoEpisodio(culturas, caso, { identidadeDe });
+    const opcoesAgente = [
+      el('option', { value: '' }, '— escolher —'),
+      ...candidatas.map(c => el('option', { value: c.ID_Cultura, selected: c.ID_Cultura === caso.ID_CulturaAgente ? '' : null },
+        `${c.DataColeta} · ${c.Material} · ${c.Microrganismo}${c.MecanismoResistencia ? ' (' + c.MecanismoResistencia + ')' : ''}`)),
+      el('option', { value: '__sem__', selected: caso.Microrganismo === SEM_CULTURA_VALIDA ? '' : null }, SEM_CULTURA_VALIDA),
+      el('option', { value: '__outro__', selected: caso.Microrganismo && caso.Microrganismo !== SEM_CULTURA_VALIDA && !caso.ID_CulturaAgente ? '' : null }, 'Outro (digitar)…')
+    ];
+    const selAgente = el('select', {}, opcoesAgente);
+    const campoMicro = el('input', { type: 'text', value: caso.ID_CulturaAgente ? '' : (caso.Microrganismo === SEM_CULTURA_VALIDA ? '' : caso.Microrganismo || ''),
+      placeholder: 'microrganismo', style: selAgente.value === '__outro__' ? '' : 'display:none' });
+    selAgente.addEventListener('change', () => { campoMicro.style.display = selAgente.value === '__outro__' ? '' : 'none'; });
     const campoCriterio = el('input', { type: 'text', value: caso.CriterioDiagnostico || '', style: 'width:320px' });
     const campoNovaObs = el('textarea', { rows: 2, style: 'width:100%',
       placeholder: 'observação da segunda análise (opcional) — entra no diário do caso' });
@@ -205,13 +284,21 @@ async function montarInfeccoes(conteudo) {
 
     async function decidir(statusNovo) {
       try {
-        await comTrava(['iras', 'cirurgias'], async () => {
+        await comTrava(['iras', 'cirurgias', 'culturas'], async () => {
           const atualIras = await lerBanco('iras');
           const alvo = atualIras.casos.find(k => k.ID_IRAS === caso.ID_IRAS);
           if (!alvo) throw new Error('Caso não encontrado no banco.');
           alvo.Topografia = selTopo.value;
           alvo.DispositivoAssociado = selDisp.value;
-          alvo.Microrganismo = campoMicro.value;
+          const escolha = selAgente.value;
+          if (escolha === '__sem__') { alvo.Microrganismo = SEM_CULTURA_VALIDA; alvo.ID_CulturaAgente = ''; }
+          else if (escolha === '__outro__' || !escolha) { alvo.Microrganismo = campoMicro.value.trim(); alvo.ID_CulturaAgente = ''; }
+          else {
+            const cul = culturas.find(c => c.ID_Cultura === escolha);
+            alvo.Microrganismo = cul ? cul.Microrganismo : alvo.Microrganismo;
+            alvo.ID_CulturaAgente = escolha;
+          }
+          if (!String(alvo.AgenteOriginal || '').trim() && String(alvo.Microrganismo || '').trim()) alvo.AgenteOriginal = alvo.Microrganismo;
           alvo.CriterioDiagnostico = campoCriterio.value;
           alvo.Observacoes = acrescentarObservacao(alvo.Observacoes,
             'Segunda análise', campoNovaObs.value, app.usuario, agoraCurto());
@@ -219,6 +306,17 @@ async function montarInfeccoes(conteudo) {
           alvo.ConfirmadoPor = app.usuario;
           alvo.ConfirmadoEm = hojeISO();
           await gravarBanco('iras', atualIras);
+          /* A cultura que definiu a infecção aponta para o caso (e só ela). */
+          if (statusNovo === 'confirmado') {
+            const atualCul = await lerBanco('culturas');
+            let mudou = false;
+            for (const c of atualCul.culturas || []) {
+              const deveApontar = c.ID_Cultura === alvo.ID_CulturaAgente;
+              if (deveApontar && c.ID_IRAS !== alvo.ID_IRAS) { c.ID_IRAS = alvo.ID_IRAS; mudou = true; }
+              else if (!deveApontar && c.ID_IRAS === alvo.ID_IRAS) { c.ID_IRAS = ''; mudou = true; }
+            }
+            if (mudou) await gravarBanco('culturas', atualCul);
+          }
           /* Suspeita que veio da vigilância pós-alta fecha o ciclo lá também. */
           const atualCir = await lerBanco('cirurgias');
           const cirurgia = atualCir.cirurgias.find(c => c.ID_IRAS === caso.ID_IRAS);
@@ -248,7 +346,7 @@ async function montarInfeccoes(conteudo) {
         el('label', {}, 'Topografia: ', selTopo),
         el('label', {}, 'Dispositivo: ', selDisp)),
       el('div', { class: 'linha-campos' },
-        el('label', {}, 'Microrganismo: ', campoMicro),
+        el('label', {}, 'Agente (cultura): ', selAgente), campoMicro,
         el('label', {}, 'Critério: ', campoCriterio)),
       String(caso.Observacoes || '').trim()
         ? el('p', { class: 'texto-suave', style: 'white-space:pre-line;border-left:3px solid #ccc;padding-left:8px' },
@@ -345,6 +443,8 @@ async function montarInfeccoes(conteudo) {
             : 'Sem internações importadas cobrindo este período'),
         cartaoNumero(fmtInt(comMecanismo.length), 'com mecanismo de resistência',
           'IRAS por germe multirresistente'),
+        cartaoNumero(fmtInt(casosPeriodo.filter(k => k.StatusInvestigacao === 'digitado').length),
+          'digitadas no Tasy', 'Casos conciliados com o Tasy — os que valem nos relatórios a partir da data de início da conciliação'),
         cartaoNumero(fmtInt(casosPeriodo.filter(k => k.StatusInvestigacao === 'confirmado').length),
           'notificações confirmadas',
           'Casos de IRAS com as duas assinaturas (quem notificou e quem confirmou)'),

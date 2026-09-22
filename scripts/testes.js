@@ -895,6 +895,58 @@ console.log('\n== 31. Triagem automática das culturas ==');
     imp.culturaDoPainel({ StatusRevisao: 'descartada', Microrganismo: 'X' }) === false);
 }
 
+console.log('\n== 83. Agrupamento de culturas repetidas (mesma infecção) ==');
+{
+  const cul = (id, pront, data, material, micro, extras) => ({ ID_Cultura: id, Prontuario: pront,
+    DataColeta: data, Material: material, Microrganismo: micro, StatusRevisao: 'avaliada', ...extras });
+  /* Mesmo paciente, 2 hemoculturas de S. aureus em 3 dias = 1 grupo de 2 amostras. */
+  const g1 = imp.agruparCulturasRepetidas([
+    cul('C1', '1', '2026-08-01', 'Hemocultura', 'Staphylococcus aureus', { AvaliacaoCCIH: 'IRAS' }),
+    cul('C2', '1', '2026-08-03', 'Hemocultura', 'Staphylococcus aureus', { AvaliacaoCCIH: 'Repetição' })
+  ]);
+  verificar('2 hemoculturas do mesmo germe/paciente viram 1 grupo de 2 amostras',
+    g1.length === 1 && g1[0].Quantidade === 2 && g1[0].IDs.length === 2, JSON.stringify(g1));
+  verificar('IRAS + Repetição não é divergente — a classe forte (IRAS) vale para o grupo',
+    g1[0].Classificacao === 'IRAS' && g1[0].Divergente === false, g1[0]);
+
+  /* Material diferente = grupo diferente (bacteremia × pneumonia). */
+  const g2 = imp.agruparCulturasRepetidas([
+    cul('C1', '1', '2026-08-01', 'Hemocultura', 'Staphylococcus aureus'),
+    cul('C2', '1', '2026-08-02', 'Secreção traqueal', 'Staphylococcus aureus')
+  ]);
+  verificar('mesmo germe em materiais diferentes NÃO agrupa', g2.length === 2, JSON.stringify(g2.map(g => g.Material)));
+
+  /* Fora da janela de 14 dias = episódios distintos. */
+  const g3 = imp.agruparCulturasRepetidas([
+    cul('C1', '1', '2026-08-01', 'Urocultura', 'Escherichia coli'),
+    cul('C2', '1', '2026-09-01', 'Urocultura', 'Escherichia coli')
+  ]);
+  verificar('mesmo germe/material a 30 dias vira 2 grupos', g3.length === 2, JSON.stringify(g3.map(g => g.Inicio)));
+
+  /* Identidade: mesmo paciente com prontuários diferentes junta as amostras. */
+  const g4 = imp.agruparCulturasRepetidas([
+    cul('C1', '10', '2026-08-01', 'Hemocultura', 'Klebsiella pneumoniae'),
+    cul('C2', '11', '2026-08-02', 'Hemocultura', 'Klebsiella pneumoniae')
+  ], { identidadeDe: pr => ({ 10: 'ana', 11: 'ana' })[pr] || pr });
+  verificar('mesmo paciente com prontuários diferentes agrupa por identidade',
+    g4.length === 1 && g4[0].Quantidade === 2, JSON.stringify(g4));
+
+  /* Divergência real (IRAS × Contaminação) fica sinalizada e sem classe automática. */
+  const g5 = imp.agruparCulturasRepetidas([
+    cul('C1', '1', '2026-08-01', 'Hemocultura', 'Staphylococcus coagulase-negativo', { AvaliacaoCCIH: 'IRAS' }),
+    cul('C2', '1', '2026-08-02', 'Hemocultura', 'Staphylococcus coagulase-negativo', { AvaliacaoCCIH: 'Contaminação' })
+  ]);
+  verificar('IRAS × Contaminação é divergente (a CCIH reconcilia)',
+    g5[0].Divergente === true && g5[0].Classificacao === '', g5[0]);
+
+  /* Negativas e controles não entram no agrupamento. */
+  const g6 = imp.agruparCulturasRepetidas([
+    cul('C1', '1', '2026-08-01', 'Hemocultura', '', { AvaliacaoCCIH: 'Negativa' }),
+    cul('C2', '1', '2026-08-02', 'Leite materno', 'Coliformes fecais', { AvaliacaoCCIH: 'Leite' })
+  ]);
+  verificar('negativa e controle ficam fora do agrupamento', g6.length === 0, JSON.stringify(g6));
+}
+
 console.log('\n== 32. Culturas do protocolo de sepse ==');
 {
   const indice = imp.indiceSepse([

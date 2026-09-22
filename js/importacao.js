@@ -1548,6 +1548,69 @@ function culturaDoPainel(cultura) {
   return !!germeDaCultura(cultura.Microrganismo);
 }
 
+/* Agrupa culturas REPETIDAS: o mesmo paciente costuma ter o mesmo germe em várias amostras
+   (2 hemoculturas de S. aureus no mesmo dia, urocultura de controle 3 dias depois). São a
+   MESMA infecção — contar cada isolado infla o numerador e, na tela, mostra a mesma cultura
+   várias vezes. Agrupa por paciente (IDENTIDADE) + germe + MATERIAL, encadeando numa janela
+   (14 dias, o mesmo corte de episódio da aba Infecções). Grão POR MATERIAL: hemocultura
+   (bacteremia) e secreção traqueal (pneumonia) do mesmo germe são infecções diferentes.
+
+   Mantém as amostras (o dado como é); devolve grupos para EXIBIR "Material (N amostras) Germe"
+   e classificar de uma vez. Identidade importa: o mesmo paciente com vários prontuários/
+   atendimentos tem as amostras juntadas — sem isso ficariam separadas.
+
+   opcoes: { janelaDias, identidadeDe }. Só culturas com germe (positivas); negativas e
+   controles (água/leite/ambiental) não entram — não são "a bactéria de uma infecção". */
+function agruparCulturasRepetidas(culturas, opcoes) {
+  opcoes = opcoes || {};
+  const janela = opcoes.janelaDias || 14;
+  const idDe = opcoes.identidadeDe || (p => p);
+  const porChave = new Map();
+  for (const c of culturas) {
+    if (c.StatusRevisao === 'descartada') continue;
+    const germe = germeDaCultura(c.Microrganismo);
+    if (!germe) continue;
+    if (['Água', 'Leite', 'Controle ambiental/alimentar'].includes(String(c.AvaliacaoCCIH || '').trim())) continue;
+    const pront = normalizarProntuario(c.Prontuario);
+    const chave = idDe(pront) + '|' + normalizarTexto(germe) + '|' + normalizarTexto(c.Material);
+    if (!porChave.has(chave)) porChave.set(chave, []);
+    porChave.get(chave).push(c);
+  }
+  const grupos = [];
+  const emitir = amostras => {
+    /* Classificações presentes: normalmente uma só; com o workaround antigo, IRAS + Repetição
+       (não é conflito — são 2 amostras da mesma infecção). Divergente de verdade = duas classes
+       "fortes" diferentes (ex.: IRAS × Contaminação), que a CCIH precisa reconciliar. */
+    const fracas = new Set(['Repetição', 'Informativa', '']);
+    const classes = [...new Set(amostras.map(c => String(c.AvaliacaoCCIH || '').trim()))];
+    const fortes = classes.filter(cl => !fracas.has(cl));
+    const primeira = amostras[0];
+    grupos.push({
+      Prontuario: primeira.Prontuario, Identidade: idDe(normalizarProntuario(primeira.Prontuario)),
+      Microrganismo: primeira.Microrganismo, Material: primeira.Material, Setor: primeira.Setor,
+      Amostras: amostras, Quantidade: amostras.length,
+      IDs: amostras.map(c => c.ID_Cultura),
+      Inicio: amostras[0].DataColeta, Fim: amostras[amostras.length - 1].DataColeta,
+      /* A classe do grupo: a única forte, se houver uma só; senão vazio (pendente ou a decidir). */
+      Classificacao: fortes.length === 1 ? fortes[0] : '',
+      Divergente: fortes.length > 1,
+      StatusRevisao: amostras.every(c => c.StatusRevisao === 'avaliada') ? 'avaliada'
+        : amostras.some(c => c.StatusRevisao === 'pendente') ? 'pendente' : primeira.StatusRevisao
+    });
+  };
+  for (const lista of porChave.values()) {
+    lista.sort((a, b) => String(a.DataColeta).localeCompare(String(b.DataColeta)));
+    let atual = [lista[0]];
+    for (let i = 1; i < lista.length; i++) {
+      const dias = diasDesde(atual[atual.length - 1].DataColeta, lista[i].DataColeta);
+      if (dias !== null && dias <= janela) atual.push(lista[i]);
+      else { emitir(atual); atual = [lista[i]]; }
+    }
+    emitir(atual);
+  }
+  return grupos;
+}
+
 /* Índice prontuário → datas de abertura de protocolo de sepse. */
 function indiceSepse(casos) {
   const indice = new Map();
@@ -3385,7 +3448,7 @@ if (typeof module !== 'undefined' && module.exports) {
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,
-    preClassificarCultura, culturaDoPainel, germeDaCultura, indiceSepse, culturaDeProtocoloSepse, JANELA_CULTURA_SEPSE,
+    preClassificarCultura, culturaDoPainel, germeDaCultura, agruparCulturasRepetidas, indiceSepse, culturaDeProtocoloSepse, JANELA_CULTURA_SEPSE,
     prepararRelatorio, adesaoHigiene, tipoPrecaucao, encerrarIsolamentosAusentes, encerrarIsolamentosPorSaida, seguiuProtocoloEmpirico, dataDoRelatorio, vincularAvaliacaoAPrescricao,
     momentoCanonico, categoriaProfissional, normalizarObservacaoHigiene, MOMENTOS_OMS,
     principioAtivo, aplicarObitos,

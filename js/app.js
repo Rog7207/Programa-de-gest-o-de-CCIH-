@@ -434,11 +434,25 @@ async function montarPainel(conteudo) {
         el('button', { class: 'botao-secundario', onclick: () => navegar('pacientes') }, 'Revisar e unificar'))));
   }
 
-  const suspeitasIras = (iras.casos || []).filter(k => k.StatusInvestigacao === 'em investigação').length;
-  if (suspeitasIras) {
+  const suspeitasIras = (iras.casos || []).filter(k => k.StatusInvestigacao === 'em investigação');
+  if (suspeitasIras.length) {
+    /* De onde vieram (CriterioDiagnostico é gravado por cada caminho: revisão de culturas,
+       vigilância pós-alta, visita da UTI, ficha, avaliação remota, importação). */
+    const origemDe = k => {
+      const c = normalizarTexto(k.CriterioDiagnostico);
+      if (c.includes('cultura')) return 'revisão de culturas';
+      if (c.includes('posalta') || c.includes('cirurg')) return 'vigilância cirúrgica';
+      if (c.includes('uti')) return 'visita da UTI';
+      if (c.includes('remota')) return 'avaliação remota';
+      if (c.includes('ficha')) return 'ficha do paciente';
+      return c ? 'importação/outros' : 'sem origem registrada';
+    };
+    const porOrigem = {};
+    suspeitasIras.forEach(k => { const o = origemDe(k); porOrigem[o] = (porOrigem[o] || 0) + 1; });
     areaAlertas.append(el('div', { class: 'aviso-alerta' },
-      el('div', { class: 'alerta-titulo' }, `${fmtInt(suspeitasIras)} suspeita(s) de IRAS aguardando confirmação`),
-      el('div', { class: 'texto-suave' }, 'A notificação oficial precisa da segunda análise, por outro profissional.'),
+      el('div', { class: 'alerta-titulo' }, `${fmtInt(suspeitasIras.length)} suspeita(s) de IRAS aguardando confirmação`),
+      el('div', { class: 'texto-suave' }, 'A notificação oficial precisa da segunda análise, por outro profissional. Origem: '
+        + Object.entries(porOrigem).sort((a, b) => b[1] - a[1]).map(([o, n]) => `${o} ${fmtInt(n)}`).join(' · ') + '.'),
       el('div', { class: 'linha-botoes' },
         el('button', { class: 'botao-secundario', onclick: () => navegar('iras') }, 'Abrir a fila de confirmação'))));
   }

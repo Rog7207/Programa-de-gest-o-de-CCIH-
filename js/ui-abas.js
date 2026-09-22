@@ -301,7 +301,7 @@ async function montarCulturas(conteudo) {
            aberto (outra cultura, pós-alta, visita da UTI), não duplica — só completa. */
         registrarCasoIras(bancoIras.casos, {
           Prontuario: c.Prontuario, DataInfeccao: c.DataColeta, Topografia: topografia,
-          CriterioDiagnostico: '', Setor: c.Setor, DispositivoAssociado: dispositivo,
+          CriterioDiagnostico: 'Revisão de culturas', Setor: c.Setor, DispositivoAssociado: dispositivo,
           Microrganismo: c.Microrganismo, Desfecho: '', StatusInvestigacao: 'em investigação',
           NotificadoANVISA: '', CriadoPor: app.usuario, CriadoEm: agoraCurto()
         }, () => proximoIDLista(bancoIras.casos, 'ID_IRAS', 'IRA'), identidadePorNome(bancoPacientes.pacientes));

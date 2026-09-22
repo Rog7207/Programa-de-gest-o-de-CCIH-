@@ -53,7 +53,11 @@ const UNIFICACOES = {
   'CIT': 'CTI - Dr. Joaquim David Ferreira Lima',
   'Hemodinâmica HNSC': 'Hemodinâmica Cardíaca',
   'Unidade de Espera de Leitos Clínicos': 'Unidade de Espera de Leitos - Emergência',
-  'H UNIDADE DE ESPERA DE LEITO - (HNSC)': 'Unidade de Espera de Leitos - Emergência'
+  'H UNIDADE DE ESPERA DE LEITO - (HNSC)': 'Unidade de Espera de Leitos - Emergência',
+  /* Variante acentuada vinda de outra importação (5 registros na pasta operacional, 22/09/2026).
+     Canônico é a forma sem acento: é a majoritária, a do vocabulário e a da pasta geral — a fonte
+     tira acentos de forma inconsistente em todos os setores, então acentuar só este destoaria. */
+  'Agência Transfusional': 'Agencia Transfusional'
 };
 
 /* Entradas do vocabulário que não são setor nenhum. Só saem se não tiverem NENHUM

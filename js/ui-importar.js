@@ -1201,7 +1201,8 @@ function aplicarDecisoes(linhasComErro) {
     resolverProntuarioPorAtendimento(registrosFinais, imp.bancoPacientes.internacoes || []);
   }
   const existentes = imp.bancoDestino[definicao.abaDestino] || [];
-  imp.dedup = deduplicar(registrosFinais, existentes, imp.tipo);
+  imp.dedup = deduplicar(registrosFinais, existentes, imp.tipo,
+    { identidadeDe: identidadePorNome((imp.bancoPacientes || {}).pacientes) });
   imp.excluidosPorErro = linhasComErro.size;
 }
 
@@ -1314,7 +1315,8 @@ async function renderPasso5() {
         if (resolvidos) anotar(`${fmtInt(resolvidos)} prontuários resolvidos pelo nome do paciente.`);
       }
     }
-    const { novos } = definicao.modo ? { novos: [] } : deduplicar(imp.dedup.novos, existentes, imp.tipo);
+    const { novos } = definicao.modo ? { novos: [] } : deduplicar(imp.dedup.novos, existentes, imp.tipo,
+      { identidadeDe: identidadePorNome((imp.bancoPacientes || {}).pacientes) });
     if (!definicao.modo) anotar(`Registros a gravar após verificação final: ${fmtInt(novos.length)}`);
     if (imp.tipo === 'internacoes') {
       const atualizadas = atualizarInternacoesExistentes(existentes, imp.dedup.novos.concat(imp.dedup.duplicados));

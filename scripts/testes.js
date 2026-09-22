@@ -3648,6 +3648,40 @@ console.log('\n== 81. Deduplicação de casos de IRAS (mesmo episódio, vários 
     mantido && { data: mantido.DataInfeccao, obs: mantido.Observacoes });
 }
 
+console.log('\n== 81b. Dedup de IRAS por IDENTIDADE (mesmo paciente, prontuários diferentes) ==');
+{
+  const caso = (id, pront, extras) => ({ ID_IRAS: id, Prontuario: pront, DataInfeccao: '2026-05-10',
+    Topografia: 'ITU', StatusInvestigacao: 'em investigação', CriadoPor: 'A', CriadoEm: '2026-05-10 08:00', ...extras });
+  const pacientes = [{ Prontuario: '100', Nome: 'Ana Silva' }, { Prontuario: '101', Nome: 'ANA SILVA' },
+    { Prontuario: '200', Nome: 'Bia Souza' }, { Prontuario: '300', Nome: '' }];
+  const idDe = imp.identidadePorNome(pacientes);
+  verificar('identidadePorNome: dois prontuários da mesma pessoa dão a mesma identidade',
+    idDe('100') === idDe('101') && idDe('100') !== idDe('200'));
+  verificar('prontuário sem nome (ou fora do cadastro) cai nele mesmo', idDe('300') === '300' && idDe('999') === '999');
+
+  /* Sem identidade, escapa; com identidade, é o mesmo caso. */
+  const a = caso('IRA-1', '100'), b = caso('IRA-2', '101', { DataInfeccao: '2026-05-14' });
+  verificar('por prontuário, 100 e 101 NÃO são o mesmo caso (comportamento antigo)', !imp.mesmoCasoIras(a, b));
+  verificar('por identidade, 100 e 101 SÃO o mesmo caso', imp.mesmoCasoIras(a, b, undefined, idDe));
+
+  const casos = [caso('IRA-1', '100')];
+  const r = imp.registrarCasoIras(casos, caso('', '101', { DataInfeccao: '2026-05-12', Setor: 'CTI' }), () => 'IRA-9', idDe);
+  verificar('registrarCasoIras com identidade completa o existente em vez de abrir outro',
+    !r.novo && casos.length === 1 && casos[0].Setor === 'CTI');
+
+  const grupos = imp.agruparCasosIrasDuplicados([a, b, caso('IRA-3', '200')], undefined, idDe);
+  verificar('agrupamento por identidade junta 100+101 e deixa 200 de fora',
+    grupos.length === 1 && grupos[0].length === 2, JSON.stringify(grupos.map(g => g.map(c => c.ID_IRAS))));
+  verificar('sem identidade o mesmo agrupamento não acha nada',
+    imp.agruparCasosIrasDuplicados([a, b, caso('IRA-3', '200')]).length === 0);
+
+  /* Importação: o registro que chega sob o outro prontuário é duplicata, não caso novo. */
+  const dd = imp.deduplicar([caso('', '101', { DataInfeccao: '2026-05-13' })], [a], 'iras', { identidadeDe: idDe });
+  verificar('deduplicar(iras) com identidade marca como duplicado', dd.duplicados.length === 1 && dd.novos.length === 0, dd);
+  verificar('deduplicar(iras) sem identidade deixaria passar como novo',
+    imp.deduplicar([caso('', '101', { DataInfeccao: '2026-05-13' })], [a], 'iras').novos.length === 1);
+}
+
 console.log('\n== 82. Rotina da equipe: dias úteis, âncora na carga semanal e cadência do ATB ==');
 {
   const al = require(path.join(__dirname, '..', 'js', 'alertas.js'));

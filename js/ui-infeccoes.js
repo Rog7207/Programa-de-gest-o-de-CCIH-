@@ -63,6 +63,8 @@ async function montarInfeccoes(conteudo) {
   const casos = bancoIras.casos || [];
   const internacoes = bancoPacientes.internacoes || [];
   const nomes = new Map((bancoPacientes.pacientes || []).map(p => [normalizarProntuario(p.Prontuario), p.Nome]));
+  /* Identidade pelo nome: o mesmo paciente sob dois prontuários é UM paciente na dedup. */
+  const identidadeDe = identidadePorNome(bancoPacientes.pacientes);
 
   const ehInfeccao = c => /^IRAS/i.test(String(c.AvaliacaoCCIH || '')) || c.AvaliacaoCCIH === 'Bacteremia secundária';
   const ehAdmissao = c => c.AvaliacaoCCIH === 'Presente na admissão';
@@ -124,7 +126,7 @@ async function montarInfeccoes(conteudo) {
   conteudo.insertBefore(areaDuplicatas, area);
 
   function desenharDuplicatas() {
-    const grupos = agruparCasosIrasDuplicados(casos);
+    const grupos = agruparCasosIrasDuplicados(casos, undefined, identidadeDe);
     if (!grupos.length) { areaDuplicatas.replaceChildren(); return; }
     const redundantes = grupos.reduce((soma, g) => soma + g.length - 1, 0);
     const linhaDoGrupo = g => el('tr', {},
@@ -153,7 +155,7 @@ async function montarInfeccoes(conteudo) {
     try {
       await comTrava(['iras', 'cirurgias'], async () => {
         const atualIras = await lerBanco('iras');
-        const resultado = deduplicarCasosIras(atualIras.casos);
+        const resultado = deduplicarCasosIras(atualIras.casos, undefined, identidadeDe);
         if (!resultado.remover.size) return;
         atualIras.casos = resultado.casos;
         await gravarBanco('iras', atualIras);

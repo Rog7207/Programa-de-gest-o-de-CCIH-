@@ -1849,7 +1849,9 @@ function valorDeChave(registro, campo, tipo) {
 }
 
 /* Separa novos × duplicados comparando com os registros existentes no banco. */
-function deduplicar(registros, existentes, tipo) {
+/* opcoes.identidadeDe: identidade do paciente (nome) para a dedup de IRAS não escapar quando
+   o mesmo paciente chega com outro número de prontuário. */
+function deduplicar(registros, existentes, tipo, opcoes) {
   const chavesExistentes = new Set(existentes.map(r => chaveNaturalDe(r, tipo)));
   const vistas = new Set();
   let novos = [];
@@ -1865,10 +1867,11 @@ function deduplicar(registros, existentes, tipo) {
      a revisão de culturas já abriu. Mesmo paciente + topografia equivalente + datas
      próximas é duplicata, não caso novo. */
   if (tipo === 'iras') {
+    const idDe = (opcoes || {}).identidadeDe;
     const aceitos = [];
     for (const registro of novos) {
-      if (existentes.some(e => mesmoCasoIras(e, registro))) duplicados.push(registro);
-      else if (aceitos.some(a => mesmoCasoIras(a, registro))) duplicadosInternos.push(registro);
+      if (existentes.some(e => mesmoCasoIras(e, registro, undefined, idDe))) duplicados.push(registro);
+      else if (aceitos.some(a => mesmoCasoIras(a, registro, undefined, idDe))) duplicadosInternos.push(registro);
       else aceitos.push(registro);
     }
     novos = aceitos;
@@ -1897,8 +1900,18 @@ function grupoTopografia(topografia) {
   return t;
 }
 
-function mesmoCasoIras(a, b, janelaDias) {
-  if (normalizarProntuario(a.Prontuario) !== normalizarProntuario(b.Prontuario)) return false;
+/* Identidade do paciente pelo NOME do cadastro: o mesmo paciente aparece com vários números
+   de prontuário/atendimento (identidade fragmentada), e por prontuário a duplicata escapa —
+   no banco real, 4–5 casos de IRAS em 987 (22/09/2026). Prontuário sem nome cai nele mesmo. */
+function identidadePorNome(pacientes) {
+  const nome = new Map((pacientes || []).map(p => [normalizarProntuario(p.Prontuario), normalizarTexto(p.Nome)]));
+  return pront => nome.get(pront) || pront;
+}
+
+/* identidadeDe(prontuarioNormalizado) → identidade; sem ela, vale o prontuário. */
+function mesmoCasoIras(a, b, janelaDias, identidadeDe) {
+  const idDe = identidadeDe || (p => p);
+  if (idDe(normalizarProntuario(a.Prontuario)) !== idDe(normalizarProntuario(b.Prontuario))) return false;
   const grupo = grupoTopografia(a.Topografia);
   if (!grupo || grupo !== grupoTopografia(b.Topografia)) return false;
   const dataA = Date.parse(String(a.DataInfeccao || '').slice(0, 10) + 'T00:00:00Z');
@@ -1913,8 +1926,8 @@ function mesmoCasoIras(a, b, janelaDias) {
 /* Registra um caso vindo de qualquer momento de detecção SEM duplicar: se o episódio já
    existe, só completa os campos vazios do registro existente (status, autoria e decisão
    da segunda assinatura ficam como estão). Devolve { caso, novo }. */
-function registrarCasoIras(casos, candidato, gerarID) {
-  const existente = casos.find(k => mesmoCasoIras(k, candidato));
+function registrarCasoIras(casos, candidato, gerarID, identidadeDe) {
+  const existente = casos.find(k => mesmoCasoIras(k, candidato, undefined, identidadeDe));
   if (!existente) {
     const novo = { ID_IRAS: gerarID(), ...candidato };
     casos.push(novo);
@@ -1937,13 +1950,14 @@ function registrarCasoIras(casos, candidato, gerarID) {
 /* Agrupa os casos do banco que são o mesmo episódio, encadeando pela data (A~B e B~C
    juntam A, B e C mesmo com A e C além da janela — o mesmo encadeamento dos episódios
    de culturas da aba Infecções). Devolve só os grupos com 2+ casos. */
-function agruparCasosIrasDuplicados(casos, janelaDias) {
+function agruparCasosIrasDuplicados(casos, janelaDias, identidadeDe) {
   const porChave = new Map();
+  const idDe = identidadeDe || (p => p);
   for (const caso of casos) {
     const pront = normalizarProntuario(caso.Prontuario);
     const grupo = grupoTopografia(caso.Topografia);
     if (!pront || !grupo) continue;
-    const chave = pront + '|' + grupo;
+    const chave = idDe(pront) + '|' + grupo;
     if (!porChave.has(chave)) porChave.set(chave, []);
     porChave.get(chave).push(caso);
   }
@@ -1953,7 +1967,7 @@ function agruparCasosIrasDuplicados(casos, janelaDias) {
     lista.sort((a, b) => String(a.DataInfeccao || '').localeCompare(String(b.DataInfeccao || '')));
     let atual = [lista[0]];
     for (let i = 1; i < lista.length; i++) {
-      if (mesmoCasoIras(atual[atual.length - 1], lista[i], janelaDias)) atual.push(lista[i]);
+      if (mesmoCasoIras(atual[atual.length - 1], lista[i], janelaDias, identidadeDe)) atual.push(lista[i]);
       else {
         if (atual.length > 1) duplicatas.push(atual);
         atual = [lista[i]];
@@ -1999,8 +2013,8 @@ function fundirCasosIras(grupo) {
 /* Deduplica o banco inteiro de casos: devolve a lista limpa, o mapa removido→mantido
    (para reapontar cirurgias que referenciam o caso) e os grupos, para a tela mostrar
    o que vai acontecer antes de gravar. */
-function deduplicarCasosIras(casos, janelaDias) {
-  const grupos = agruparCasosIrasDuplicados(casos, janelaDias);
+function deduplicarCasosIras(casos, janelaDias, identidadeDe) {
+  const grupos = agruparCasosIrasDuplicados(casos, janelaDias, identidadeDe);
   const remover = new Map();
   for (const grupo of grupos) {
     const { principal, removidos } = fundirCasosIras(grupo);
@@ -3570,7 +3584,7 @@ if (typeof module !== 'undefined' && module.exports) {
     classificarParaVigilancia, categoriaDeVigilancia, CATEGORIAS_VIGILANCIA, CATEGORIAS_VIGILANCIA_PADRAO,
     diasDesde, telefoneWhatsApp, mensagemVigilancia, linkWhatsApp, JANELA_VIGILANCIA,
     prescricaoAtiva, analisarDose, cursosDeAntibiotico, alertasDeAntibioticos, DIAS_CURSO_PROLONGADO, TETO_DOSE_DIARIA_MG,
-    grupoTopografia, mesmoCasoIras, registrarCasoIras, agruparCasosIrasDuplicados,
+    grupoTopografia, mesmoCasoIras, registrarCasoIras, agruparCasosIrasDuplicados, identidadePorNome,
     fundirCasosIras, deduplicarCasosIras, IRAS_JANELA_DUPLICATA_DIAS
   };
 }

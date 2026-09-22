@@ -150,7 +150,11 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 <h2>9. Vigilância pós-alta (cirurgias)</h2>
 <p>A aba Pós-alta acompanha infecção de sítio cirúrgico depois da alta:</p>
 <ul>
-<li><strong>Triagem</strong>: cirurgias de 30 a 120 dias aparecem com checkbox — próteses/implantes e cesarianas já marcadas. Confirme para colocar <strong>sob vigilância</strong>.</li>
+<li><strong>Triagem</strong>: cirurgias de 30 a 120 dias aparecem com checkbox — próteses/implantes e cesarianas já marcadas. Confirme para colocar <strong>sob vigilância</strong>.
+<ul>
+<li>Quem entra na triagem: <strong>cirurgias limpas, cesarianas e próteses/implantes</strong> (regra da CCIH). Como o anestesista raramente preenche o potencial de contaminação, o app <strong>presume</strong> limpa/não-limpa pelo tipo de cirurgia; o valor do anestesista, quando existe, sempre vence.</li>
+<li>O tipo de cirurgia é definido sozinho pelo app a partir do nome que veio do Tasy: <strong>categoria NHSN</strong> (Colecistectomia, Artroplastia de quadril…), categoria própria para as frequentes fora do NHSN (Desbridamento, Cateter duplo J…) ou a especialidade "(outras)". Bloqueio anestésico, biópsia, drenagem e cateteres não são cirurgia e não entram. Só o que o app não reconhece aparece na importação para alguém decidir.</li>
+</ul></li>
 <li><strong>WhatsApp</strong>: mensagem-modelo editável (com {nome}, {procedimento}, {data}); o clique abre a conversa e marca "mensagem enviada" (reversível com ↩).</li>
 <li><strong>Desfecho</strong>: "✓ Sem infecção" encerra; "⚠ Investigação" abre a ficha (tipo de ISC, observações) e cria a suspeita de IRAS.</li>
 <li><strong>Validação</strong>: um segundo profissional valida — só então a infecção é confirmada.</li>

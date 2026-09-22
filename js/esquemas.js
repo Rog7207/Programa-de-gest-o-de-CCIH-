@@ -321,8 +321,11 @@ const VOCABULARIO_INICIAL = {
     'Infecção de pele e partes moles', 'Enterocolite por C. difficile', 'Gastroenterite',
     'Meningite/ventriculite', 'Sinusite', 'Conjuntivite', 'Endometrite', 'Endocardite', 'Osteomielite'
   ],
-  /* Categorias de procedimento do NHSN traduzidas. TempoCorteHoras = ponto de corte de duração
-     (percentil 75) usado no índice NNIS — conferir/completar na aba procedimentos_nhsn do config.xlsx. */
+  /* Categorias de procedimento do NHSN traduzidas — MESMOS nomes de NHSN_CATEGORIAS em
+     importacao.js (o classificador grava estes nomes em ProcedimentoNHSN; testes conferem).
+     TempoCorteHoras = ponto de corte de duração (percentil 75) usado no índice NNIS —
+     conferir/completar na aba procedimentos_nhsn do config.xlsx. As categorias próprias e
+     por especialidade do classificador entram pelo config.carregar. */
   procedimentos_nhsn: [
     { Nome: 'Apendicectomia', Codigo: 'APPY', TempoCorteHoras: '1' },
     { Nome: 'Cesariana', Codigo: 'CSEC', TempoCorteHoras: '1' },
@@ -331,7 +334,7 @@ const VOCABULARIO_INICIAL = {
     { Nome: 'Cirurgia de reto', Codigo: 'REC', TempoCorteHoras: '' },
     { Nome: 'Cirurgia de intestino delgado', Codigo: 'SB', TempoCorteHoras: '3' },
     { Nome: 'Cirurgia gástrica', Codigo: 'GAST', TempoCorteHoras: '3' },
-    { Nome: 'Cirurgia de vias biliares/fígado/pâncreas', Codigo: 'BILI', TempoCorteHoras: '' },
+    { Nome: 'Cirurgia de vias biliares, fígado ou pâncreas', Codigo: 'BILI', TempoCorteHoras: '' },
     { Nome: 'Laparotomia exploradora', Codigo: 'XLAP', TempoCorteHoras: '' },
     { Nome: 'Herniorrafia', Codigo: 'HER', TempoCorteHoras: '2' },
     { Nome: 'Esplenectomia', Codigo: 'SPLE', TempoCorteHoras: '' },
@@ -340,7 +343,7 @@ const VOCABULARIO_INICIAL = {
     { Nome: 'Cirurgia torácica', Codigo: 'THOR', TempoCorteHoras: '3' },
     { Nome: 'Bypass vascular periférico', Codigo: 'PVBY', TempoCorteHoras: '' },
     { Nome: 'Craniotomia', Codigo: 'CRAN', TempoCorteHoras: '4' },
-    { Nome: 'Derivação ventricular (shunt)', Codigo: 'VSHN', TempoCorteHoras: '1' },
+    { Nome: 'Derivação ventricular', Codigo: 'VSHN', TempoCorteHoras: '1' },
     { Nome: 'Laminectomia', Codigo: 'LAM', TempoCorteHoras: '2' },
     { Nome: 'Artrodese de coluna', Codigo: 'FUSN', TempoCorteHoras: '4' },
     { Nome: 'Artroplastia de quadril', Codigo: 'HPRO', TempoCorteHoras: '2' },
@@ -350,11 +353,12 @@ const VOCABULARIO_INICIAL = {
     { Nome: 'Histerectomia abdominal', Codigo: 'HYST', TempoCorteHoras: '2' },
     { Nome: 'Histerectomia vaginal', Codigo: 'VHYS', TempoCorteHoras: '2' },
     { Nome: 'Cirurgia de ovário', Codigo: 'OVRY', TempoCorteHoras: '' },
-    { Nome: 'Prostatectomia', Codigo: 'PRST', TempoCorteHoras: '4' },
+    { Nome: 'Cirurgia de próstata', Codigo: 'PRST', TempoCorteHoras: '4' },
     { Nome: 'Nefrectomia', Codigo: 'NEPH', TempoCorteHoras: '' },
-    { Nome: 'Mastectomia', Codigo: 'MAST', TempoCorteHoras: '3' },
+    { Nome: 'Cirurgia de mama', Codigo: 'BRST', TempoCorteHoras: '3' },
     { Nome: 'Tireoidectomia', Codigo: 'THYR', TempoCorteHoras: '' },
-    { Nome: 'Cirurgia de cabeça e pescoço', Codigo: 'NECK', TempoCorteHoras: '' }
+    { Nome: 'Cirurgia de cabeça e pescoço', Codigo: 'NECK', TempoCorteHoras: '' },
+    { Nome: 'Implante de marca-passo', Codigo: 'PACE', TempoCorteHoras: '' }
   ]
 };
 

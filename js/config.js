@@ -35,6 +35,33 @@ const config = {
     for (const v of Object.keys(this.vocabulario)) {
       this.vocabulario[v] = (dados[v] || []).map(l => l.Nome).filter(Boolean);
     }
+    this.garantirCategoriasDeProcedimento();
+  },
+
+  /* O vocabulário de procedimentos é a lista de categorias do classificador: toda categoria
+     que ele pode gravar em ProcedimentoNHSN precisa existir aqui (com o código NHSN e o
+     tempo de corte padrão), senão a cirurgia importada aparece como termo desconhecido e o
+     NNIS perde o corte. Não apaga nada do que a instituição já tem. */
+  garantirCategoriasDeProcedimento() {
+    if (typeof categoriasDeProcedimento !== 'function') return;
+    const padrao = {};
+    for (const p of (VOCABULARIO_INICIAL.procedimentos_nhsn || [])) padrao[p.Codigo] = p.TempoCorteHoras;
+    const conhecidos = new Set(this.procedimentosNHSN.map(p => normalizarTexto(p.Nome)));
+    for (const cat of categoriasDeProcedimento()) {
+      if (conhecidos.has(normalizarTexto(cat.Nome))) {
+        /* Já existe: só completa código/corte vazios. */
+        const atual = this.procedimentosNHSN.find(p => normalizarTexto(p.Nome) === normalizarTexto(cat.Nome));
+        if (!atual.Codigo && cat.Codigo) atual.Codigo = cat.Codigo;
+        if (!atual.TempoCorteHoras && cat.Codigo && padrao[cat.Codigo]) atual.TempoCorteHoras = padrao[cat.Codigo];
+        continue;
+      }
+      conhecidos.add(normalizarTexto(cat.Nome));
+      this.procedimentosNHSN.push({ Nome: cat.Nome, Codigo: cat.Codigo, TempoCorteHoras: (cat.Codigo && padrao[cat.Codigo]) || '' });
+    }
+    const nomes = new Set(this.vocabulario.procedimentos_nhsn.map(normalizarTexto));
+    for (const p of this.procedimentosNHSN) {
+      if (p.Nome && !nomes.has(normalizarTexto(p.Nome))) { nomes.add(normalizarTexto(p.Nome)); this.vocabulario.procedimentos_nhsn.push(p.Nome); }
+    }
   },
 
   async salvar() {

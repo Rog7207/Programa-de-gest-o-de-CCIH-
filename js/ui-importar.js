@@ -1091,6 +1091,7 @@ async function renderPasso3() {
         const suspeitaNaoCirurgia = ehProcedimento && !sugestao && pareceNaoCirurgia(termo);
         imp.decisoes[vocab][chave] = sugestao ? { acao: 'alias', termo, para: sugestao }
           : suspeitaNaoCirurgia ? { acao: 'excluir', termo }
+          : ehProcedimento ? { acao: 'alias', termo, para: CATEGORIA_SEM_CLASSIFICACAO }
           : { acao: 'novo', termo };
         const nomeRadio = `termo-${vocab}-${chave}`;
         const radio = marcado => el('input', { type: 'radio', name: nomeRadio, checked: marcado ? '' : null });
@@ -1108,6 +1109,9 @@ async function renderPasso3() {
           if (radioAlias.checked) imp.decisoes[vocab][chave] = { acao: 'alias', termo, para: seletorExistente.value };
           else if (radioExcluir && radioExcluir.checked) imp.decisoes[vocab][chave] = { acao: 'excluir', termo };
           else if (radioRenomear && radioRenomear.checked) imp.decisoes[vocab][chave] = { acao: 'renomear', termo, para: campoNovoNome.value.trim() || termo };
+          /* Procedimento: "termo novo" com o rótulo cru do Tasy é exatamente a fragmentação
+             que o classificador veio acabar — a opção aqui é deixar em "Sem classificação". */
+          else if (ehProcedimento) imp.decisoes[vocab][chave] = { acao: 'alias', termo, para: CATEGORIA_SEM_CLASSIFICACAO };
           else imp.decisoes[vocab][chave] = { acao: 'novo', termo };
         };
         [radioNovo, radioAlias, radioExcluir, radioRenomear].filter(Boolean).forEach(r => r.addEventListener('change', aplicarEscolha));
@@ -1115,7 +1119,7 @@ async function renderPasso3() {
         if (campoNovoNome) campoNovoNome.addEventListener('input', aplicarEscolha);
         secao.append(el('div', { class: 'linha-termo' },
           el('strong', {}, termo),
-          el('label', {}, radioNovo, ' termo novo'),
+          el('label', {}, radioNovo, ehProcedimento ? ` deixar em "${CATEGORIA_SEM_CLASSIFICACAO}"` : ' termo novo'),
           el('label', {}, radioAlias, ' é o mesmo que: ', seletorExistente),
           radioExcluir ? el('label', { class: 'aviso-erro-texto' }, radioExcluir,
             ehMicrorganismo ? ' não é cultura (descartar)' : ' não é cirurgia (excluir)') : null,

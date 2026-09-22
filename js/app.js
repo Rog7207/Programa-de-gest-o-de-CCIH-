@@ -542,7 +542,16 @@ async function montarPainel(conteudo) {
   desenhar();
 }
 
-async function montarConfiguracoes(conteudo) {
+async /* Termos "oficiais" de um vocabulário (base das sugestões de unificação): a semente do
+   esquema e, para procedimentos, as categorias do classificador (próprias e por
+   especialidade não estão na semente — só as NHSN com tempo de corte). */
+function vocabularioOficial(vocab) {
+  const base = (VOCABULARIO_INICIAL[vocab] || []).map(x => typeof x === 'string' ? x : x.Nome);
+  if (vocab !== 'procedimentos_nhsn') return base;
+  return [...new Set([...base, ...categoriasDeProcedimento().map(c => c.Nome)])];
+}
+
+function montarConfiguracoes(conteudo) {
   conteudo.append(el('h1', {}, 'Configurações'));
   const campoNome = el('input', { type: 'text', value: app.usuario });
   conteudo.append(el('div', { class: 'cartao' },
@@ -844,7 +853,7 @@ async function montarConfiguracoes(conteudo) {
           }
         }
         const termos = [...new Set([...(config.vocabulario[vocab] || []), ...Object.keys(frequencias)])];
-        const oficiais = (VOCABULARIO_INICIAL[vocab] || []).map(x => typeof x === 'string' ? x : x.Nome);
+        const oficiais = vocabularioOficial(vocab);
         const pares = auditarVocabulario(termos, oficiais, frequencias)
           .filter(p => !ignorados.has(chavePar(vocab, p.de, p.para)));
         if (pares.length) { grupos.push([vocab, pares, frequencias]); totalPares += pares.length; }
@@ -901,7 +910,7 @@ async function montarConfiguracoes(conteudo) {
     } catch (e) { msgVocab.className = 'aviso-erro-texto'; msgVocab.textContent = e.message; }
   };
   for (const [nome, termos] of Object.entries(config.vocabulario)) {
-    const oficiais = (VOCABULARIO_INICIAL[nome] || []).map(x => typeof x === 'string' ? x : x.Nome);
+    const oficiais = vocabularioOficial(nome);
     const sugestoes = (VOCAB_APLICACAO[nome] ? sugerirUnificacoesVocabulario(termos, oficiais) : []);
     const selDe = el('select', {}, termos.map(t => el('option', { value: t }, t)));
     const selPara = el('select', {}, termos.map(t => el('option', { value: t }, t)));

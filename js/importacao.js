@@ -19,10 +19,17 @@ const PALAVRAS_NAO_CIRURGIA = ['partonormal', 'partovaginal', 'cateterismo', 'co
   'cateterparahemodialise', 'cateterparaanalgesia', 'bloqueiosprolongados', 'bloqueioprolongado',
   /* Decidido com a CCIH (22/09/2026): não são cirurgia para a vigilância — bloqueio
      anestésico, biópsia e drenagem. Ficam fora da tabela de vigilância de ISC. */
-  'bloqueiosimpatico', 'bloqueioanestesico', 'bloqueiodeplexo', 'biopsia', 'drenagem', 'puncaobiopsia'];
+  'bloqueiosimpatico', 'bloqueioanestesico', 'bloqueiodeplexo', 'biopsia', 'drenagem', 'puncaobiopsia',
+  /* Fratura tratada com imobilização/gesso: não há ferida operatória. */
+  'tratamentoconservador', 'toracocentese', 'reducaoincruenta', 'bloqueioperidural', 'bloqueiosubaracnoideo'];
+/* Rótulos do Tasy que CITAM biópsia/drenagem como finalidade de uma cirurgia de verdade
+   ("Laparotomia exploradora, ou para biópsia, ou para drenagem de abscesso…", "Craniotomia
+   para biópsia encefálica"): abriu-se cavidade, é cirurgia. Vence a lista de exclusão. */
+const RESGATE_CIRURGIA = /laparotomia|craniotom|toracotom|ressecaoemcunha|tumorectomia|lobectomia|nefrostomia|esternotomia/;
 
 function pareceNaoCirurgia(procedimento) {
   const n = normalizarTexto(procedimento);
+  if (RESGATE_CIRURGIA.test(n)) return false;
   if (PALAVRAS_NAO_CIRURGIA.some(palavra => n.includes(palavra))) return true;
   /* "Endoscopia" solta é exame; "Septoplastia Por VIDEOendoscopia" é cirurgia de verdade.
      O adjetivo ("...endoscópica") não contém a palavra e passa direto. */
@@ -61,26 +68,29 @@ const REGRAS_NHSN = [
   [/artrodese|fusaodecoluna|fusaovertebr|artrodeseco/, 'FUSN'],
   [/(protese|artroplastia).*(quadril|coxofemor)|(quadril|coxofemor).*(protese|artroplastia)/, 'HPRO'],
   [/(protese|artroplastia).*joelho|joelho.*(protese|artroplastia)/, 'KPRO'],
-  [/reducaoaberta|osteossintese|osteosintese|tratamentocirurgicodefratura|fratura.*(sintese|placa|haste|fixacao|reducao|fixadorexterno)|fixacaodefratura|epifisiodese|transposicaodafibula|luxacao/, 'FX'],
+  /* Artroscopia com "redução artroscópica de fraturas" no rótulo é artroscopia (própria), não FX. */
+  [/^(?!.*artroscop).*(?:reducaoaberta|osteossintese|osteosintese|fratura|epifisiodese|transposicaodafibula|luxac)/, 'FX'],
   [/amputa/, 'AMP'],
   /* Mama: mastectomia, ressecção de nódulo E reconstrução com prótese/expansor (decisão da
      CCIH: reconstrução de mama com prótese é categoria mama; o 90 d de vigilância vem do
      regex de implante, que pega "prótese"). */
   [/mastectomia|quadrantectomia|mama.*(exerese|ressec|excisao|nodulo|setor|protese|expansor|reconstru|marcacao)|(exerese|ressec|excisao|lesao|protese|inclusao).*mama|reconstru.*mama|nodulectomiamama|plasticamamaria|mamariafemininanaoestetica/, 'BRST'],
   [/prostat/, 'PRST'], [/histerectomiavagin/, 'VHYS'], [/histerectomia|traquelectomia/, 'HYST'],
-  [/colectomia|hemicolectomia|colon|sigmoidectomia|retossigmoid|colostomia/, 'COLO'],
-  [/tireoidec|paratireoid|tireoide/, 'THYR'], [/nefrectomia|nefroureterec|nefrolitotom/, 'NEPH'], [/esplenec/, 'SPLE'],
+  /* Retossigmoidectomia/amputação abdominoperineal: ressecção de RETO (NHSN REC), não cólon. */
+  [/retossigmoid|abdominoperineal|abdominoperin|proctectomia|proctocolectomia|amputacaodereto/, 'REC'],
+  [/colectomia|hemicolectomia|colon|sigmoidectomia|colostomia/, 'COLO'],
+  [/tireoidec|paratireoid|tireoide|istmectomia/, 'THYR'], [/nefrectomia|nefroureterec|nefrolitotom/, 'NEPH'], [/esplenec/, 'SPLE'],
   [/ooforec|ovario|salpingooofor|anexectomia/, 'OVRY'],
   [/gastrectomia|gastrica|gastroplastia|bariatric|sleevegastr|refluxogastroesofag|fundoplicat/, 'GAST'],
-  [/duodenopancreat|pancreatectomia|hepatectomia|figado|anastomosebileo|biliodigest/, 'BILI'],
+  [/duodenopancreat|pancreatectomia|hepatectomia|figado|anastomosebileo|biliodigest|viabiliar|viasbiliares/, 'BILI'],
   [/enterectomia|intestinodelgado|jejunostomia|ileostomia|enterostomia|delgado/, 'SB'],
-  [/toracotom|toracic|lobectomiapulmon|pulmon|pneumectomia|mediastin|corticacaopulmon/, 'THOR'],
+  [/toracotom|toracic|lobectomiapulmon|pulmon|pulmao|ressecaoemcunha|pneumectomia|mediastin|corticacaopulmon/, 'THOR'],
   [/revasculariz|pontedesafena|pontecoronar/, 'CBGB'],
-  [/valv|reconstrucaodaraizdaaorta|tubovalvado|cirurgiacardiac|comunicacaointeratrial|comunicacaointerventric/, 'CARD'],
-  [/marcapasso|ressincroniz|cardioversor|desfibriladorimplant/, 'PACE'],
+  [/valv|reconstrucaodaraizdaaorta|tubovalvado|cirurgiacardiac|comunicacaointeratrial|comunicacaointerventric|pericardiec|dissec+[a-z]*daaorta/, 'CARD'],
+  [/marcapasso|ressincroniz|cardioversor|desfibrilador|estimulacaocardiaca/, 'PACE'],
   [/derivacaoventric|ventriculoperiton|ventriculostomia/, 'VSHN'],
   [/bypassvascular|enxertovascular|femoropoplite|aortobifemoral|endarterectomia/, 'PVBY'],
-  [/laringectomia|esvaziamentocervical|glossectomia|parotidectomia|maxilectomia|faringolaring|dissecaoradicaldopescoco|dissecaoradicaldopesc|cervicotomia|tumordocavum/, 'NECK'],
+  [/laringectomia|esvaziamentocervical|glossectomia|parotidectomia|maxilectomia|faringolaring|dissec+aoradicaldopesc|cervicotomia|tumordocavum/, 'NECK'],
   [/laparotomiaexplorad/, 'XLAP'], [/herni/, 'HER']
 ];
 const REGRAS_PROPRIA = [
@@ -94,18 +104,43 @@ const REGRAS_PROPRIA = [
   [/traqueostomia/, 'Traqueostomia'], [/postectomia|fimose/, 'Postectomia'], [/varizes|variz/, 'Varizes']
 ];
 const REGRAS_ESPECIALIDADE = [
-  [/retalho|enxertodepele|enxertodermo|enxertolivredepele|dermolipectomia|mamoplastia|mastopexia|lipoaspir|abdominoplast|lifting|blefaroplast|otoplast|lesaonapele|lesaodapele|extirpacao.*pele|cutane|reconstrucaocomretalho|reconstrucaopormicro|partesmoles|tumordepele|excisaoeenxerto|zetaplastia|rotacaoderetalho|cistosacrococc/, 'Plástica (outras)'],
-  [/ureter|uretra|bexiga|vesical|renal|\brim\b|escrotal|orquiec|orquid|hidrocele|varicocele|pieloplastia|reimplanteureteral|testicul|cordaoespermatico|penis|prepucio/, 'Urologia (outras)'],
-  [/osso|tendao|tenoplastia|tenomiotomia|ligament|ortoped|fixadorexterno|placaeparafuso|parafuso|osteo|punho|ombro|cotovelo|tornozelo|femur|tibia|umero|carpo|pilaotibial|antepe|alongamento|quadricep|peplano|pecavo|coalisaotarsal|manguito|artriteinfecciosa|artriteseptica|fiooupino|retiradadefio|retiradadeplaca|neuropatiacompressiva|tuneldocarpo|luxacaorecidivante|pseudartrose|halluxvalgus|mecanismoextensor/, 'Ortopedia (outras)'],
-  [/utero|colouterino|vagin|vulv|endometri|laqueadura|curetagem|salping|colpo|anexial|histeroscop|perineoplast|exenteracaopelvic/, 'Ginecologia (outras)'],
-  [/cerebr|cranian|ventricul|medula|nervo|neurocir|vertebroplast|corpoestranho.*coluna|colunacervical|coluna.*endoscopic|discectomia|neurolise/, 'Neurocirurgia (outras)'],
+  [/retalho|enxertodepele|enxertodermo|enxertolivredepele|enxertocomposto|dermolipectomia|mamoplastia|mastopexia|lipoaspir|abdominoplast|lifting|blefaroplast|otoplast|lesaonapele|lesaodapele|extirpacao.*pele|cutane|reconstrucaocomretalho|reconstrucaopormicro|partesmoles|tumordepele|excisaoeenxerto|zetaplastia|rotacaoderetalho|cistosacrococc|suturadeferimento|dapele|enxertia|ginecomastia|minilipo/, 'Plástica (outras)'],
+  [/ureter|uretr|bexiga|vesical|renal|\brim\b|escrotal|orquiec|orquid|hidrocele|varicocele|pieloplastia|reimplanteureteral|testicul|cordaoespermatico|penis|prepucio|esterilizadoramasculina|vasectomia|priapismo|priaprismo|meatotomia|espermatocel/, 'Urologia (outras)'],
+  [/osso|tendao|tenoplastia|tenomio|tenorraf|ligament|ortoped|fixadorexterno|placaeparafuso|parafuso|osteo|punho|ombro|cotovelo|tornozelo|femur|tibia|umero|carpo|pilaotibial|antepe|alongamento|quadricep|peplano|pecavo|coalisaotarsal|manguito|artriteinfecciosa|artriteseptica|fiooupino|retiradadefio|retiradadeplaca|materialdesintese|tuneldocarpo|pseudartrose|halluxvalgus|mecanismoextensor|articula|sinovec|tenodese|tenolise|tumorosseo|osse|desarticulacao|polidactilia|dedo|falange|metatars|talus|calcaneo|ulna|fisaria|fixadores|espacadores|aparelhoextensor|miotendin|petorto|malperfurante|capsulotomia|fasciotomia|artroplastia|cabecadoradio/, 'Ortopedia (outras)'],
+  [/uter|vagin|vulv|endometri|laqueadura|curetagem|salping|colp|anexial|histeroscop|perineoplast|exenteracaopelvic|esvaziamentopelvic|miomectomia/, 'Ginecologia (outras)'],
+  [/cerebr|cranian|ventricul|medula|nervo|neurocir|vertebroplast|corpoestranho.*coluna|colunacervical|coluna.*endoscopic|discectomia|neurolise|neuropatia|neurorraf|acessoposterior|acessoanterior/, 'Neurocirurgia (outras)'],
   [/vascular|safena|arteri|venos|fistulaarteriovenos|aneurisma|pericardio/, 'Vascular (outras)'],
-  [/torax|pleura|pulmon|toracic/, 'Torácica (outras)'],
-  [/nariz|septo|amigdal|otorrino|laring|sinusal|sinusec|mastoid|ouvido|adenoid|turbinectomia|rinoplast|endonasal|pavilhaoauricular|cavum|faringe/, 'ORL (outras)'],
-  [/bucomaxilo|mandibul|odontolog|dente|maxilofacial|labio/, 'Bucomaxilofacial (outras)'],
-  [/linfadenectomia|cervical/, 'Cabeça e pescoço (outras)'],
-  [/abscesso|abcesso|laparotomia|laparoscopia|hernia|intestin|gastr|colon|reto|anal|fistul|esofag|abdominal|estomago|apendice|adere|gastrostomia|corpoestranho/, 'Cirurgia geral (outras)']
+  [/torax|pleur|pulmon|toracic|toracoscop|bulectomia|costectomia/, 'Torácica (outras)'],
+  [/nariz|septo|amigdal|otorrino|laring|sinusal|sinusec|mastoid|ouvido|adenoid|turbinectomia|rinoplast|endonasal|pavilhaoauricular|cavum|faring|timpan|uvulo|intranasal|estapedec|estapedot|intracordal|antrostomia|preauricular|colobomaauris/, 'ORL (outras)'],
+  [/bucomaxilo|mandibul|odontolog|dente|dentar|exodont|maxilofacial|labio|bucal|\bboca\b|daboca/, 'Bucomaxilofacial (outras)'],
+  [/linfadenectomia|cervical|pescoco/, 'Cabeça e pescoço (outras)'],
+  [/abscesso|abcesso|laparotomia|laparoscopia|hernia|intestin|gastr|colon|reto|anal|anuret|anorret|fistul|esofag|abdominal|estomago|apendice|adere|gastrostomia|corpoestranho|retroperit|plicoma/, 'Cirurgia geral (outras)']
 ];
+const CATEGORIA_SEM_CLASSIFICACAO = 'Sem classificação';
+
+/* Lista canônica de categorias do classificador — é o vocabulário `procedimentos_nhsn`
+   (config.carregar garante que todas existam; o código NHSN vai junto para o NNIS). */
+function categoriasDeProcedimento() {
+  const lista = NHSN_CATEGORIAS.map(([codigo, nome]) => ({ Nome: nome, Codigo: codigo }));
+  const vistos = new Set(lista.map(c => c.Nome));
+  for (const [, cat] of [...REGRAS_PROPRIA, ...REGRAS_ESPECIALIDADE]) {
+    if (!vistos.has(cat)) { vistos.add(cat); lista.push({ Nome: cat, Codigo: '' }); }
+  }
+  lista.push({ Nome: CATEGORIA_SEM_CLASSIFICACAO, Codigo: '' });
+  return lista;
+}
+
+/* Categoria que vai para ProcedimentoNHSN: a do classificador quando ele decide; senão o
+   que veio do vocabulário/sinônimo (decisão humana na importação). Não-cirurgia devolve ''
+   — quem chama decide se exclui (importação) ou só marca (banco antigo). */
+function categoriaDoProcedimento(bruto, vocabular) {
+  const r = classificarProcedimentoNHSN(bruto);
+  /* Termo igual ao texto cru não é decisão humana — é o rótulo do Tasy passando reto. */
+  if (normalizarTexto(vocabular) === normalizarTexto(bruto)) vocabular = '';
+  if (r.cirurgia && r.categoria !== CATEGORIA_SEM_CLASSIFICACAO) return r.categoria;
+  if (r.cirurgia) return String(vocabular || '').trim() || CATEGORIA_SEM_CLASSIFICACAO;
+  return String(vocabular || '').trim();
+}
 
 function classificarProcedimentoNHSN(nome) {
   const t = normalizarTexto(nome);
@@ -113,7 +148,7 @@ function classificarProcedimentoNHSN(nome) {
   for (const [re, cod] of REGRAS_NHSN) if (re.test(t)) return { categoria: NHSN_NOME[cod], codigo: cod, cirurgia: true };
   for (const [re, cat] of REGRAS_PROPRIA) if (re.test(t)) return { categoria: cat, codigo: '', cirurgia: true };
   for (const [re, cat] of REGRAS_ESPECIALIDADE) if (re.test(t)) return { categoria: cat, codigo: '', cirurgia: true };
-  return { categoria: 'Sem classificação', codigo: '', cirurgia: true };
+  return { categoria: CATEGORIA_SEM_CLASSIFICACAO, codigo: '', cirurgia: true };
 }
 
 /* Classificação PRESUNTIVA da ferida (potencial de contaminação, CDC) pelo TIPO de cirurgia —
@@ -1771,6 +1806,13 @@ function validar(registros, tipo, vocabulario) {
         erros.push({ linha: registro._linha, campo: campo.id, motivo: `${campo.rotulo} vazio` });
       }
       if (campo.tipo === 'vocab' && valor && !valor.startsWith('__')) {
+        /* Procedimento que o classificador resolve sozinho não é "termo novo": a categoria
+           já é o vocabulário. Só o que ele não decide (Sem classificação) ou o que parece
+           não-cirurgia vai à tela, para a pessoa confirmar/excluir. */
+        if (campo.vocab === 'procedimentos_nhsn') {
+          const r = classificarProcedimentoNHSN((registro._originais || {})[campo.id] || valor);
+          if (r.cirurgia && r.categoria !== CATEGORIA_SEM_CLASSIFICACAO) continue;
+        }
         const conjunto = vocabNormalizado[campo.vocab];
         if (conjunto && !conjunto.has(normalizarTexto(valor))) {
           termosNovos[campo.vocab] = termosNovos[campo.vocab] || new Map();
@@ -1822,7 +1864,12 @@ function chaveNaturalDe(registro, tipo) {
    valor derivado ("Contato", Acao/TipoHigienizacao). Sem normalizar os dois pelo mesmo
    caminho, reimportar o mesmo arquivo duplicaria tudo. */
 function valorDeChave(registro, campo, tipo) {
-  if (tipo === 'cirurgias' && campo === 'Procedimento' && registro.ProcedimentoNHSN) return registro.ProcedimentoNHSN;
+  if (tipo === 'cirurgias' && campo === 'Procedimento') {
+    /* Os dois lados (linha do banco e linha recém-lida) passam pelo MESMO classificador
+       sobre o texto cru; assim o rótulo antigo do vocabulário e o novo dão a mesma chave. */
+    const bruto = (registro._originais && registro._originais.Procedimento) || registro.Procedimento;
+    return categoriaDoProcedimento(bruto, registro.ProcedimentoNHSN || registro.Procedimento);
+  }
   /* Análise de ATB (Tasy): a identidade do paciente é o prontuário quando resolvido —
      assim a MESMA prescrição vinda do relatório antigo (que só tinha prontuário) deduplica
      contra a do Tasy. Sem prontuário (RN/ambulatório), vale o atendimento, que é único. */
@@ -2716,8 +2763,10 @@ function montarLinhaImportada(registro, tipo, id, usuario, agora, tempoCorte) {
     linha.Prontuario = registro.Prontuario || '';
   }
   if (tipo === 'cirurgias') {
-    linha.ProcedimentoNHSN = registro.Procedimento;
+    /* ProcedimentoNHSN = categoria do classificador sobre o texto CRU; o sinônimo/termo que a
+       pessoa escolheu na importação só vale quando o classificador não decide. */
     linha.Procedimento = (registro._originais && registro._originais.Procedimento) || registro.Procedimento;
+    linha.ProcedimentoNHSN = categoriaDoProcedimento(linha.Procedimento, registro.Procedimento);
     enriquecerCirurgia(linha, tempoCorte);
   } else if (tipo === 'antibioticos') {
     /* Os campos de parecer pertencem à aba de AVALIAÇÕES, não à de prescrições: aqui
@@ -3572,7 +3621,7 @@ if (typeof module !== 'undefined' && module.exports) {
     indiceDeObitos, faleceuAposCirurgia, acrescentarObservacao,
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome,
-    enriquecerCirurgia, classificarProcedimentoNHSN, NHSN_CATEGORIAS, contaminacaoPresumida, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
+    enriquecerCirurgia, classificarProcedimentoNHSN, NHSN_CATEGORIAS, categoriasDeProcedimento, categoriaDoProcedimento, CATEGORIA_SEM_CLASSIFICACAO, contaminacaoPresumida, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
     textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,

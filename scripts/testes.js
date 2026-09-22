@@ -161,7 +161,9 @@ console.log('\n== 5. Cirurgias xlsx (NHSN, ASA, contaminação, NNIS) ==');
   verificar('desfecho vazio fica vazio', linha3.Obito === '', JSON.stringify(linha3.Obito));
 
   const validacao = imp.validar(registros, 'cirurgias', vocabulario);
-  verificar('procedimentos fora do NHSN viram termos novos', (validacao.termosNovos.procedimentos_nhsn || []).length === 2, validacao.termosNovos.procedimentos_nhsn);
+  /* Antes viravam 2 termos novos; desde o classificador (22/09/2026) colecistectomia e
+     herniorrafia são resolvidas sozinhas e não perguntam nada. */
+  verificar('procedimentos que o classificador resolve NÃO viram termos novos', (validacao.termosNovos.procedimentos_nhsn || []).length === 0, validacao.termosNovos.procedimentos_nhsn);
 }
 
 console.log('\n== 6. Casos de IRAS de outro sistema (csv) ==');
@@ -997,6 +999,90 @@ console.log('\n== 84. Classificação de procedimento cirúrgico em categoria NH
     cv({ Procedimento: 'Colecistectomia', PotencialContaminacao: '' }).marcar === false);
   verificar('valor do anestesista vence o presumido (limpa marcada mesmo em colecistectomia)',
     cv({ Procedimento: 'Colecistectomia', PotencialContaminacao: 'Limpa' }).marcar === true);
+}
+
+console.log('\n== 84b. Classificador ligado à importação, à dedup e ao vocabulário ==');
+{
+  const cl = n => imp.classificarProcedimentoNHSN(n);
+  /* Refinamentos vindos do banco real (22/09/2026). */
+  verificar('laparotomia "ou para biópsia/drenagem" é cirurgia (XLAP)',
+    cl('Laparotomia Exploradora, Ou Para Biópsia, Ou Para Drenagem De Abscesso, Ou Para Liberação De Bridas').codigo === 'XLAP');
+  verificar('craniotomia para biópsia é cirurgia (CRAN)', cl('Craniotomia Para Biopsia Encefálica').codigo === 'CRAN');
+  verificar('tratamento conservador de fratura não é cirurgia',
+    cl('Tratamento Conservador De Fratura Em Membro Superior Com Imobilização').cirurgia === false);
+  verificar('luxações (plural) -> FX', cl('Fraturas E/Ou Luxações - Tratamento Cirúrgico - Em Cintura Escapular').codigo === 'FX');
+  verificar('uretrorrafia -> Urologia (outras)', cl('Uretrorrafia').categoria === 'Urologia (outras)');
+  verificar('miomectomia uterina -> Ginecologia (outras)', cl('Miomectomia Uterina Laparoscópica').categoria === 'Ginecologia (outras)');
+  verificar('pericardiectomia -> CARD', cl('Pericardiectomia').codigo === 'CARD');
+  verificar('retirada de estimulação cardíaca -> PACE', cl('Retirada De Sistema De Estimulação Cardíaca Artificial').codigo === 'PACE');
+  verificar('videotoracoscopia -> Torácica (outras)', cl('Bulectomia Unilateral Por Videotoracoscopia').categoria === 'Torácica (outras)');
+  verificar('cateter de longa permanência não é cirurgia (era "Apendicectomia" por alias antigo)',
+    cl('Implantação De Cateter De Longa Permanência Semi Ou Totalmente Implantavel (Procedimento Principal)').cirurgia === false);
+
+  /* Lista canônica = vocabulário; a semente do esquema usa os MESMOS nomes NHSN. */
+  const categorias = imp.categoriasDeProcedimento();
+  const nomes = new Set(categorias.map(c => c.Nome));
+  const semente = esquemas.VOCABULARIO_INICIAL.procedimentos_nhsn;
+  verificar('toda categoria NHSN do classificador está na semente com o mesmo nome',
+    imp.NHSN_CATEGORIAS.every(([cod, nome]) => semente.some(s => s.Codigo === cod && s.Nome === nome)),
+    imp.NHSN_CATEGORIAS.filter(([cod, nome]) => !semente.some(s => s.Codigo === cod && s.Nome === nome)));
+  verificar('toda entrada da semente é categoria do classificador',
+    semente.every(s => nomes.has(s.Nome)), semente.filter(s => !nomes.has(s.Nome)).map(s => s.Nome));
+  verificar('categorias próprias/especialidade e "Sem classificação" estão na lista',
+    nomes.has('Desbridamento') && nomes.has('Plástica (outras)') && nomes.has(imp.CATEGORIA_SEM_CLASSIFICACAO));
+  verificar('lista canônica sem nomes repetidos', nomes.size === categorias.length);
+
+  /* Importação: ProcedimentoNHSN = categoria; Procedimento = texto cru. */
+  const linha = imp.montarLinhaImportada(
+    { Prontuario: '1', DataCirurgia: '2026-08-01', Procedimento: 'Colecistectomia Videolaparoscópica' },
+    'cirurgias', 'CIR-1', 't', '2026-08-01 10:00', { colecistectomia: 2 });
+  verificar('importação grava a categoria em ProcedimentoNHSN e o texto cru em Procedimento',
+    linha.ProcedimentoNHSN === 'Colecistectomia' && linha.Procedimento === 'Colecistectomia Videolaparoscópica', linha);
+  const comAlias = imp.montarLinhaImportada(
+    { Prontuario: '1', DataCirurgia: '2026-08-01', Procedimento: 'Apendicectomia', _originais: { Procedimento: 'APENDICECTOMIA VLP' } },
+    'cirurgias', 'CIR-2', 't', '2026-08-01 10:00');
+  verificar('com sinônimo, o cru preservado é o original do relatório', comAlias.Procedimento === 'APENDICECTOMIA VLP' && comAlias.ProcedimentoNHSN === 'Apendicectomia');
+  const humano = imp.montarLinhaImportada(
+    { Prontuario: '1', DataCirurgia: '2026-08-01', Procedimento: 'Segmentectomia hepática', _originais: { Procedimento: 'Segmentectomia (Qualquer Técnica)' } },
+    'cirurgias', 'CIR-3', 't', '2026-08-01 10:00');
+  verificar('quando o classificador não decide, vale o termo escolhido pela pessoa',
+    humano.ProcedimentoNHSN === 'Segmentectomia hepática', humano.ProcedimentoNHSN);
+  const semNada = imp.montarLinhaImportada(
+    { Prontuario: '1', DataCirurgia: '2026-08-01', Procedimento: 'Segmentectomia (Qualquer Técnica)' },
+    'cirurgias', 'CIR-4', 't', '2026-08-01 10:00');
+  verificar('sem decisão humana e sem classificador, fica "Sem classificação"',
+    semNada.ProcedimentoNHSN === imp.CATEGORIA_SEM_CLASSIFICACAO, semNada.ProcedimentoNHSN);
+
+  /* Validação: só o que o classificador não resolve vai à tela de termos novos. */
+  const vocab = { procedimentos_nhsn: categorias.map(c => c.Nome) };
+  const v = imp.validar([
+    { _linha: 1, Prontuario: '1', DataCirurgia: '2026-08-01', Procedimento: 'Herniorrafia Inguinal' },
+    { _linha: 2, Prontuario: '1', DataCirurgia: '2026-08-01', Procedimento: 'Segmentectomia (Qualquer Técnica)' },
+    { _linha: 3, Prontuario: '1', DataCirurgia: '2026-08-01', Procedimento: 'Bloqueio Simpático Por Via Venosa' }
+  ], 'cirurgias', vocab);
+  verificar('termos novos: só o não classificado e o não-cirúrgico (para a pessoa confirmar)',
+    JSON.stringify(v.termosNovos.procedimentos_nhsn) === JSON.stringify(['Segmentectomia (Qualquer Técnica)', 'Bloqueio Simpático Por Via Venosa']),
+    v.termosNovos.procedimentos_nhsn);
+
+  /* Dedup: linha antiga com rótulo do vocabulário velho × reimportação do texto cru. */
+  const existente = [{ Prontuario: '2', DataCirurgia: '2026-08-10', Procedimento: 'Colecistectomia Videolaparoscopica', ProcedimentoNHSN: 'Colecistectomia videolaparoscópica (antigo)' }];
+  const d = imp.deduplicar([{ Prontuario: '2', DataCirurgia: '2026-08-10', Procedimento: 'COLECISTECTOMIA VIDEOLAPAROSCOPICA' }], existente, 'cirurgias');
+  verificar('rótulo antigo no banco não faz a mesma cirurgia reimportar como nova', d.novos.length === 0 && d.duplicados.length === 1, d);
+
+  /* config.carregar garante que toda categoria exista no vocabulário, com código e corte. */
+  global.VOCABULARIO_INICIAL = esquemas.VOCABULARIO_INICIAL;
+  global.categoriasDeProcedimento = imp.categoriasDeProcedimento;
+  const cfg = eval(fs.readFileSync(path.join(__dirname, '..', 'js', 'config.js'), 'utf-8') + '\nconfig');
+  cfg.procedimentosNHSN = [{ Nome: 'Colecistectomia', Codigo: '', TempoCorteHoras: '2,5' }, { Nome: 'Categoria da casa', Codigo: '', TempoCorteHoras: '' }];
+  cfg.vocabulario.procedimentos_nhsn = ['Colecistectomia', 'Categoria da casa'];
+  cfg.garantirCategoriasDeProcedimento();
+  const porNome = Object.fromEntries(cfg.procedimentosNHSN.map(p => [p.Nome, p]));
+  verificar('vocabulário ganha todas as categorias do classificador (+ o que a casa já tinha)',
+    cfg.procedimentosNHSN.length === categorias.length + 1 && porNome['Categoria da casa'], cfg.procedimentosNHSN.length);
+  verificar('categoria já existente ganha o código e mantém o corte ajustado pela casa',
+    porNome['Colecistectomia'].Codigo === 'CHOL' && porNome['Colecistectomia'].TempoCorteHoras === '2,5', porNome['Colecistectomia']);
+  verificar('categoria nova entra com o corte padrão da semente', porNome['Cirurgia de mama'].TempoCorteHoras === '3' && porNome['Cirurgia de mama'].Codigo === 'BRST');
+  verificar('lista de nomes do vocabulário acompanha', cfg.vocabulario.procedimentos_nhsn.includes('Desbridamento') && cfg.vocabulario.procedimentos_nhsn.length === cfg.procedimentosNHSN.length);
 }
 
 console.log('\n== 32. Culturas do protocolo de sepse ==');

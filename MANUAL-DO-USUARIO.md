@@ -285,6 +285,15 @@ A aba Pós-alta acompanha infecção de sítio cirúrgico depois da alta:
 
 1. **Triagem**: cirurgias de 30 a 120 dias aparecem com checkbox — próteses/implantes e
    cesarianas já marcadas. Confirme para colocar **sob vigilância**.
+   - Quem entra na triagem: **cirurgias limpas, cesarianas e próteses/implantes** (regra da
+     CCIH). Como o anestesista raramente preenche o potencial de contaminação, o app
+     **presume** limpa/não-limpa pelo tipo de cirurgia; o valor do anestesista, quando
+     existe, sempre vence.
+   - O tipo de cirurgia é definido sozinho pelo app a partir do nome que veio do Tasy:
+     **categoria NHSN** (Colecistectomia, Artroplastia de quadril…), categoria própria para
+     as frequentes fora do NHSN (Desbridamento, Cateter duplo J…) ou a especialidade
+     "(outras)". Bloqueio anestésico, biópsia, drenagem e cateteres não são cirurgia e não
+     entram. Só o que o app não reconhece aparece na importação para alguém decidir.
 2. **WhatsApp**: mensagem-modelo editável (com {nome}, {procedimento}, {data}); o clique
    abre a conversa e marca "mensagem enviada" (reversível com ↩).
 3. **Desfecho**: "✓ Sem infecção" encerra; "⚠ Investigação" abre a ficha (tipo de ISC,

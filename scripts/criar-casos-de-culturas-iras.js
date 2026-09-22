@@ -6,7 +6,10 @@
    "Cultura classificada pela CCIH (retroativo)".
 
    Situação do caso: --status=investigacao (padrão; entra na fila de confirmação) ou
-   --status=confirmado (histórico já validado). --desde=AAAA-MM-DD limita por data de coleta.
+   --status=confirmado (histórico já validado). --desde=AAAA-MM-DD e --ate=AAAA-MM-DD (exclusivo)
+   limitam por data de coleta. Decisão da CCIH (22/09/2026): coletas até 31/05/2026 entram
+   confirmadas (era o mesmo processo no sistema anterior); de junho/2026 em diante, "em
+   investigação", para confirmação na aba Infecções.
    Roda em simulação; grava só com --aplicar (backup). PASTA_CCIH escolhe a pasta. */
 
 const fs = require('fs');
@@ -28,6 +31,7 @@ const APLICAR = process.argv.includes('--aplicar');
 const arg = nome => { const a = process.argv.find(x => x.startsWith('--' + nome + '=')); return a ? a.split('=')[1] : ''; };
 const STATUS = arg('status') === 'confirmado' ? 'confirmado' : 'em investigação';
 const DESDE = arg('desde') || '';
+const ATE = arg('ate') || '';
 const USUARIO = process.env.USUARIO_CCIH || 'CCIH (retroativo)';
 
 function ler(nome) {
@@ -59,7 +63,7 @@ function gravar(nome, banco) {
 }
 
 console.log(`Pasta: ${PASTA}${APLICAR ? '' : '   (SIMULAÇÃO — use --aplicar para gravar)'}`);
-console.log(`Situação dos casos novos: ${STATUS}${DESDE ? `; só coletas desde ${DESDE}` : ''}\n`);
+console.log(`Situação dos casos novos: ${STATUS}${DESDE ? `; coletas desde ${DESDE}` : ''}${ATE ? `; antes de ${ATE}` : ''}\n`);
 
 const culturas = ler('culturas').culturas || [];
 const bancoIras = ler('iras');
@@ -82,7 +86,8 @@ const jaTemCaso = c => {
 };
 const classificadas = culturas
   .filter(c => c.StatusRevisao === 'avaliada' && /^(iras|bacteremia)/i.test(String(c.AvaliacaoCCIH || '')))
-  .filter(c => !DESDE || String(c.DataColeta).slice(0, 10) >= DESDE);
+  .filter(c => !DESDE || String(c.DataColeta).slice(0, 10) >= DESDE)
+  .filter(c => !ATE || String(c.DataColeta).slice(0, 10) < ATE);
 const candidatas = classificadas.filter(c => !jaTemCaso(c))
   .sort((a, b) => String(a.DataColeta).localeCompare(String(b.DataColeta)));
 console.log(`Culturas classificadas como IRAS/bacteremia${DESDE ? ' no período' : ''}: ${classificadas.length}; sem caso do episódio: ${candidatas.length}`);

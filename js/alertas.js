@@ -253,12 +253,15 @@ const GERME_ESPERA_CLASSIFICACAO = /coagulase|^staphylococcus(spp?)?$|^cocogramp
    infere "Resistente a carbapenêmicos" — para o surto é o MESMO sinal (senão o clone se
    dividia em grupos por grafia do mecanismo). */
 function fenotipoResistencia(mecanismo) {
+  /* normalizarTexto tira espaços e acentos: "SCN OXA R" vira "scnoxar", "CRAb" vira "crab". */
   const m = normalizarTexto(mecanismo);
   if (!m) return '';
-  if (/kpc|ndm|oxa|carbapen|\berc\b|^erc|mbl|vim|imp\b|enterobact.*resist/.test(m)) return 'Resistente a carbapenêmicos';
-  if (/mrsa|oxacilina|meticilina/.test(m)) return 'MRSA';
-  if (/vre|vancomicina/.test(m)) return 'VRE';
-  if (/esbl|blee/.test(m)) return 'ESBL';
+  if (/kpc|ndm|oxa48|oxa\d|carbapen|^erc$|crab|crpa|crkp|^cre$|mbl|vim|^imp$/.test(m)) return 'Resistente a carbapenêmicos';
+  if (/mrsa/.test(m)) return 'MRSA';
+  /* CoNS oxacilina-R (laudo "SCN OXA R"), MRSE: resistente à oxacilina, mas não é MRSA. */
+  if (/oxar$|mrse|meticilin|oxacilin/.test(m)) return 'Resistente à oxacilina';
+  if (/vre|vancomicin/.test(m)) return 'VRE';
+  if (/esbl|blee|ampc/.test(m)) return 'ESBL';
   return String(mecanismo).trim();
 }
 

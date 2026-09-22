@@ -1223,8 +1223,12 @@ console.log('\n== 80c. Surtos em hospital grande: linha de base endêmica, clone
   const invRes = { ...invSens, Mecanismo: 'KPC' };
   verificar('investigação com mecanismo só casa com a suspeita do mesmo fenótipo',
     al.mesmaSuspeita(mdr[0], invRes) && al.mesmaSuspeita(mdr[0], invSens) /* sem mecanismo: casa (compatível com o histórico) */);
-  verificar('fenótipos normalizados (KPC, NDM, ERC, carbapen → um só)',
-    ['KPC', 'NDM', 'ERC', 'Enterobactéria resistente a carbapenêmicos'].every(m => al.fenotipoResistencia(m) === 'Resistente a carbapenêmicos'));
+  verificar('fenótipos normalizados (KPC, NDM, ERC, CRAb, CRPa, BGN-NF… → um só)',
+    ['KPC', 'NDM', 'ERC', 'CRAb', 'CRPa', 'OXA-48', 'BGN-NF resistente aos carbapenêmicos', 'Resistente a carbapenêmicos']
+      .every(m => al.fenotipoResistencia(m) === 'Resistente a carbapenêmicos'));
+  verificar('"SCN OXA R" é oxacilina-R, não carbapenem nem MRSA; ESBL/AmpC é ESBL; VRE é VRE',
+    al.fenotipoResistencia('SCN OXA R') === 'Resistente à oxacilina' && al.fenotipoResistencia('MRSA') === 'MRSA'
+    && al.fenotipoResistencia('ESBL/AmpC') === 'ESBL' && al.fenotipoResistencia('VRE') === 'VRE' && al.fenotipoResistencia('Pneumo PenR') === 'Pneumo PenR');
 
   /* (3) CoNS e preliminares esperam a classificação da CCIH. */
   const cons = (id, pront, data, extras) => cultura(id, pront, data, { Microrganismo: 'Staphylococcus coagulase-negativo', StatusRevisao: 'pendente', AvaliacaoCCIH: '', ...extras });

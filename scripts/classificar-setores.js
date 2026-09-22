@@ -62,7 +62,6 @@ const TIPOS = {
   'Unidade de Espera Centro Obstetrico': 'Espera/recuperação',
   'Unidade de Espera Sala de Preparo': 'Espera/recuperação',
   'Unidade de Espera Pos Operatoria': 'Espera/recuperação',
-  'Unidade de Espera de Leitos Clínicos': 'Espera/recuperação',
   'Unidade de Espera Cirúrgica': 'Espera/recuperação',
   'Unidade de Espera Neonatal / Pediatrica': 'Espera/recuperação',
   'Recuperação Pós Anestésica Obstétrica': 'Espera/recuperação',
@@ -108,7 +107,7 @@ for (const [banco, aba, campo] of VOCAB_APLICACAO.setores) {
 
 /* Fusões pendentes (limpar-setores.js): não precisam de tipo, viram outro setor. */
 const FUNDIDOS = new Set(['CIT', 'Hemodinâmica HNSC', 'H CENTRO OBSTETRICO (HNSC)',
-  'H UNID 04 PEDIAT. MENINO JESUS (HNSC)']);
+  'H UNID 04 PEDIAT. MENINO JESUS (HNSC)', 'Unidade de Espera de Leitos Clínicos']);
 
 const porTipo = new Map();
 for (const [setor, tipo] of Object.entries(TIPOS)) {

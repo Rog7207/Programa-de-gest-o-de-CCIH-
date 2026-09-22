@@ -46,11 +46,14 @@ const UNIFICACOES = {
   'H CENTRO OBSTETRICO (HNSC)': 'Centro Obstétrico',
   'H UNID 22 ONCOLOGIA (HNSC)': 'Oncologia',
   'H ESPERA DE CIRURGIA (HNSC)': 'Unidade de Espera Cirúrgica',
-  'H UNIDADE DE ESPERA DE LEITO - (HNSC)': 'Unidade de Espera de Leitos Clínicos',
-  /* Decididos por ele em 21/09/2026: "CIT" é digitação de CTI (a UTI adulto), e
-     "Hemodinâmica HNSC" é o mesmo setor de "Hemodinâmica Cardíaca". */
+  /* Decididos por ele em 21/09/2026: "CIT" é digitação de CTI (a UTI adulto);
+     "Hemodinâmica HNSC" é o mesmo setor de "Hemodinâmica Cardíaca"; e a Espera de Leitos
+     Clínicos passa a ser a mesma Espera de Leitos - Emergência (o rótulo cru do Tasy que
+     antes virava "Clínicos" agora vai direto para "Emergência"). */
   'CIT': 'CTI - Dr. Joaquim David Ferreira Lima',
-  'Hemodinâmica HNSC': 'Hemodinâmica Cardíaca'
+  'Hemodinâmica HNSC': 'Hemodinâmica Cardíaca',
+  'Unidade de Espera de Leitos Clínicos': 'Unidade de Espera de Leitos - Emergência',
+  'H UNIDADE DE ESPERA DE LEITO - (HNSC)': 'Unidade de Espera de Leitos - Emergência'
 };
 
 /* Entradas do vocabulário que não são setor nenhum. Só saem se não tiverem NENHUM

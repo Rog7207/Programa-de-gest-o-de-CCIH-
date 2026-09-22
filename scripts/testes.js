@@ -4017,6 +4017,104 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     verificar('montarVigilancia monta com todos os status sem exceção', false, e.stack ? e.stack.split('\n')[0] : e.message);
   }
 
+  /* == 85. Amostras repetidas agrupadas nas telas de Culturas e Isolamentos ==
+     Motor puro (pendências agrupadas) + fumaça da tela de Culturas com DOM falso: duas
+     hemoculturas do mesmo paciente (sob dois números) viram uma linha e uma classificação. */
+  console.log('\n== 85. Amostras repetidas: telas de Culturas e Isolamentos ==');
+  {
+    const al = require(path.join(__dirname, '..', 'js', 'alertas.js'));
+    const idNome = imp.identidadePorNome([{ Prontuario: '100', Nome: 'Fulano de Tal' }, { Prontuario: '80000100', Nome: 'Fulano de Tal' }]);
+    const pend = al.agruparPendenciasIsolamento([
+      { ID_Cultura: 'CUL-3', Prontuario: '80000100', Microrganismo: 'Klebsiella pneumoniae', DataColeta: '2026-09-03' },
+      { ID_Cultura: 'CUL-1', Prontuario: '100', Microrganismo: 'Klebsiella pneumoniae', DataColeta: '2026-09-01' },
+      { ID_Cultura: 'CUL-2', Prontuario: '100', Microrganismo: 'Acinetobacter baumannii', DataColeta: '2026-09-02' }
+    ], idNome);
+    verificar('pendências do mesmo paciente (por identidade) e germe viram uma só, com todos os IDs',
+      pend.length === 2 && pend[0].Quantidade === 2 && JSON.stringify(pend[0].IDs) === JSON.stringify(['CUL-3', 'CUL-1']) && pend[0].ID_Cultura === 'CUL-3', pend);
+    verificar('sem identidade, prontuários diferentes não se juntam',
+      al.agruparPendenciasIsolamento([{ ID_Cultura: 'a', Prontuario: '100', Microrganismo: 'X' }, { ID_Cultura: 'b', Prontuario: '80000100', Microrganismo: 'X' }]).length === 2);
+
+    /* DOM falso com árvore de verdade (para achar linhas e botões pelo texto). */
+    const mkNode = (tag, attrs) => {
+      const n = {
+        tag, attrs: attrs || {}, kids: [], parent: null, style: {}, classes: new Set(), ouvintes: {}, value: '', textContent: '',
+        append(...k) { for (const x of k.flat(9)) if (x != null) { n.kids.push(x); if (typeof x === 'object') x.parent = n; } },
+        appendChild(x) { n.append(x); }, replaceChildren(...k) { n.kids = []; n.append(...k); },
+        addEventListener(ev, fn) { (n.ouvintes[ev] = n.ouvintes[ev] || []).push(fn); },
+        setAttribute(k, v) { n.attrs[k] = v; },
+        classList: { add: c => n.classes.add(c), remove: c => n.classes.delete(c), contains: c => n.classes.has(c) },
+        closest(sel) { let p = n; while (p && p.tag !== sel) p = p.parent; return p; },
+        querySelectorAll() { return []; }, querySelector() { return null; }, remove() {}, scrollIntoView() {},
+        after(x) { if (n.parent) n.parent.append(x); },
+        get children() { return n.kids.filter(x => typeof x === 'object'); }
+      };
+      return n;
+    };
+    const elFalso = (tag, attrs, ...filhos) => {
+      const n = mkNode(tag, attrs);
+      for (const [k, v] of Object.entries(attrs || {})) { if (k.startsWith('on')) n.addEventListener(k.slice(2), v); if (k === 'value') n.value = v; }
+      n.append(...filhos);
+      if (tag === 'select') { const o = n.children[0]; n.value = o ? (o.attrs.value || '') : ''; }
+      return n;
+    };
+    const texto = n => typeof n === 'string' ? n : (n && n.kids ? n.kids.map(texto).join(' ') : '');
+    const achar = (n, pred, saida = []) => { if (n && typeof n === 'object') { if (pred(n)) saida.push(n); (n.kids || []).forEach(k => achar(k, pred, saida)); } return saida; };
+
+    const fixture = {
+      culturas: { culturas: [
+        { ID_Cultura: 'CUL-1', Prontuario: '100', DataColeta: '2026-09-01', Material: 'Hemocultura', Microrganismo: 'Staphylococcus aureus', Setor: 'CTI', StatusRevisao: 'pendente', AvaliacaoCCIH: '' },
+        { ID_Cultura: 'CUL-2', Prontuario: '80000100', DataColeta: '2026-09-03', Material: 'Hemocultura', Microrganismo: 'Staphylococcus aureus', Setor: 'CTI', StatusRevisao: 'pendente', AvaliacaoCCIH: '' },
+        { ID_Cultura: 'CUL-3', Prontuario: '200', DataColeta: '2026-09-02', Material: 'Urocultura', Microrganismo: 'Escherichia coli', Setor: 'CTI', StatusRevisao: 'pendente', AvaliacaoCCIH: '' }
+      ], sensibilidade: [] },
+      pacientes: { pacientes: [{ Prontuario: '100', Nome: 'Fulano de Tal' }, { Prontuario: '80000100', Nome: 'Fulano de Tal' }, { Prontuario: '200', Nome: 'Beltrana' }], internacoes: [] },
+      evolucoes: { evolucoes: [] }, sepse: { casos: [] }, iras: { casos: [] }
+    };
+    const antes = {};
+    ['el', 'fmtInt', 'app', 'config', 'lerBanco', 'gravarBanco', 'navegar', 'abrirPaciente', 'normalizarProntuario', 'normalizarTexto',
+      'identidadePorNome', 'agruparCulturasRepetidas', 'indiceSepse', 'culturaDeProtocoloSepse', 'internacaoNaColeta', 'CLASSIFICACOES_CULTURA',
+      'registrarCasoIras', 'verificarTrava', 'criarTrava', 'confirmarTrava', 'liberarTrava', 'ESQUEMAS'].forEach(k => { antes[k] = global[k]; });
+    let gravado = null;
+    Object.assign(global, {
+      el: elFalso, fmtInt: n => String(n), app: { usuario: 'Enf. Teste' },
+      config: { vocabulario: { topografias: ['Infecção de corrente sanguínea'] }, rotina: { mdrMonitorados: [] } },
+      lerBanco: async n => JSON.parse(JSON.stringify(fixture[n] || {})),
+      gravarBanco: async (n, banco) => { if (n === 'culturas') gravado = banco; },
+      navegar() {}, abrirPaciente() {},
+      normalizarProntuario: imp.normalizarProntuario, normalizarTexto: leitura.normalizarTexto,
+      identidadePorNome: imp.identidadePorNome, agruparCulturasRepetidas: imp.agruparCulturasRepetidas,
+      indiceSepse: imp.indiceSepse, culturaDeProtocoloSepse: imp.culturaDeProtocoloSepse, internacaoNaColeta: imp.internacaoNaColeta,
+      CLASSIFICACOES_CULTURA: esquemas.CLASSIFICACOES_CULTURA, registrarCasoIras: imp.registrarCasoIras,
+      verificarTrava: async () => null, criarTrava: async () => {}, confirmarTrava: async () => true, liberarTrava: async () => {},
+      ESQUEMAS: esquemas.ESQUEMAS
+    });
+    try {
+      eval(fs.readFileSync(path.join(__dirname, '..', 'js', 'ui-abas.js'), 'utf-8') + '\nglobal.__montarCulturas = montarCulturas;');
+      const raiz = mkNode('div');
+      await global.__montarCulturas(raiz);
+      const resumo = achar(raiz, n => n.tag === 'p' && /culturas/.test(texto(n))).map(texto).find(t => /em \d+ linha/.test(t)) || '';
+      verificar('tela de Culturas: 3 culturas em 2 linhas (2 hemoculturas do mesmo paciente agrupadas)',
+        /3 culturas em 2 linhas/.test(resumo), resumo);
+      const linhaGrupo = achar(raiz, n => n.tag === 'tr' && /\(2 amostras\)/.test(texto(n)))[0];
+      verificar('a linha do grupo mostra "Hemocultura (2 amostras)" e o intervalo das coletas',
+        !!linhaGrupo && /2026-09-01 → 2026-09-03/.test(texto(linhaGrupo)), linhaGrupo && texto(linhaGrupo));
+      linhaGrupo.ouvintes.click[0]({ currentTarget: linhaGrupo });
+      const cartao = achar(raiz, n => n.tag === 'div' && String(n.attrs.class || '').includes('cartao-detalhe'))[0];
+      verificar('o cartão do grupo lista as duas amostras e avisa que a classificação vale para todas',
+        !!cartao && /CUL-1/.test(texto(cartao)) && /CUL-2/.test(texto(cartao)) && /vale para todas/.test(texto(cartao)), cartao && texto(cartao).slice(0, 200));
+      const botao = achar(cartao, n => n.tag === 'button' && /Salvar avaliação/.test(texto(n)))[0];
+      await botao.ouvintes.click[0]({});
+      const gravadas = (gravado ? gravado.culturas : []).filter(c => ['CUL-1', 'CUL-2'].includes(c.ID_Cultura));
+      verificar('salvar classifica as DUAS amostras de uma vez (e não toca na urocultura)',
+        gravadas.length === 2 && gravadas.every(c => c.StatusRevisao === 'avaliada' && c.AvaliacaoCCIH === 'Presente na admissão')
+          && gravado.culturas.find(c => c.ID_Cultura === 'CUL-3').StatusRevisao === 'pendente',
+        gravado && gravado.culturas.map(c => c.ID_Cultura + ':' + c.StatusRevisao + ':' + c.AvaliacaoCCIH));
+    } catch (e) {
+      verificar('tela de Culturas monta e classifica grupo sem exceção', false, e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e.message);
+    } finally {
+      Object.assign(global, antes);
+    }
+  }
+
   console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
   process.exit(falharam ? 1 : 0);
 })();

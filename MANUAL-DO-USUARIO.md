@@ -176,6 +176,12 @@ linha: o detalhe abre embaixo dela, com antibiograma e o botão "Ver ficha do pa
 Classifique: Presente na admissão / IRAS (pede topografia e dispositivo) / Colonização /
 Contaminação / Repetição / Não é cultura.
 
+- **Amostras repetidas viram uma linha só**: o mesmo paciente com o mesmo germe no mesmo
+  material em até 14 dias aparece como "Hemocultura (2 amostras)". O detalhe lista todas
+  as amostras e **uma classificação vale para todas** — é a mesma infecção, não duas.
+  Se as amostras já tinham classificações diferentes, a linha avisa "⚠ divergente" para
+  a CCIH escolher uma. O mesmo agrupamento vale para as pendências de isolamento.
+
 - Classificar como **IRAS abre uma suspeita de notificação** — que só vira notificação
   oficial depois que *outro profissional* confirmar (ver seção 7).
 - Culturas colhidas em torno de um protocolo de sepse levam o selo **🩸 sepse** e nunca

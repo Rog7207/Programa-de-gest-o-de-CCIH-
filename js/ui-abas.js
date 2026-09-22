@@ -109,6 +109,19 @@ async function montarCulturas(conteudo) {
   const sensPorCultura = {};
   banco.sensibilidade.forEach(s => { (sensPorCultura[s.ID_Cultura] = sensPorCultura[s.ID_Cultura] || []).push(s); });
 
+  /* Amostras repetidas (mesmo paciente — por identidade, não só prontuário —, mesmo germe e
+     mesmo material em 14 dias) viram UMA linha: "Hemocultura (2 amostras)". A classificação
+     é compartilhada: classificar o grupo classifica todas. Decisão da CCIH (22/09/2026):
+     amostra repetida é a mesma infecção, não um caso novo — e "Repetição" deixa de ser
+     necessária como rótulo. */
+  const grupoPorID = new Map();
+  for (const g of agruparCulturasRepetidas(banco.culturas, { identidadeDe: identidadePorNome(bancoPacientes.pacientes) })) {
+    if (g.Quantidade > 1) g.IDs.forEach(id => grupoPorID.set(id, g));
+  }
+  const rotuloGrupo = g => g.Divergente
+    ? '⚠ divergente: ' + [...new Set(g.Amostras.map(a => a.AvaliacaoCCIH).filter(Boolean))].join(' × ')
+    : (g.Classificacao || g.StatusRevisao);
+
   /* Quadro dos últimos 90 dias (pedido da revisão tela a tela, 16/09/2026): o pulso da
      triagem — quanto entrou, como foi classificado e o que ainda espera. */
   const corte90 = (() => { const d = new Date(Date.parse(hojeISO() + 'T00:00:00Z') - 90 * 864e5);
@@ -159,25 +172,33 @@ async function montarCulturas(conteudo) {
       && (!ate || String(c.DataColeta).slice(0, 10) <= ate)
       && (!b || [c.Prontuario, nomes.get(normalizarProntuario(c.Prontuario)), c.Microrganismo].some(v => normalizarTexto(v).includes(b))))
       .sort((x, y) => String(y.DataColeta).localeCompare(String(x.DataColeta)));
-    const mostradas = linhas.slice(0, 200);
+    /* Uma linha por grupo de amostras repetidas (ancorada na amostra mais recente que passou
+       no filtro); cultura sem grupo é linha própria. */
+    const vistos = new Set();
+    const itens = [];
+    for (const c of linhas) {
+      const g = grupoPorID.get(c.ID_Cultura) || null;
+      if (g) { if (vistos.has(g)) continue; vistos.add(g); }
+      itens.push({ c, g });
+    }
+    const mostradas = itens.slice(0, 200);
+    const resumo = `${fmtInt(linhas.length)} culturas` + (itens.length !== linhas.length ? ` em ${fmtInt(itens.length)} linha${itens.length === 1 ? '' : 's'} (amostras repetidas agrupadas)` : '')
+      + (itens.length > 200 ? ' — mostrando 200' : '');
     areaTabela.replaceChildren(
-      el('p', { class: 'texto-suave' }, `${fmtInt(linhas.length)} culturas` + (linhas.length > 200 ? ' (mostrando 200)' : '')),
+      el('p', { class: 'texto-suave' }, resumo),
       el('table', { class: 'tabela' },
         el('thead', {}, el('tr', {}, ['Coleta', 'Prontuário', 'Paciente', 'Setor', 'Material', 'Microrganismo', 'Mecanismo', 'Classificação'].map(c => el('th', {}, c)))),
-        el('tbody', {}, mostradas.map(c => el('tr', { class: 'linha-clicavel', onclick: e => mostrarDetalhe(c, e.currentTarget) },
-          [c.DataColeta, c.Prontuario, nomes.get(normalizarProntuario(c.Prontuario)) || '', c.Setor, c.Material,
+        el('tbody', {}, mostradas.map(({ c, g }) => el('tr', { class: 'linha-clicavel', onclick: e => mostrarDetalhe(c, e.currentTarget, g) },
+          [g && g.Inicio !== g.Fim ? `${g.Inicio} → ${g.Fim}` : c.DataColeta,
+           c.Prontuario, nomes.get(normalizarProntuario(c.Prontuario)) || '', c.Setor,
+           g ? `${c.Material} (${g.Quantidade} amostras)` : c.Material,
            c.Microrganismo || '(negativa)', c.MecanismoResistencia].map(v => el('td', {}, String(v || ''))),
-          el('td', {}, c.AvaliacaoCCIH || c.StatusRevisao, marcaSepse(c)))))));
+          el('td', {}, g ? rotuloGrupo(g) : (c.AvaliacaoCCIH || c.StatusRevisao), marcaSepse(c)))))));
   }
 
-  function mostrarDetalhe(c, tr) {
+  function tabelaAntibiograma(c) {
     const sens = sensPorCultura[c.ID_Cultura] || [];
-    const cartao = el('div', { class: 'cartao cartao-detalhe' },
-      el('h2', {}, `${c.ID_Cultura} — ${c.Microrganismo || 'sem crescimento'}`),
-      el('p', { class: 'texto-suave' },
-        `${nomes.get(normalizarProntuario(c.Prontuario)) || ''} (${c.Prontuario}) · ${c.Setor} · ${c.Material} · coleta ${c.DataColeta}` +
-        (c.MecanismoResistencia ? ` · ${c.MecanismoResistencia}` : '')),
-      contextoDaColeta(c),
+    return [
       sens.length ? el('table', { class: 'tabela' },
         el('thead', {}, el('tr', {}, ['Antibiótico', 'Resultado'].map(x => el('th', {}, x)))),
         el('tbody', {}, sens.map(s => el('tr', {}, el('td', {}, s.Antibiotico),
@@ -185,7 +206,32 @@ async function montarCulturas(conteudo) {
         : el('p', { class: 'texto-suave' }, c.Antibiograma
             ? 'Antibiograma como veio do laboratório: ' + c.Antibiograma
             : 'Sem antibiograma.'),
-      sens.length && c.Antibiograma ? el('p', { class: 'texto-suave' }, 'Laudo original: ' + c.Antibiograma) : null);
+      sens.length && c.Antibiograma ? el('p', { class: 'texto-suave' }, 'Laudo original: ' + c.Antibiograma) : null
+    ];
+  }
+
+  /* g (opcional) = grupo de amostras repetidas: o cartão mostra todas e classifica todas. */
+  function mostrarDetalhe(c, tr, g) {
+    const amostras = g ? g.Amostras : [c];
+    const cartao = g
+      ? el('div', { class: 'cartao cartao-detalhe' },
+          el('h2', {}, `${g.Quantidade} amostras — ${c.Microrganismo || 'sem crescimento'}`),
+          el('p', { class: 'texto-suave' },
+            `${nomes.get(normalizarProntuario(c.Prontuario)) || ''} (${c.Prontuario}) · ${c.Setor} · ${c.Material} · coletas de ${g.Inicio} a ${g.Fim}`),
+          el('p', { class: 'texto-suave' }, 'Mesmo paciente, germe e material em até 14 dias: conta como UMA infecção. A classificação abaixo vale para todas as amostras.'),
+          contextoDaColeta(amostras[0]),
+          ...amostras.map(a => el('details', {},
+            el('summary', {}, `${a.ID_Cultura} · coleta ${a.DataColeta} · ${a.Setor || ''}` +
+              (a.MecanismoResistencia ? ` · ${a.MecanismoResistencia}` : '') +
+              (a.AvaliacaoCCIH ? ` · ${a.AvaliacaoCCIH}` : ` · ${a.StatusRevisao}`)),
+            ...tabelaAntibiograma(a))))
+      : el('div', { class: 'cartao cartao-detalhe' },
+          el('h2', {}, `${c.ID_Cultura} — ${c.Microrganismo || 'sem crescimento'}`),
+          el('p', { class: 'texto-suave' },
+            `${nomes.get(normalizarProntuario(c.Prontuario)) || ''} (${c.Prontuario}) · ${c.Setor} · ${c.Material} · coleta ${c.DataColeta}` +
+            (c.MecanismoResistencia ? ` · ${c.MecanismoResistencia}` : '')),
+          contextoDaColeta(c),
+          ...tabelaAntibiograma(c));
 
     cartao.append(el('div', { class: 'linha-botoes' },
       el('button', { class: 'botao-secundario', onclick: e => { e.stopPropagation(); abrirPaciente(c.Prontuario); } },
@@ -194,9 +240,14 @@ async function montarCulturas(conteudo) {
       cartao.append(el('p', { class: 'texto-suave' },
         '🩸 Colhida em torno da abertura de um protocolo de sepse — aparece no relatório mesmo se a triagem a classificar.'));
     }
-    if (c.StatusRevisao === 'avaliada') {
-      cartao.append(el('p', {}, el('strong', {}, 'Avaliação da CCIH: '), c.AvaliacaoCCIH || '—'));
+    const avaliadaSemConflito = g ? (g.StatusRevisao === 'avaliada' && !g.Divergente) : c.StatusRevisao === 'avaliada';
+    if (avaliadaSemConflito) {
+      cartao.append(el('p', {}, el('strong', {}, 'Avaliação da CCIH: '), (g ? g.Classificacao : c.AvaliacaoCCIH) || '—'));
     } else {
+      if (g && g.Divergente) {
+        cartao.append(el('p', { class: 'aviso-erro-texto' },
+          'As amostras receberam classificações diferentes — escolha uma para o episódio inteiro.'));
+      }
       if (c.StatusRevisao === 'triagem') {
         cartao.append(el('p', { class: 'texto-suave' },
           `Triagem automática: ${c.AvaliacaoCCIH}. Classifique abaixo se discordar.`));
@@ -213,7 +264,7 @@ async function montarCulturas(conteudo) {
         el('label', {}, 'Classificação: ', selAval), linhaIras,
         el('button', { class: 'botao-primario', onclick: async () => {
           try {
-            await salvarAvaliacao(c, selAval.value, selTopo.value, selDisp.value);
+            await salvarAvaliacao(amostras, selAval.value, selTopo.value, selDisp.value);
             /* Preserva onde a pessoa estava: sem isto, cada avaliação salva jogava o
                revisor de volta ao filtro padrão, perdendo setor e busca. */
             app.filtroCulturas = { status: selStatus.value, setor: selSetor.value, busca: campoBusca.value,
@@ -225,15 +276,23 @@ async function montarCulturas(conteudo) {
     detalharNaLinha(tr, cartao);
   }
 
-  async function salvarAvaliacao(c, avaliacao, topografia, dispositivo) {
+  /* culturas: uma ou várias (grupo de amostras repetidas) — todas recebem a mesma
+     classificação; o caso de IRAS nasce UMA vez, na coleta mais antiga. */
+  async function salvarAvaliacao(culturas, avaliacao, topografia, dispositivo) {
+    const lista = (Array.isArray(culturas) ? culturas : [culturas])
+      .slice().sort((a, b) => String(a.DataColeta).localeCompare(String(b.DataColeta)));
+    const c = lista[0];
     const arquivos = avaliacao === 'IRAS' ? ['culturas', 'iras'] : ['culturas'];
     await comTrava(arquivos, async () => {
       const bancoAtual = await lerBanco('culturas');
-      const alvo = bancoAtual.culturas.find(x => x.ID_Cultura === c.ID_Cultura);
-      if (!alvo) throw new Error('Cultura não encontrada no banco.');
+      const ids = new Set(lista.map(x => x.ID_Cultura));
+      const alvos = bancoAtual.culturas.filter(x => ids.has(x.ID_Cultura));
+      if (!alvos.length) throw new Error('Cultura não encontrada no banco.');
       const descarte = avaliacao.startsWith('Não é cultura');
-      alvo.StatusRevisao = descarte ? 'descartada' : 'avaliada';
-      alvo.AvaliacaoCCIH = descarte ? 'Não é cultura' : (avaliacao === 'IRAS' ? `IRAS — ${topografia}` : avaliacao);
+      for (const alvo of alvos) {
+        alvo.StatusRevisao = descarte ? 'descartada' : 'avaliada';
+        alvo.AvaliacaoCCIH = descarte ? 'Não é cultura' : (avaliacao === 'IRAS' ? `IRAS — ${topografia}` : avaliacao);
+      }
       await gravarBanco('culturas', bancoAtual);
       if (avaliacao === 'IRAS') {
         const bancoIras = await lerBanco('iras');
@@ -661,9 +720,11 @@ async function montarIsolamentos(conteudo) {
   }
 
   const ativas = banco.precaucoes.filter(p => !String(p.DataFim || '').trim());
-  const pendencias = pendenciasIsolamento(
+  /* Amostras repetidas do mesmo paciente (por identidade) com o mesmo germe são UMA
+     pendência; a decisão registrada vale para todas as culturas do grupo. */
+  const pendencias = agruparPendenciasIsolamento(pendenciasIsolamento(
     bancoCulturas.culturas, bancoCulturas.sensibilidade, banco.precaucoes, banco.decisoes, hojeISO(),
-    null, config.rotina.mdrMonitorados);
+    null, config.rotina.mdrMonitorados), identidadePorNome(bancoPacientes.pacientes));
 
   conteudo.append(el('div', { class: 'grade-cartoes' }, ...[
     ['Pendências de isolamento', pendencias.length],
@@ -695,7 +756,8 @@ async function montarIsolamentos(conteudo) {
     pendencias.length ? el('table', { class: 'tabela' },
       el('thead', {}, el('tr', {}, ['Coleta', 'Prontuário', 'Paciente', 'Setor', 'Microrganismo', 'Mecanismo', 'Sugestão'].map(c => el('th', {}, c)))),
       el('tbody', {}, pendencias.map(m => el('tr', { class: 'linha-clicavel', onclick: e => mostrarPendencia(m, e.currentTarget) },
-        [m.DataColeta, m.Prontuario, nomeDe(m.Prontuario), m.Setor, m.Microrganismo, m.Mecanismo, m.Sugestao]
+        [m.DataColeta, m.Prontuario, nomeDe(m.Prontuario), m.Setor,
+         m.Quantidade > 1 ? `${m.Microrganismo} (${m.Quantidade} amostras)` : m.Microrganismo, m.Mecanismo, m.Sugestao]
           .map(v => el('td', {}, String(v || '')))))))
       : el('p', { class: 'texto-suave' }, 'Nenhuma pendência — todos os multirresistentes recentes têm precaução ou decisão registrada.')),
     el('div', { class: 'cartao' },
@@ -828,7 +890,9 @@ async function montarIsolamentos(conteudo) {
     const msg = el('p', { class: 'aviso-erro-texto' });
     detalharNaLinha(tr, el('div', { class: 'cartao cartao-detalhe' },
       el('h2', {}, `${m.Microrganismo} (${m.Mecanismo}) — ${nomeDe(m.Prontuario)} (${m.Prontuario})`),
-      el('p', { class: 'texto-suave' }, `${m.Setor || 'setor não informado'} · cultura ${m.ID_Cultura} de ${m.DataColeta} · origem: ${m.Origem}`),
+      el('p', { class: 'texto-suave' }, `${m.Setor || 'setor não informado'} · ` +
+        (m.Quantidade > 1 ? `${m.Quantidade} culturas (${m.IDs.join(', ')}), a mais recente de ${m.DataColeta}` : `cultura ${m.ID_Cultura} de ${m.DataColeta}`) +
+        ` · origem: ${m.Origem}`),
       el('div', { class: 'linha-campos' },
         el('label', {}, 'Tipo de precaução: ', selTipo),
         el('button', { class: 'botao-primario', onclick: () => decidir('isolado') }, 'Registrar precaução iniciada')),
@@ -851,11 +915,13 @@ async function montarIsolamentos(conteudo) {
               DataInicio: hojeISO(), DataFim: '', CriadoPor: app.usuario, CriadoEm: agoraCurto()
             });
           }
-          atual.decisoes.push({
-            ID_Cultura: m.ID_Cultura, Prontuario: m.Prontuario, Decisao: decisao,
-            Justificativa: decisao === 'isolado' ? '' : campoJustificativa.value.trim(),
-            CriadoPor: app.usuario, CriadoEm: agoraCurto()
-          });
+          for (const id of (m.IDs || [m.ID_Cultura])) {
+            atual.decisoes.push({
+              ID_Cultura: id, Prontuario: m.Prontuario, Decisao: decisao,
+              Justificativa: decisao === 'isolado' ? '' : campoJustificativa.value.trim(),
+              CriadoPor: app.usuario, CriadoEm: agoraCurto()
+            });
+          }
           await gravarBanco('isolamentos', atual);
         });
         navegar('isolamentos');

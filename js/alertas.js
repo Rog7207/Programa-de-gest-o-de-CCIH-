@@ -339,6 +339,25 @@ function pendenciasIsolamento(culturas, sensibilidade, precaucoes, decisoes, hoj
     }));
 }
 
+/* Pendências do MESMO paciente (por identidade — o mesmo doente chega com prontuário e
+   número de atendimento) com o MESMO germe viram uma só: várias amostras repetidas não são
+   vários isolamentos a decidir. A linha resultante é a cultura mais recente, com IDs de
+   todas (a decisão registrada vale para o grupo) e Quantidade. Sem identidadeDe, cai no
+   prontuário. */
+function agruparPendenciasIsolamento(pendencias, identidadeDe) {
+  const idDe = identidadeDe || (p => p);
+  const grupos = new Map();
+  for (const m of (pendencias || [])) {
+    const chave = idDe(normalizarProntuario(m.Prontuario)) + '|' + normalizarTexto(m.Microrganismo);
+    if (!grupos.has(chave)) grupos.set(chave, { ...m, IDs: [], Quantidade: 0 });
+    const g = grupos.get(chave);
+    g.IDs.push(m.ID_Cultura);
+    g.Quantidade++;
+    /* pendenciasIsolamento já vem ordenada da mais recente para a mais antiga. */
+  }
+  return [...grupos.values()];
+}
+
 /* Isolamentos de um dia que precisam ser digitados no sistema do hospital. Só os
    registrados NO APP (ID PRC-, nascidos na revisão de culturas): os importados da lista
    do hospital (PRE-) vieram DE lá — já estão notificados por definição. */
@@ -518,7 +537,7 @@ function rotinaDaEquipe(profissionais, bancos, referencia, opcoes) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { detectarSurtos, detectarMultirresistentes, inferirMecanismo, pendenciasIsolamento,
+  module.exports = { detectarSurtos, detectarMultirresistentes, inferirMecanismo, pendenciasIsolamento, agruparPendenciasIsolamento,
     mesmaSuspeita, correlacionarSurto, resumoParaVisitaUTI, ehSetorDeUTI, iniciaisDe, isolamentosParaNotificar,
     ehSetorPortaDeEntrada, perfilAntibiograma, antibiogramasSemelhantes,
     rotinaDaEquipe, diasCorridos, diasUteis, dataDaUltimaCarga,

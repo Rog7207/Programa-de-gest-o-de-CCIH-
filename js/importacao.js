@@ -116,6 +116,28 @@ function classificarProcedimentoNHSN(nome) {
   return { categoria: 'Sem classificação', codigo: '', cirurgia: true };
 }
 
+/* Classificação PRESUNTIVA da ferida (potencial de contaminação, CDC) pelo TIPO de cirurgia —
+   os anestesistas não preenchem o campo de rotina, então presumimos para escolher o que entra
+   na vigilância pós-alta. Decisão da CCIH do HNSC (22/09/2026): vigia-se LIMPAS + cesarianas +
+   cirurgias com prótese. O valor do anestesista, quando existe, SEMPRE vence este presumido
+   (ver categoriaDeVigilancia). Sinais de infecção/ferida aberta no texto rebaixam a classe:
+   ferida infectada ou fratura exposta não é limpa. Categorias do classificador presumidas
+   limpas — o resto é "não limpa" (potencialmente contaminada por padrão, salvo os sinais). */
+const CATEGORIAS_LIMPAS = new Set([
+  'BRST', 'HER', 'THYR', 'HPRO', 'KPRO', 'FUSN', 'LAM', 'CRAN', 'CARD', 'CBGB', 'PVBY', 'PACE', 'VSHN', 'SPLE',
+  'Artroscopia', 'Varizes',
+  'Plástica (outras)', 'Neurocirurgia (outras)', 'Vascular (outras)', 'Ortopedia (outras)'
+]);
+function contaminacaoPresumida(procedimento) {
+  const t = normalizarTexto(procedimento);
+  if (/infectad|infeccios|abscesso|purulent|fasceitenecrot|osteomielite|artriteseptic|gangren|perfurad|peritonit|empiema|piotorax|necrosant/.test(t)) return 'infectada';
+  if (/fraturaexposta|exposta|feridatraumatica|ferimento|corpoestranho|traumatico/.test(t)) return 'contaminada';
+  const r = classificarProcedimentoNHSN(procedimento);
+  if (!r.cirurgia) return '';
+  if (CATEGORIAS_LIMPAS.has(r.codigo) || CATEGORIAS_LIMPAS.has(r.categoria)) return 'limpa';
+  return 'potencialmente_contaminada';
+}
+
 function normalizarData(valor) {
   if (valor == null || valor === '') return '';
   if (valor instanceof Date && !isNaN(valor)) {
@@ -2458,7 +2480,10 @@ function categoriaDeVigilancia(cirurgia) {
   if (potencial.includes('potencialmente')) return 'potencialmente_contaminada';
   if (/infectada|suja/.test(potencial)) return 'infectada';
   if (potencial.includes('contaminada')) return 'contaminada';
-  return 'sem_classificacao';
+  /* Anestesista não classificou: presume pelo tipo de cirurgia — é o que permite escolher as
+     LIMPAS para a vigilância pós-alta mesmo sem o campo preenchido. */
+  const presumida = contaminacaoPresumida(cirurgia.Procedimento);
+  return presumida || 'sem_classificacao';
 }
 
 function classificarParaVigilancia(cirurgia, categoriasVigiadas) {
@@ -3533,7 +3558,7 @@ if (typeof module !== 'undefined' && module.exports) {
     indiceDeObitos, faleceuAposCirurgia, acrescentarObservacao,
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome,
-    enriquecerCirurgia, classificarProcedimentoNHSN, NHSN_CATEGORIAS, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
+    enriquecerCirurgia, classificarProcedimentoNHSN, NHSN_CATEGORIAS, contaminacaoPresumida, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
     textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,

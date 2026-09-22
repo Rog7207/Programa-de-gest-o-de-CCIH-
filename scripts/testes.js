@@ -977,6 +977,26 @@ console.log('\n== 84. Classificação de procedimento cirúrgico em categoria NH
   verificar('parto normal não é cirurgia', cl('Parto Normal').cirurgia === false);
   /* Cesariana É cirurgia (não confundir com parto). */
   verificar('cesariana é cirurgia -> CSEC', cl('Cesariana').cirurgia === true && cl('Cesariana').codigo === 'CSEC');
+
+  /* Contaminação presumida pelo tipo (anestesista não classifica de rotina). */
+  const cp = n => imp.contaminacaoPresumida(n);
+  verificar('prótese de mama é presuntivamente LIMPA', cp('Reconstrução Da Mama Com Prótese') === 'limpa');
+  verificar('herniorrafia é limpa', cp('Herniorrafia Inguinal') === 'limpa');
+  verificar('artroplastia de quadril é limpa', cp('Artroplastia Total De Quadril') === 'limpa');
+  verificar('colecistectomia NÃO é limpa (potencialmente contaminada)', cp('Colecistectomia') === 'potencialmente_contaminada');
+  verificar('apendicectomia não é limpa', cp('Apendicectomia') === 'potencialmente_contaminada');
+  verificar('fratura EXPOSTA rebaixa para contaminada', cp('Tratamento De Fratura Exposta Da Tíbia') === 'contaminada');
+  verificar('desbridamento de fasceíte é infectada', cp('Debridamento De Fasceite Necrotizante') === 'infectada');
+  verificar('bloqueio/biópsia não têm classe (não é cirurgia)', cp('Bloqueio Simpático') === '');
+
+  /* Integração com a vigilância: cirurgia limpa SEM potencial preenchido vira vigiada. */
+  const cv = c => imp.classificarParaVigilancia(c, null);
+  verificar('cirurgia limpa sem potencial preenchido é presumida limpa e VIGIADA',
+    cv({ Procedimento: 'Herniorrafia Inguinal', PotencialContaminacao: '' }).marcar === true);
+  verificar('colecistectomia sem potencial não é vigiada por padrão (não é limpa/cesárea/prótese)',
+    cv({ Procedimento: 'Colecistectomia', PotencialContaminacao: '' }).marcar === false);
+  verificar('valor do anestesista vence o presumido (limpa marcada mesmo em colecistectomia)',
+    cv({ Procedimento: 'Colecistectomia', PotencialContaminacao: 'Limpa' }).marcar === true);
 }
 
 console.log('\n== 32. Culturas do protocolo de sepse ==');
@@ -1362,8 +1382,10 @@ console.log('\n== 41. Vigilância pós-alta ==');
     comRotina({ Procedimento: 'Colectomia', PotencialContaminacao: 'Contaminada' }, ['contaminada']).marcar === true);
   verificar('rotina personalizada pode EXCLUIR a prótese',
     comRotina({ Procedimento: 'Artroplastia Total' }, ['limpa']).marcar === false);
-  verificar('rotina com sem_classificacao pega o campo vazio',
-    comRotina({ Procedimento: 'Colecistectomia' }, ['sem_classificacao']).marcar === true);
+  /* Campo vazio agora recebe a contaminação PRESUMIDA pelo tipo (não mais 'sem_classificacao'):
+     colecistectomia sem potencial preenchido presume 'potencialmente_contaminada'. */
+  verificar('campo vazio vira o presumido pelo tipo (colecistectomia -> potencialmente contaminada)',
+    comRotina({ Procedimento: 'Colecistectomia' }, ['potencialmente_contaminada']).marcar === true);
   verificar('potencialmente contaminada é categoria própria, não vira contaminada',
     imp.categoriaDeVigilancia({ Procedimento: 'Histerectomia', PotencialContaminacao: 'Potencialmente contaminada' }) === 'potencialmente_contaminada');
   verificar('cesariana ganha do potencial de contaminação',

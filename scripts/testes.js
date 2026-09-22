@@ -947,6 +947,38 @@ console.log('\n== 83. Agrupamento de culturas repetidas (mesma infecção) ==');
   verificar('negativa e controle ficam fora do agrupamento', g6.length === 0, JSON.stringify(g6));
 }
 
+console.log('\n== 84. Classificação de procedimento cirúrgico em categoria NHSN ==');
+{
+  const cl = n => imp.classificarProcedimentoNHSN(n);
+  /* Nível 1: NHSN oficial. */
+  verificar('apendicectomia -> APPY', cl('Apendicectomia Por Videolaparoscopia').codigo === 'APPY');
+  verificar('colecistectomia -> CHOL', cl('Colecistectomia').codigo === 'CHOL');
+  verificar('redução de fratura -> FX', cl('Tratamento Cirurgico De Fratura Do Femur (Sintese)').codigo === 'FX');
+  verificar('prótese de quadril -> HPRO', cl('Artroplastia Total De Quadril').codigo === 'HPRO');
+  verificar('RTU de próstata -> PRST (decisão da CCIH)', cl('Ressecção Transuretral De Próstata').codigo === 'PRST');
+  verificar('reconstrução de mama com prótese -> BRST (mama)',
+    cl('Reconstrução Da Mama Com Prótese E/Ou Expansor').codigo === 'BRST');
+  verificar('anatomia escondida em oncologia é resgatada (nefroureterectomia -> NEPH)',
+    cl('Nefroureterectomia Total Em Oncologia').codigo === 'NEPH');
+  /* Nível 2: categoria própria. */
+  verificar('desbridamento -> categoria própria',
+    cl('Debridamento De Ulcera / De Tecidos Desvitalizados').categoria === 'Desbridamento' && cl('Desbridamento').codigo === '');
+  verificar('duplo J -> categoria própria',
+    cl('Instalação Endoscópica De Cateter Duplo J').categoria === 'Cateter duplo J (urológico)');
+  /* Nível 3: especialidade "(outras)" com sufixo no fim. */
+  verificar('lesão de pele com retalho -> Plástica (outras)',
+    cl('Excisão E Sutura De Lesão Na Pele Com Rotação De Retalho Em Oncologia').categoria === 'Plástica (outras)');
+  verificar('sufixo (outras) fica no fim (ordena por especialidade)',
+    /\(outras\)$/.test(cl('Ressecção De Tumor De Partes Moles Em Oncologia').categoria));
+  /* Não é cirurgia: excluída. */
+  verificar('bloqueio anestésico não é cirurgia', cl('Bloqueio Simpático Por Via Venosa').cirurgia === false);
+  verificar('biópsia não é cirurgia', cl('Biópsia De Linfonodo').cirurgia === false);
+  verificar('drenagem não é cirurgia', cl('Incisão E Drenagem De Abscesso').cirurgia === false);
+  verificar('parto normal não é cirurgia', cl('Parto Normal').cirurgia === false);
+  /* Cesariana É cirurgia (não confundir com parto). */
+  verificar('cesariana é cirurgia -> CSEC', cl('Cesariana').cirurgia === true && cl('Cesariana').codigo === 'CSEC');
+}
+
 console.log('\n== 32. Culturas do protocolo de sepse ==');
 {
   const indice = imp.indiceSepse([

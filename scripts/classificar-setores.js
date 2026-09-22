@@ -75,6 +75,7 @@ const TIPOS = {
 
   'Laboratório de Analises Clinicas': 'Apoio',
   'Agencia Transfusional': 'Apoio',
+  'Agência Transfusional': 'Apoio',   /* grafia acentuada da pasta operacional */
   'Banco de Leite': 'Apoio',
   'Hemodinâmica Cardíaca': 'Apoio',
   'Eletrocardiograma HNSC': 'Apoio',

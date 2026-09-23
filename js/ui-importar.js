@@ -501,13 +501,15 @@ async function gravarDispositivosDia(abas, arquivo, setor) {
    suspeita de IRAS em investigação) ANTES de gravar — e a gravação SUBSTITUI a foto
    anterior, nunca acumula. */
 async function telaEvolucoes(arquivo, leitura) {
-  let retidas = [];
+  let retidas = [], bancosRetencao = null, persistidasPrevia = 0;
   try {
-    const [bCulturas, bAtb, bPacientes, bIso, bIras] = await Promise.all([
+    const [bCulturas, bAtb, bPacientes, bIso, bIras, bEvo] = await Promise.all([
       lerBanco('culturas'), lerBanco('antibioticos'), lerBanco('pacientes'),
-      lerBanco('isolamentos').catch(() => ({ precaucoes: [] })), lerBanco('iras').catch(() => ({ casos: [] }))]);
-    retidas = filtrarEvolucoesRetidas(leitura.evolucoes,
-      { culturas: bCulturas, antibioticos: bAtb, pacientes: bPacientes, isolamentos: bIso, iras: bIras }, hojeISO());
+      lerBanco('isolamentos').catch(() => ({ precaucoes: [] })), lerBanco('iras').catch(() => ({ casos: [] })),
+      lerBanco('evolucoes').catch(() => ({ evolucoes: [] }))]);
+    bancosRetencao = { culturas: bCulturas, antibioticos: bAtb, pacientes: bPacientes, isolamentos: bIso, iras: bIras };
+    retidas = filtrarEvolucoesRetidas(leitura.evolucoes, bancosRetencao, hojeISO());
+    persistidasPrevia = mesclarEvolucoes(retidas, bEvo.evolucoes || [], bancosRetencao, hojeISO()).persistidas;
   } catch (e) {
     imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message));
     return;
@@ -521,7 +523,9 @@ async function telaEvolucoes(arquivo, leitura) {
       + `${fmtInt(leitura.evolucoes.length)} evoluções (última geral + última médica) de `
       + `${fmtInt(leitura.atendimentos)} atendimentos.`),
     el('p', {}, `Ficam ${fmtInt(retidas.length)} — pacientes com cultura pendente, antibiótico em curso, isolamento ativo ou suspeita de IRAS em investigação. `
-      + `${fmtInt(descartadas)} sem pendência são descartadas, e a foto anterior é substituída inteira.`),
+      + `${fmtInt(descartadas)} sem pendência são descartadas. `
+      + (persistidasPrevia ? `${fmtInt(persistidasPrevia)} evolução(ões) da foto anterior são mantidas: pacientes que já tiveram alta ou óbito (fora deste export) mas ainda têm pendência.`
+        : 'A foto anterior é substituída.')),
     datas.length ? el('p', { class: 'texto-suave' }, 'Datas: ' + datas.join(', ')
       + '. O texto fica só neste banco local — nunca sai em exportação ou miniapp.') : null,
     leitura.problemas.length ? el('details', {},
@@ -534,15 +538,18 @@ async function telaEvolucoes(arquivo, leitura) {
           const agora = new Date().toISOString().slice(0, 16).replace('T', ' ');
           const resumo = await comTrava(['evolucoes'], async () => {
             const banco = await lerBanco('evolucoes');
+            /* Quem saiu do hospital com pendência aberta persiste da foto anterior. */
+            const mescla = mesclarEvolucoes(retidas, banco.evolucoes || [], bancosRetencao, hojeISO());
             const gerarID = proximoID([], 'ID_Evolucao', 'EVO');
-            banco.evolucoes = retidas.map(e => ({ ID_Evolucao: gerarID(), ...e,
-              CriadoPor: app.usuario || '', CriadoEm: agora }));
+            banco.evolucoes = mescla.evolucoes.map(e => ({ ...e, ID_Evolucao: gerarID(),
+              CriadoPor: e.CriadoPor || app.usuario || '', CriadoEm: e.CriadoEm || agora }));
             await gravarBanco('evolucoes', banco);
-            return banco.evolucoes.length;
+            return { total: banco.evolucoes.length, persistidas: mescla.persistidas };
           });
           imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
             el('h2', {}, 'Importado'),
-            el('p', {}, `Foto do dia gravada: ${fmtInt(resumo)} evoluções de pacientes com pendência.`),
+            el('p', {}, `Foto do dia gravada: ${fmtInt(resumo.total)} evoluções de pacientes com pendência`
+              + (resumo.persistidas ? ` (${fmtInt(resumo.persistidas)} mantidas da foto anterior — pacientes fora do export com pendência aberta)` : '') + '.'),
             el('p', { class: 'texto-suave' }, 'Aparecem na ficha do paciente enquanto a pendência existir.')));
         } catch (e) {
           imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao gravar: ' + e.message));

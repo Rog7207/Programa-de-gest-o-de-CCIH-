@@ -1439,12 +1439,26 @@ function filtrarEvolucoesRetidas(evolucoes, bancos, hoje) {
   const retidas = [];
   for (const e of evolucoes) {
     const atd = normalizarProntuario(e.Atendimento);
-    const pron = pronDoAt.get(atd) || '';
+    /* Evolução já guardada traz o prontuário resolvido de antes — vale quando o atendimento
+       sumiu do censo (alta/óbito). */
+    const pron = pronDoAt.get(atd) || normalizarProntuario(e.Prontuario) || '';
     const pendente = atdComATB.has(atd) || (pron && (pronPendentes.has(pron) || pronComATB.has(pron)));
     if (!pendente) continue;
     retidas.push({ ...e, Prontuario: pron });
   }
   return retidas;
+}
+
+/* Foto nova + o que a foto anterior ainda precisa guardar (pedido de 23/09/2026): paciente
+   que teve alta ou óbito some do export do Tasy, mas a pendência dele (cultura, IRAS em
+   investigação, isolamento) continua aberta — a evolução dele PERSISTE até a pendência
+   fechar. Quem está na foto nova é substituído pela versão nova; quem não está e ainda tem
+   pendência é mantido; quem não tem mais pendência cai. Devolve { evolucoes, persistidas }. */
+function mesclarEvolucoes(retidasNovas, antigas, bancos, hoje) {
+  const atendimentosNovos = new Set((retidasNovas || []).map(e => normalizarProntuario(e.Atendimento)));
+  const foraDaFoto = (antigas || []).filter(e => !atendimentosNovos.has(normalizarProntuario(e.Atendimento)));
+  const persistidas = filtrarEvolucoesRetidas(foraDaFoto, bancos, hoje);
+  return { evolucoes: (retidasNovas || []).concat(persistidas), persistidas: persistidas.length };
 }
 
 /* Competência (AAAA-MM) a partir do NOME do arquivo. Relatório mensal agregado costuma
@@ -3991,7 +4005,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome, resolverProntuarioPorNomeEData, NAO_ANTIMICROBIANO, pareceNomeTruncado,
     enriquecerCirurgia, classificarProcedimentoNHSN, NHSN_CATEGORIAS, categoriasDeProcedimento, categoriaDoProcedimento, CATEGORIA_SEM_CLASSIFICACAO, contaminacaoPresumida, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, mesclarEvolucoes, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

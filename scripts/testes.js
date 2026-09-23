@@ -3618,6 +3618,22 @@ console.log('\n== 74. Evoluções do Tasy: foto operacional com retenção por p
   const irasConfirmada = imp.filtrarEvolucoesRetidas(r.evolucoes, { ...bancos,
     iras: { casos: [{ Prontuario: 'P4', StatusInvestigacao: 'confirmado' }] } }, '2026-09-15');
   verificar('IRAS já confirmada não segura mais', !irasConfirmada.some(e => e.Atendimento === '444'));
+
+  /* Alta/óbito com pendência (23/09/2026): quem sumiu do export persiste da foto anterior. */
+  const antigas = [
+    { ID_Evolucao: 'EVO-1', Atendimento: '111', Prontuario: 'P1', DataEvolucao: '2026-09-10', Texto: 'antiga de P1 (está na foto nova: substituída)' },
+    { ID_Evolucao: 'EVO-2', Atendimento: '999', Prontuario: 'P9', DataEvolucao: '2026-09-10', Texto: 'P9 teve alta, cultura pendente' },
+    { ID_Evolucao: 'EVO-3', Atendimento: '888', Prontuario: 'P8', DataEvolucao: '2026-09-10', Texto: 'P8 teve alta, sem pendência' }
+  ];
+  const bancosAlta = { ...bancos, culturas: { culturas: bancos.culturas.culturas.concat([
+    { Prontuario: 'P9', StatusRevisao: 'pendente', AvaliacaoCCIH: '', Microrganismo: 'Escherichia coli' }]) } };
+  const mescla = imp.mesclarEvolucoes(retidas, antigas, bancosAlta, '2026-09-15');
+  verificar('paciente fora do export com cultura pendente persiste (P9 fica)',
+    mescla.persistidas === 1 && mescla.evolucoes.some(e => e.Atendimento === '999'), mescla);
+  verificar('paciente fora do export sem pendência cai (P8 sai)', !mescla.evolucoes.some(e => e.Atendimento === '888'));
+  verificar('paciente presente na foto nova vem só da foto nova (111 não duplica)',
+    mescla.evolucoes.filter(e => e.Atendimento === '111').length === retidas.filter(e => e.Atendimento === '111').length
+    && !mescla.evolucoes.some(e => e.ID_Evolucao === 'EVO-1'));
 }
 
 console.log('\n== 75. Internação na data da coleta (hospitalar × comunitária) ==');

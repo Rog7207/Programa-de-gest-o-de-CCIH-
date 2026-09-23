@@ -309,6 +309,8 @@ async function processarArquivo(arquivo, codificacao, opcoesAba) {
           if (niss.reconhecido && niss.linhas.length) { telaCensoNISS(arquivo, niss); return; }
           const evolucoes = lerEvolucoesTasy(matrizCrua);
           if (evolucoes.reconhecido && evolucoes.evolucoes.length) { await telaEvolucoes(arquivo, evolucoes); return; }
+          const foto = lerFotoInternados(matrizCrua);
+          if (foto.reconhecido && foto.linhas.length) { await telaFotoInternados(arquivo, foto); return; }
         }
       }
     }
@@ -555,6 +557,71 @@ async function telaEvolucoes(arquivo, leitura) {
           imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao gravar: ' + e.message));
         }
       } }, 'Substituir a foto do dia'),
+      ' ',
+      el('button', { onclick: () => {
+        imp.forcarPlanilhaComum = true;
+        processarArquivo(arquivo, 'auto');
+      } }, 'Não é isso — ler como planilha comum'))));
+}
+
+/* Foto dos internados (relatório 2396 do Tasy): setor e leito de HOJE de cada atendimento.
+   Atualiza SetorAtual/Leito da internação e a passagem por setores (denominadores). A data
+   da foto sai do nome do arquivo (…-2396-AAAAMMDD-…) e pode ser corrigida na tela. */
+async function telaFotoInternados(arquivo, leitura) {
+  const m = /(20\d{2})(\d{2})(\d{2})/.exec(arquivo.name);
+  const dataSugerida = m ? `${m[1]}-${m[2]}-${m[3]}` : hojeISO();
+  const campoData = el('input', { type: 'date', value: dataSugerida });
+  const previa = el('p', { class: 'texto-suave' });
+  let bancos = null;
+  const simular = async () => {
+    try {
+      const [bPac, bDen] = await Promise.all([lerBanco('pacientes'), lerBanco('denominadores').catch(() => ({}))]);
+      bancos = { pacientes: bPac, denominadores: bDen };
+      const copia = { pacientes: { internacoes: JSON.parse(JSON.stringify(bPac.internacoes || [])) },
+        denominadores: { passagem_setor: JSON.parse(JSON.stringify(bDen.passagem_setor || [])) } };
+      const r = aplicarFotoInternados(leitura.linhas, campoData.value, copia, app.usuario, '');
+      previa.textContent = `Prévia: ${fmtInt(r.internacoes)} internações reconhecidas (${fmtInt(r.setorAtualizado)} mudam de setor, `
+        + `${fmtInt(r.leitoAtualizado)} de leito); passagem por setores: ${fmtInt(r.passagensNovas)} abertas, `
+        + `${fmtInt(r.transferencias)} transferências, ${fmtInt(r.encerradas)} encerradas (saíram da foto)`
+        + (r.desconhecidos ? `; ${fmtInt(r.desconhecidos)} atendimentos ainda sem internação no banco (importe o censo 50023 antes, se possível).` : '.');
+    } catch (e) { previa.textContent = 'Erro ao ler o banco: ' + e.message; }
+  };
+  campoData.addEventListener('change', simular);
+  await simular();
+  const setores = [...new Set(leitura.linhas.map(l => l.Setor))].sort();
+  imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
+    el('h2', {}, 'Internados hoje (foto do Tasy)'),
+    el('p', {}, `Reconheci ${arquivo.name} como a foto dos internados: ${fmtInt(leitura.linhas.length)} atendimentos em ${fmtInt(setores.length)} setores.`),
+    el('p', { class: 'texto-suave' }, 'Cada foto atualiza o setor e o leito ATUAIS de cada internação e alimenta a passagem por setores — '
+      + 'importada todo dia, vira pacientes-dia por setor (denominador das taxas por setor) e mostra por onde cada paciente passou.'),
+    el('div', { class: 'linha-campos' }, el('label', {}, 'Data da foto: ', campoData)),
+    previa,
+    leitura.problemas.length ? el('details', {},
+      el('summary', {}, `${fmtInt(leitura.problemas.length)} linha(s) com problema`),
+      el('ul', {}, leitura.problemas.slice(0, 30).map(p => el('li', {}, p)))) : null,
+    el('div', { class: 'linha-botoes' },
+      el('button', { class: 'botao-primario', onclick: async () => {
+        imp.detalhes.replaceChildren(el('div', { class: 'cartao' }, el('p', {}, 'Gravando…')));
+        try {
+          const agora = new Date().toISOString().slice(0, 16).replace('T', ' ');
+          const r = await comTrava(['pacientes', 'denominadores'], async () => {
+            const bPac = await lerBanco('pacientes');
+            const bDen = await lerBanco('denominadores').catch(() => ({}));
+            const resultado = aplicarFotoInternados(leitura.linhas, campoData.value, { pacientes: bPac, denominadores: bDen }, app.usuario, agora);
+            await gravarBanco('pacientes', bPac);
+            await gravarBanco('denominadores', bDen);
+            return resultado;
+          });
+          await arquivarOriginal(arquivo);
+          imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
+            el('h2', {}, 'Importado'),
+            el('p', {}, `Foto de ${campoData.value.split('-').reverse().join('/')}: ${fmtInt(r.setorAtualizado)} internações mudaram de setor, `
+              + `${fmtInt(r.leitoAtualizado)} de leito; ${fmtInt(r.passagensNovas)} passagens abertas, ${fmtInt(r.transferencias)} transferências, ${fmtInt(r.encerradas)} encerradas.`),
+            r.desconhecidos ? el('p', { class: 'texto-suave' }, `${fmtInt(r.desconhecidos)} atendimentos sem internação no banco — entram na passagem por setores, mas o setor atual só aparece na internação depois do censo.`) : null));
+        } catch (e) {
+          imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao gravar: ' + e.message));
+        }
+      } }, 'Gravar foto do dia'),
       ' ',
       el('button', { onclick: () => {
         imp.forcarPlanilhaComum = true;

@@ -1461,6 +1461,97 @@ function mesclarEvolucoes(retidasNovas, antigas, bancos, hoje) {
   return { evolucoes: (retidasNovas || []).concat(persistidas), persistidas: persistidas.length };
 }
 
+/* ---- Foto dos internados (relatório 2396 do Tasy) ----
+   Uma linha por atendimento internado NO MOMENTO: nº do atendimento, data de entrada, setor
+   onde o paciente ESTÁ e leito. É o que o censo (50023) não diz — lá fica o setor de entrada.
+   Reconhecido pelo cabeçalho ("Nr atendimento", "Ds setor atendimento", "Cd unidade basica"). */
+function lerFotoInternados(matriz) {
+  const linhas = [], problemas = [];
+  let cab = -1, col = {};
+  for (let i = 0; i < Math.min((matriz || []).length, 10); i++) {
+    const n = (matriz[i] || []).map(c => normalizarTexto(c));
+    const iAtd = n.findIndex(x => x === 'nratendimento' || x === 'atendimento' || x === 'nrdoatendimento');
+    const iSetor = n.findIndex(x => x === 'dssetoratendimento' || x === 'setoratendimento' || x === 'dssetor');
+    if (iAtd >= 0 && iSetor >= 0) {
+      cab = i;
+      col = { atd: iAtd, setor: iSetor,
+        entrada: n.findIndex(x => x === 'dtentrada' || x === 'dataentrada' || x === 'dtentradaunidade'),
+        leito: n.findIndex(x => x === 'cdunidadebasica' || x === 'leito' || x === 'unidadebasica'),
+        compl: n.findIndex(x => x === 'cdunidadecompl' || x === 'unidadecompl') };
+      break;
+    }
+  }
+  if (cab < 0) return { reconhecido: false, linhas, problemas };
+  for (const bruta of (matriz || []).slice(cab + 1)) {
+    const c = i => (i >= 0 ? String((bruta || [])[i] == null ? '' : bruta[i]).trim() : '');
+    const atd = normalizarProntuario(c(col.atd));
+    if (!atd) continue;
+    const setor = c(col.setor);
+    if (!setor) { problemas.push('atendimento ' + atd + ' sem setor'); continue; }
+    const bruto = (bruta || [])[col.entrada];
+    const entrada = col.entrada >= 0 ? normalizarData(typeof bruto === 'number' ? bruto : c(col.entrada)) : '';
+    const compl = c(col.compl).replace(/^\.$/, '');
+    const leito = [c(col.leito), compl].filter(Boolean).join('-');
+    linhas.push({ Atendimento: atd, DataInternacao: entrada, Setor: setor, Leito: leito });
+  }
+  return { reconhecido: true, linhas, problemas };
+}
+
+/* Aplica a foto nos bancos (objetos mutáveis): SetorAtual/Leito da internação aberta do
+   atendimento passam a ser os de HOJE; a passagem por setores (denominadores.passagem_setor)
+   ganha história — mesmo setor: nada; setor novo: fecha a passagem aberta na data da foto e
+   abre outra; atendimento que sumiu da foto: fecha a passagem aberta (saiu ou foi para fora
+   do escopo). A primeira passagem de um atendimento começa na DATA DA FOTO, não na entrada:
+   não sabemos onde ele esteve antes da primeira foto. Atendimento sem internação no banco
+   (censo ainda não importado) só conta em `desconhecidos` — a foto não tem prontuário nem nome
+   para criar paciente. Devolve contagens. */
+function aplicarFotoInternados(foto, dataFoto, bancos, usuario, agora) {
+  const dia = String(dataFoto || '').slice(0, 10);
+  const internacoes = ((bancos.pacientes || {}).internacoes) || [];
+  const den = bancos.denominadores = bancos.denominadores || {};
+  den.passagem_setor = den.passagem_setor || [];
+  const porAtd = new Map();
+  for (const i of internacoes) {
+    const a = normalizarProntuario(i.Atendimento);
+    if (!a) continue;
+    /* Internação aberta vence; senão a mais recente. */
+    const atual = porAtd.get(a);
+    if (!atual || (!String(i.DataAlta || '').trim() && String(atual.DataAlta || '').trim())) porAtd.set(a, i);
+  }
+  const abertas = new Map();
+  for (const p of den.passagem_setor) {
+    if (!String(p.SaidaSetor || '').trim()) abertas.set(normalizarProntuario(p.Atendimento), p);
+  }
+  const gerarID = proximoID(den.passagem_setor, 'ID_Passagem', 'PAS');
+  const r = { internacoes: 0, setorAtualizado: 0, leitoAtualizado: 0, desconhecidos: 0, passagensNovas: 0, transferencias: 0, encerradas: 0 };
+  const vistos = new Set();
+  for (const f of foto || []) {
+    const atd = normalizarProntuario(f.Atendimento);
+    if (!atd || vistos.has(atd)) continue;
+    vistos.add(atd);
+    const i = porAtd.get(atd);
+    if (i) {
+      r.internacoes++;
+      if (String(i.SetorAtual || '').trim() !== f.Setor) { i.SetorAtual = f.Setor; r.setorAtualizado++; }
+      if (f.Leito && String(i.Leito || '').trim() !== f.Leito) { i.Leito = f.Leito; r.leitoAtualizado++; }
+    } else r.desconhecidos++;
+    const aberta = abertas.get(atd);
+    if (aberta && normalizarTexto(aberta.Setor) === normalizarTexto(f.Setor)) continue;
+    if (aberta) { aberta.SaidaSetor = dia; r.transferencias++; }
+    const nova = { ID_Passagem: gerarID(), Atendimento: atd, Setor: f.Setor, EntradaSetor: dia, SaidaSetor: '',
+      CriadoPor: usuario || '', CriadoEm: agora || '' };
+    den.passagem_setor.push(nova);
+    abertas.set(atd, nova);
+    r.passagensNovas++;
+  }
+  for (const [atd, p] of abertas) {
+    if (!vistos.has(atd) && !String(p.SaidaSetor || '').trim() && String(p.EntradaSetor || '').slice(0, 10) <= dia) {
+      p.SaidaSetor = dia; r.encerradas++;
+    }
+  }
+  return r;
+}
+
 /* Competência (AAAA-MM) a partir do NOME do arquivo. Relatório mensal agregado costuma
    não trazer data nenhuma na tabela — o mês está só no nome ("Censo 012026.csv",
    "antibioticos 07-2026.xls", "Infecções 2026-03.xls"). Sem isso, dois meses diferentes
@@ -4005,7 +4096,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome, resolverProntuarioPorNomeEData, NAO_ANTIMICROBIANO, pareceNomeTruncado,
     enriquecerCirurgia, classificarProcedimentoNHSN, NHSN_CATEGORIAS, categoriasDeProcedimento, categoriaDoProcedimento, CATEGORIA_SEM_CLASSIFICACAO, contaminacaoPresumida, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, mesclarEvolucoes, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, mesclarEvolucoes, lerFotoInternados, aplicarFotoInternados, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

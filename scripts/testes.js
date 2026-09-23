@@ -1333,6 +1333,56 @@ console.log('\n== 86. IRAS: conciliação com o Tasy, status digitado, agente da
     /Sem cultura positiva válida/.test(imp.htmlDasFichas([imp.fichaDeNotificacao({ ...caso, ID_CulturaAgente: '', Microrganismo: '' }, bancos, { identidadeDe: idNome })])));
 }
 
+console.log('\n== 87. Foto dos internados (Tasy 2396): setor atual e passagem por setores ==');
+{
+  const rel = require(path.join(__dirname, '..', 'js', 'relatorios.js'));
+  const matriz = [
+    ['Nr atendimento', 'Ie tipo atendimento', 'Dt entrada', 'Cd setor atendimento', 'Ds setor atendimento', 'Cd unidade basica', 'Cd unidade compl'],
+    [1001, 1, 46267, 54, 'CTI - Dr. Joaquim David Ferreira Lima', '01', '  '],
+    [1002, 1, 46279, 79, 'Unidade 19 - Sao Vicente de Paula', '12', '.'],
+    [1003, 1, 46281, 80, 'Unidade 11 - Sao Camilo', '03', 'B'],
+    ['', '', '', '', '', '', '']
+  ];
+  const f = imp.lerFotoInternados(matriz);
+  verificar('reconhece pelo cabeçalho e lê 3 atendimentos, data serial convertida, leito com complemento',
+    f.reconhecido && f.linhas.length === 3 && f.linhas[0].DataInternacao === '2026-09-02' && f.linhas[0].Leito === '01' && f.linhas[2].Leito === '03-B', f);
+  verificar('planilha comum não é reconhecida', !imp.lerFotoInternados([['Prontuário', 'Nome', 'Setor']]).reconhecido);
+
+  const bancos = {
+    pacientes: { internacoes: [
+      { ID_Internacao: 'I1', Prontuario: 'P1', Atendimento: '1001', DataInternacao: '2026-09-02', DataAlta: '', SetorAtual: 'Emergência', Leito: '' },
+      { ID_Internacao: 'I2', Prontuario: 'P2', Atendimento: '1002', DataInternacao: '2026-09-14', DataAlta: '', SetorAtual: 'Unidade 19 - Sao Vicente de Paula', Leito: '12' },
+      { ID_Internacao: 'I9', Prontuario: 'P9', Atendimento: '9999', DataInternacao: '2026-09-01', DataAlta: '', SetorAtual: 'CTI - Dr. Joaquim David Ferreira Lima', Leito: '' }
+    ] },
+    denominadores: { passagem_setor: [
+      { ID_Passagem: 'PAS-1', Atendimento: '1002', Setor: 'Emergência', EntradaSetor: '2026-09-14', SaidaSetor: '' },
+      { ID_Passagem: 'PAS-2', Atendimento: '9999', Setor: 'CTI - Dr. Joaquim David Ferreira Lima', EntradaSetor: '2026-09-10', SaidaSetor: '' }
+    ] }
+  };
+  const r = imp.aplicarFotoInternados(f.linhas, '2026-09-18', bancos, 'Enf', '2026-09-18 08:00');
+  const int = a => bancos.pacientes.internacoes.find(i => i.Atendimento === a);
+  const pas = bancos.denominadores.passagem_setor;
+  verificar('setor e leito atuais atualizados na internação (1001: Emergência → CTI)',
+    int('1001').SetorAtual === 'CTI - Dr. Joaquim David Ferreira Lima' && int('1001').Leito === '01' && r.setorAtualizado === 1, r);
+  verificar('1002 já estava no setor certo: nada muda na internação', int('1002').SetorAtual === 'Unidade 19 - Sao Vicente de Paula');
+  verificar('transferência: passagem antiga de 1002 (Emergência) fecha na data da foto e abre a nova',
+    pas.find(p => p.ID_Passagem === 'PAS-1').SaidaSetor === '2026-09-18' && pas.some(p => p.Atendimento === '1002' && p.Setor === 'Unidade 19 - Sao Vicente de Paula' && !p.SaidaSetor) && r.transferencias === 1);
+  verificar('quem sumiu da foto (9999) tem a passagem encerrada', pas.find(p => p.ID_Passagem === 'PAS-2').SaidaSetor === '2026-09-18' && r.encerradas === 1);
+  verificar('atendimento sem internação no banco (1003) conta como desconhecido mas ganha passagem', r.desconhecidos === 1 && pas.some(p => p.Atendimento === '1003'));
+  verificar('passagens novas abertas na data da foto: 1001, 1002, 1003', r.passagensNovas === 3 && pas.filter(p => p.EntradaSetor === '2026-09-18').length === 3);
+  /* Reaplicar a MESMA foto não muda nada. */
+  const r2 = imp.aplicarFotoInternados(f.linhas, '2026-09-18', bancos, 'Enf', '2026-09-18 09:00');
+  verificar('reimportar a mesma foto é idempotente', r2.setorAtualizado === 0 && r2.passagensNovas === 0 && r2.transferencias === 0 && r2.encerradas === 0, r2);
+
+  /* Pacientes-dia por setor a partir das passagens (quando não há censo agregado). */
+  const pd = rel.pacientesDiaDoCenso({ denominadores: { passagem_setor: [
+    { Atendimento: 'a', Setor: 'CTI', EntradaSetor: '2026-09-01', SaidaSetor: '2026-09-10' },   /* 10 dias */
+    { Atendimento: 'b', Setor: 'CTI', EntradaSetor: '2026-09-25', SaidaSetor: '' },             /* aberta: até o fim, 6 dias */
+    { Atendimento: 'c', Setor: 'Unidade 19', EntradaSetor: '2026-09-05', SaidaSetor: '2026-09-06' }
+  ] } }, '2026-09-01', '2026-09-30', ['CTI']);
+  verificar('pacientes-dia do CTI pelas passagens = 16 (censo agregado ausente)', pd && pd.dias === 16 && pd.origem === 'passagens', pd);
+}
+
 console.log('\n== 32. Culturas do protocolo de sepse ==');
 {
   const indice = imp.indiceSepse([

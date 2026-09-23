@@ -81,7 +81,7 @@ function pacientesDia(internacoes, de, ate) {
    relatório não diz quanto de cada dia foi de quem. */
 function pacientesDiaDoCenso(bancos, inicio, fim, setoresEscopo) {
   const linhas = ((bancos.denominadores || {}).censo_setor || []);
-  if (!linhas.length) return null;
+  if (!linhas.length) return pacientesDiaDasPassagens(bancos, inicio, fim, setoresEscopo);
   const de = String(inicio).slice(0, 7), ate = String(fim).slice(0, 7);
   let total = 0, meses = new Set();
   for (const l of linhas) {
@@ -93,7 +93,34 @@ function pacientesDiaDoCenso(bancos, inicio, fim, setoresEscopo) {
     total += dias;
     meses.add(competencia);
   }
-  return total > 0 ? { dias: total, meses: meses.size } : null;
+  if (total > 0) return { dias: total, meses: meses.size };
+  return pacientesDiaDasPassagens(bancos, inicio, fim, setoresEscopo);
+}
+
+/* Pacientes-dia POR SETOR a partir da passagem por setores (fotos diárias dos internados,
+   relatório 2396 do Tasy): cada passagem conta os dias em que esteve dentro do período;
+   passagem aberta conta até o fim do período. Só entra quando o censo agregado não cobre. */
+function pacientesDiaDasPassagens(bancos, inicio, fim, setoresEscopo) {
+  const passagens = ((bancos.denominadores || {}).passagem_setor || []);
+  if (!passagens.length) return null;
+  const a = Date.parse(String(inicio).slice(0, 10) + 'T00:00:00Z');
+  const b = Date.parse(String(fim).slice(0, 10) + 'T00:00:00Z');
+  if (!isFinite(a) || !isFinite(b)) return null;
+  let total = 0;
+  const meses = new Set();
+  for (const p of passagens) {
+    if (!relEscopo(p.Setor, setoresEscopo)) continue;
+    const e = Date.parse(String(p.EntradaSetor || '').slice(0, 10) + 'T00:00:00Z');
+    const sTexto = String(p.SaidaSetor || '').slice(0, 10);
+    const s = sTexto ? Date.parse(sTexto + 'T00:00:00Z') : b;
+    if (!isFinite(e) || !isFinite(s)) continue;
+    const ini = Math.max(e, a), fimP = Math.min(s, b);
+    if (fimP < ini) continue;
+    const dias = Math.round((fimP - ini) / 86400000) + 1;
+    total += dias;
+    meses.add(String(inicio).slice(0, 7));
+  }
+  return total > 0 ? { dias: total, meses: meses.size, origem: 'passagens' } : null;
 }
 
 /* Dias de dispositivo no período, do banco `denominadores`. É o denominador das taxas que
@@ -1187,7 +1214,7 @@ const BANCOS_RELATORIOS = ['iras', 'culturas', 'higiene_maos', 'antibioticos', '
   'sepse', 'cirurgias', 'pacientes', 'uti'];
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { relatorioIRAS, casosParaRelatorio, relatorioMicrobiologico, relatorioHigiene,
+  module.exports = { relatorioIRAS, casosParaRelatorio, pacientesDiaDoCenso, pacientesDiaDasPassagens, relatorioMicrobiologico, relatorioHigiene,
     relatorioAntibioticos, relatorioIsolamentos, relatorioSepse, relatorioPosAlta,
     relatorioResumoExecutivo, RELATORIOS_PADRAO, BANCOS_RELATORIOS, pacientesDia, pacientesDiaDoCenso,
     relMediana, relDiasEntre, mesAnteriorIntervalo,

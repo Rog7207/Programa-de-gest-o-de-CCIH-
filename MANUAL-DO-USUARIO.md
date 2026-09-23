@@ -125,6 +125,7 @@ remapear a cada vez) e a **auditoria de vocabulário** (junta termos quase iguai
 | Internações (censo) | entradas, altas, setores, nomes, telefones | Tasy |
 | Altas | fecha internações abertas | Tasy |
 | Cirurgias realizadas | procedimentos, profilaxia | relatório do centro cirúrgico |
+| Internados hoje (Tasy 2396) | setor e leito **atuais** de cada internação; passagem por setores | foto diária do Tasy — importada todo dia vira pacientes-dia por setor |
 | Dispositivos invasivos | CVC/VM/SVD, instalação e retirada | Tasy |
 | Pacientes em isolamento | foto de quem está isolado agora | Tasy |
 | Óbitos | desfecho das internações | Tasy |

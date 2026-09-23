@@ -2858,7 +2858,9 @@ function aplicarObitos(internacoes, obitos) {
    limpas, cesarianas e qualquer procedimento com prótese/implante (nestes a vigilância
    vale até 90 dias, não 30). O relatório do centro cirúrgico HOJE não traz o potencial de
    contaminação — quando passar a trazer, a regra da cirurgia limpa liga sozinha. */
-const JANELA_VIGILANCIA = { inicioDias: 30, fimDias: 120, implanteDias: 90 };
+/* fimDias 150 (era 120): decisão da CCIH do HNSC em 23/09/2026 — a fila acumulada de maio a
+   agosto ainda merece uma tentativa de contato antes de encerrar "sem contato". */
+const JANELA_VIGILANCIA = { inicioDias: 30, fimDias: 150, implanteDias: 90 };
 const PROCEDIMENTO_COM_IMPLANTE = /protese|artroplastia|implante|marcapasso|osteossintese|osteosintese|\btela\b|valvar/;
 const PROCEDIMENTO_CESARIANA = /cesariana|cesarea|cesaria/;
 

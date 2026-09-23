@@ -593,14 +593,15 @@ function rotinaDaEquipe(profissionais, bancos, referencia, opcoes) {
       });
       return idadeDaFila(ativas, s => s.Fim, 'surtos');
     },
-    /* Pós-alta: a fila é a cirurgia dentro da janela de contato (30–120 dias corridos,
-       JANELA_VIGILANCIA) ainda pendente; o atraso conta em dias úteis a partir da ABERTURA
+    /* Pós-alta: a fila é a cirurgia dentro da janela de contato (JANELA_VIGILANCIA, 30–150
+       dias corridos) ainda pendente; o atraso conta em dias úteis a partir da ABERTURA
        da janela (data da cirurgia + 30 dias), não da cirurgia. */
     vigilancia_pos_alta: () => {
+      const janela = typeof JANELA_VIGILANCIA !== 'undefined' ? JANELA_VIGILANCIA : { inicioDias: 30, fimDias: 150 };
       const naJanela = (bancos.cirurgias || []).filter(c => {
         if (normalizarTexto(c.StatusVigilancia) !== 'pendente') return false;
         const d = diasCorridos(c.DataCirurgia, referencia);
-        return d !== null && d >= 30 && d <= 120;
+        return d !== null && d >= janela.inicioDias && d <= janela.fimDias;
       });
       let atraso = 0;
       for (const c of naJanela) {

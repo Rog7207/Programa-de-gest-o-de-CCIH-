@@ -152,7 +152,7 @@ async function montarVigilancia(conteudo) {
     ? el('span', { class: 'selo', style: 'color:#533ab7;font-weight:600', title: 'Com prótese/implante — vigilância vale até 90 dias' }, ' ⚙ prótese')
     : null;
   const seloVencida = c => janelaVencida(c)
-    ? el('span', { class: 'selo aviso-erro-texto', title: 'Passou dos 120 dias sem desfecho' }, ' ⏰ janela vencida')
+    ? el('span', { class: 'selo aviso-erro-texto', title: `Passou dos ${JANELA_VIGILANCIA.fimDias} dias sem desfecho` }, ' ⏰ janela vencida')
     : null;
 
   /* ---- 1. Triagem: o que entra na vigilância ---- */
@@ -180,7 +180,7 @@ async function montarVigilancia(conteudo) {
     conteudo.append(el('div', { class: 'cartao' },
       el('h2', {}, 'Triagem — nenhuma cirurgia aguardando'),
       el('p', { class: 'texto-suave' },
-        'Todas as cirurgias da janela de 30–120 dias já foram triadas.'),
+        `Todas as cirurgias da janela de ${JANELA_VIGILANCIA.inicioDias}–${JANELA_VIGILANCIA.fimDias} dias já foram triadas.`),
       avisoACaminho || el('p', { class: 'texto-suave' }, 'Também não há cirurgias recentes a caminho — confira se o relatório do centro cirúrgico está sendo importado.')));
   }
 
@@ -202,7 +202,7 @@ async function montarVigilancia(conteudo) {
 
     const msgTriagem = el('p', { class: 'aviso-erro-texto' });
     conteudo.append(el('div', { class: 'cartao' },
-      el('h2', {}, `Triagem — ${fmtInt(triagem.length)} cirurgias de 30 a 120 dias`),
+      el('h2', {}, `Triagem — ${fmtInt(triagem.length)} cirurgias de ${JANELA_VIGILANCIA.inicioDias} a ${JANELA_VIGILANCIA.fimDias} dias`),
       avisoACaminho,
       el('p', { class: 'texto-suave' },
         'Pré-marcadas conforme a rotina da instituição (Configurações → Rotina → cirurgias vigiadas; '
@@ -626,7 +626,7 @@ async function montarVigilancia(conteudo) {
   if (!triagem.length && !sobVigilancia.length && !enviadas.length && !investigacoes.length
       && !semInfeccao.length && !confirmadas.length && !semContato.length) {
     conteudo.append(el('div', { class: 'cartao' }, el('p', { class: 'texto-suave' },
-      'Nenhuma cirurgia na janela de vigilância (30 a 120 dias de pós-operatório). '
+      `Nenhuma cirurgia na janela de vigilância (${JANELA_VIGILANCIA.inicioDias} a ${JANELA_VIGILANCIA.fimDias} dias de pós-operatório). `
       + 'As cirurgias entram aqui automaticamente conforme completam 30 dias.')));
   }
 }

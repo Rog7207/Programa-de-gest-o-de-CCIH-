@@ -311,7 +311,7 @@ e a fusão fica registrada nas observações.
 
 A aba Pós-alta acompanha infecção de sítio cirúrgico depois da alta:
 
-1. **Triagem**: cirurgias de 30 a 120 dias aparecem com checkbox — próteses/implantes e
+1. **Triagem**: cirurgias de 30 a 150 dias aparecem com checkbox — próteses/implantes e
    cesarianas já marcadas. Confirme para colocar **sob vigilância**.
    - Quem entra na triagem: **cirurgias limpas, cesarianas e próteses/implantes** (regra da
      CCIH). Como o anestesista raramente preenche o potencial de contaminação, o app
@@ -327,7 +327,7 @@ A aba Pós-alta acompanha infecção de sítio cirúrgico depois da alta:
 3. **Desfecho**: "✓ Sem infecção" encerra; "⚠ Investigação" abre a ficha (tipo de ISC,
    observações) e cria a suspeita de IRAS.
 4. **Validação**: um segundo profissional valida — só então a infecção é confirmada.
-5. Quem passa de 120 dias sem resposta é encerrado "sem contato".
+5. Quem passa de 150 dias sem resposta é encerrado "sem contato".
 
 ---
 

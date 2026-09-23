@@ -1015,8 +1015,9 @@ async function montarCirurgias(conteudo) {
   const pacientes = new Map(bancoPacientes.pacientes.map(p => [normalizarProntuario(p.Prontuario), p]));
   const hoje = hojeISO();
 
+  /* Mais recentes em cima (pedido de 23/09/2026). */
   const pendentes = banco.cirurgias.filter(c => c.StatusVigilancia === 'pendente')
-    .sort((a, b) => String(a.DataCirurgia).localeCompare(String(b.DataCirurgia)));
+    .sort((a, b) => String(b.DataCirurgia).localeCompare(String(a.DataCirurgia)));
 
   /* ---- Resumo por período + profilaxia (pedido da revisão tela a tela, 16/09/2026).
      O seletor de datas rege os cartões e o quadro de profilaxia; "em vigilância" é

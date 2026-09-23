@@ -238,7 +238,9 @@ const SINONIMOS_CLASSIFICACAO = {
   'agua': 'Água', 'controledeagua': 'Água', 'aguacontrole': 'Água',
   'leite': 'Leite', 'leitematerno': 'Leite', 'leitehumano': 'Leite',
   'leitehumanocontrole': 'Leite', 'controledeleite': 'Leite',
-  'bacterioscopia': 'Não é cultura', 'baar': 'Não é cultura', 'naoecultura': 'Não é cultura'
+  /* Gram/BAAR é resultado preliminar, não lixo: fica visível (perfil, ficha) fora da fila —
+     decisão da CCIH em 23/09/2026 (antes caía em "Não é cultura" e sumia). */
+  'bacterioscopia': 'Informativa', 'baar': 'Informativa', 'naoecultura': 'Não é cultura'
 };
 
 const VOCAB_ROTULOS = {

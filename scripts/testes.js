@@ -259,7 +259,8 @@ console.log('\n== 9. Antibiograma em campo único e descartes ==');
       === 'Sensível: Amicacina | Resistente: Cefepima');
 
   verificar('classificação do relatório vira a canônica', imp.classificacaoCanonica('Admissão') === 'Presente na admissão');
-  verificar('bacterioscopia não é cultura', imp.classificacaoCanonica('Bacterioscopia') === 'Não é cultura');
+  /* Desde 23/09/2026 (decisão da CCIH): Gram/BAAR é resultado preliminar, fica visível como Informativa. */
+  verificar('bacterioscopia é Informativa (não some como "não é cultura")', imp.classificacaoCanonica('Bacterioscopia') === 'Informativa' && imp.classificacaoCanonica('BAAR') === 'Informativa');
   verificar('classificação desconhecida → vazio', imp.classificacaoCanonica('Qualquer coisa') === '');
 
   const linhas = [['Prontuário', 'Data Coleta', 'Material', 'Microorganismo', 'Antibiograma'],

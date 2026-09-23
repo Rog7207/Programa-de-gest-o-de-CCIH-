@@ -385,15 +385,21 @@ async function montarPainel(conteudo) {
         return el('div', { class: 'alerta-item linha-surto' },
           el('label', { class: 'rotulo-descartar', title: 'Desconsiderar — não é surto' },
             caixa, el('span', {}, 'não é surto')),
-          el('span', { class: 'linha-clicavel', style: 'flex:1', onclick: () => {
+          /* Clicar na linha abre a INVESTIGAÇÃO daquele surto (pedido de 23/09/2026); as
+             culturas filtradas ficam num link menor. */
+          el('span', { class: 'linha-clicavel', style: 'flex:1', title: 'Abrir a investigação deste surto', onclick: () => {
+            app.surtoParaAbrir = { Setor: s.Setor, Microrganismo: s.Microrganismo, Mecanismo: s.Mecanismo || '', Inicio: s.Inicio };
+            navegar('surtos');
+          } }, `${s.Setor}: ${s.Microrganismo}${s.Mecanismo ? ' (' + s.Mecanismo + ')' : ''} — ${s.Pacientes} pacientes entre ${s.Inicio} e ${s.Fim}`
+            + (s.Limiar > SURTO_MINIMO_PACIENTES ? ` · limiar do setor: ${s.Limiar}` : '')),
+          el('button', { class: 'botao-secundario', title: 'Ver as culturas deste germe no setor', onclick: () => {
             /* Alerta por procedimento não tem setor para filtrar — vai só pelo germe. */
             app.filtroCulturas = { status: 'todas', busca: s.Microrganismo };
             if (s.Criterio !== 'procedimento') app.filtroCulturas.setor = s.Setor;
             navegar('culturas');
-          } }, `${s.Setor}: ${s.Microrganismo}${s.Mecanismo ? ' (' + s.Mecanismo + ')' : ''} — ${s.Pacientes} pacientes entre ${s.Inicio} e ${s.Fim}`
-            + (s.Limiar > SURTO_MINIMO_PACIENTES ? ` · limiar do setor: ${s.Limiar}` : '')),
+          } }, 'Culturas'),
           el('button', { class: 'botao-secundario botao-investigar', onclick: () => {
-            app.surtoParaAbrir = { Setor: s.Setor, Microrganismo: s.Microrganismo };
+            app.surtoParaAbrir = { Setor: s.Setor, Microrganismo: s.Microrganismo, Mecanismo: s.Mecanismo || '', Inicio: s.Inicio };
             navegar('surtos');
           } }, inv ? 'Ver investigação' : 'Investigar'));
       }),

@@ -295,8 +295,14 @@ async function montarSurtos(conteudo) {
 
   /* Vindo do botão "investigar" do painel, já abre a suspeita escolhida. */
   if (app.surtoParaAbrir) {
-    const alvo = itens.find(i => normalizarTexto(i.suspeita.Setor) === normalizarTexto(app.surtoParaAbrir.Setor)
-      && normalizarTexto(i.suspeita.Microrganismo) === normalizarTexto(app.surtoParaAbrir.Microrganismo));
+    const pedido = app.surtoParaAbrir;
+    const mesmoGrupo = i => normalizarTexto(i.suspeita.Setor) === normalizarTexto(pedido.Setor)
+      && normalizarTexto(i.suspeita.Microrganismo) === normalizarTexto(pedido.Microrganismo)
+      && (pedido.Mecanismo === undefined || normalizarTexto(i.suspeita.Mecanismo || '') === normalizarTexto(pedido.Mecanismo || ''));
+    /* O mesmo setor+germe pode ter mais de uma suspeita (clone sensível × resistente,
+       períodos diferentes): a data de início desempata. */
+    const alvo = itens.find(i => mesmoGrupo(i) && (!pedido.Inicio || String(i.suspeita.Inicio) === String(pedido.Inicio)))
+      || itens.find(mesmoGrupo);
     app.surtoParaAbrir = null;
     if (alvo) {
       const linhas = [...area.querySelectorAll('tbody tr')];

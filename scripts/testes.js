@@ -3605,6 +3605,19 @@ console.log('\n== 74. Evoluções do Tasy: foto operacional com retenção por p
   verificar('antibiótico em curso segura (222 fica)', retidas.some(e => e.Atendimento === '222'));
   verificar('sem pendência, a evolução é descartada (444 sai — curso já encerrado)',
     !retidas.some(e => e.Atendimento === '444'));
+  /* Ampliação de 23/09/2026: isolamento ativo e suspeita de IRAS em investigação também seguram. */
+  const comIsoEIras = imp.filtrarEvolucoesRetidas(r.evolucoes, { ...bancos,
+    isolamentos: { precaucoes: [{ Prontuario: 'P4', DataInicio: '2026-09-10', DataFim: '' }] } }, '2026-09-15');
+  verificar('precaução de isolamento ativa segura a evolução (444 fica)', comIsoEIras.some(e => e.Atendimento === '444'));
+  const isoEncerrado = imp.filtrarEvolucoesRetidas(r.evolucoes, { ...bancos,
+    isolamentos: { precaucoes: [{ Prontuario: 'P4', DataInicio: '2026-09-10', DataFim: '2026-09-14' }] } }, '2026-09-15');
+  verificar('isolamento encerrado não segura mais', !isoEncerrado.some(e => e.Atendimento === '444'));
+  const comIras = imp.filtrarEvolucoesRetidas(r.evolucoes, { ...bancos,
+    iras: { casos: [{ Prontuario: 'P4', StatusInvestigacao: 'em investigação' }] } }, '2026-09-15');
+  verificar('suspeita de IRAS em investigação segura a evolução', comIras.some(e => e.Atendimento === '444'));
+  const irasConfirmada = imp.filtrarEvolucoesRetidas(r.evolucoes, { ...bancos,
+    iras: { casos: [{ Prontuario: 'P4', StatusInvestigacao: 'confirmado' }] } }, '2026-09-15');
+  verificar('IRAS já confirmada não segura mais', !irasConfirmada.some(e => e.Atendimento === '444'));
 }
 
 console.log('\n== 75. Internação na data da coleta (hospitalar × comunitária) ==');

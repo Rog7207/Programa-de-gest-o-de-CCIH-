@@ -1399,14 +1399,18 @@ function internacaoNaColeta(prontuario, dataColeta, internacoes) {
   return antes ? { situacao: 'fora', internacao: antes } : { situacao: 'sem-internacao' };
 }
 
-/* Retenção decidida pelo usuário (16/09/2026): a evolução só fica no banco enquanto o
-   paciente tem PENDÊNCIA — cultura no painel de revisão ou antibiótico em curso. Sem
-   pendência, é descartada (e a foto inteira é substituída a cada importação). Também
-   resolve o prontuário pelo atendimento, para a ficha do paciente achar. */
+/* Retenção decidida pelo usuário (16/09/2026, ampliada em 23/09/2026): a evolução só fica
+   no banco enquanto o paciente tem PENDÊNCIA — cultura no painel de revisão, antibiótico em
+   curso, precaução de ISOLAMENTO ativa ou suspeita de IRAS em investigação. Quando a
+   pendência fecha (cultura classificada, curso encerrado, isolamento encerrado, IRAS
+   confirmada/descartada), a próxima foto descarta a evolução (a foto inteira é substituída
+   a cada importação). Também resolve o prontuário pelo atendimento, para a ficha achar. */
 function filtrarEvolucoesRetidas(evolucoes, bancos, hoje) {
   const culturas = ((bancos.culturas || {}).culturas) || [];
   const prescricoes = ((bancos.antibioticos || {}).prescricoes) || [];
   const internacoes = ((bancos.pacientes || {}).internacoes) || [];
+  const precaucoes = ((bancos.isolamentos || {}).precaucoes) || [];
+  const casosIras = ((bancos.iras || {}).casos) || [];
   const pronDoAt = new Map();
   for (const i of internacoes) {
     const a = normalizarProntuario(i.Atendimento), p = normalizarProntuario(i.Prontuario);
@@ -1415,6 +1419,12 @@ function filtrarEvolucoesRetidas(evolucoes, bancos, hoje) {
   const pronPendentes = new Set();
   for (const c of culturas) {
     if (culturaDoPainel(c)) pronPendentes.add(normalizarProntuario(c.Prontuario));
+  }
+  for (const p of precaucoes) {
+    if (!String(p.DataFim || '').trim()) pronPendentes.add(normalizarProntuario(p.Prontuario));
+  }
+  for (const k of casosIras) {
+    if (normalizarTexto(k.StatusInvestigacao) === normalizarTexto('em investigação')) pronPendentes.add(normalizarProntuario(k.Prontuario));
   }
   const atdComATB = new Set(), pronComATB = new Set();
   const dia = String(hoje || '').slice(0, 10);

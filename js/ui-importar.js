@@ -497,15 +497,17 @@ async function gravarDispositivosDia(abas, arquivo, setor) {
 }
 
 /* Evoluções do Tasy: foto operacional. A tela mostra o que fica e o que cai pela regra de
-   retenção (só paciente com cultura pendente ou antibiótico em curso) ANTES de gravar —
-   e a gravação SUBSTITUI a foto anterior, nunca acumula. */
+   retenção (paciente com cultura pendente, antibiótico em curso, isolamento ativo ou
+   suspeita de IRAS em investigação) ANTES de gravar — e a gravação SUBSTITUI a foto
+   anterior, nunca acumula. */
 async function telaEvolucoes(arquivo, leitura) {
   let retidas = [];
   try {
-    const [bCulturas, bAtb, bPacientes] = await Promise.all([
-      lerBanco('culturas'), lerBanco('antibioticos'), lerBanco('pacientes')]);
+    const [bCulturas, bAtb, bPacientes, bIso, bIras] = await Promise.all([
+      lerBanco('culturas'), lerBanco('antibioticos'), lerBanco('pacientes'),
+      lerBanco('isolamentos').catch(() => ({ precaucoes: [] })), lerBanco('iras').catch(() => ({ casos: [] }))]);
     retidas = filtrarEvolucoesRetidas(leitura.evolucoes,
-      { culturas: bCulturas, antibioticos: bAtb, pacientes: bPacientes }, hojeISO());
+      { culturas: bCulturas, antibioticos: bAtb, pacientes: bPacientes, isolamentos: bIso, iras: bIras }, hojeISO());
   } catch (e) {
     imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message));
     return;
@@ -518,7 +520,7 @@ async function telaEvolucoes(arquivo, leitura) {
     el('p', {}, `Reconheci ${arquivo.name} como o export de evoluções. `
       + `${fmtInt(leitura.evolucoes.length)} evoluções (última geral + última médica) de `
       + `${fmtInt(leitura.atendimentos)} atendimentos.`),
-    el('p', {}, `Ficam ${fmtInt(retidas.length)} — pacientes com cultura pendente ou antibiótico em curso. `
+    el('p', {}, `Ficam ${fmtInt(retidas.length)} — pacientes com cultura pendente, antibiótico em curso, isolamento ativo ou suspeita de IRAS em investigação. `
       + `${fmtInt(descartadas)} sem pendência são descartadas, e a foto anterior é substituída inteira.`),
     datas.length ? el('p', { class: 'texto-suave' }, 'Datas: ' + datas.join(', ')
       + '. O texto fica só neste banco local — nunca sai em exportação ou miniapp.') : null,

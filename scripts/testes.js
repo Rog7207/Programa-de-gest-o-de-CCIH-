@@ -2090,6 +2090,21 @@ console.log('\n== 47. Relatórios padrão: escopo, período, denominadores hones
   const itens = Object.fromEntries(iras.secoes[0].itens);
   verificar('IRAS: julho fica fora, agosto entra', itens['IRAS no período'] === 2);
   verificar('IRAS: dupla assinatura separa confirmadas', itens['Confirmadas (dupla assinatura)'] === 1);
+  /* Dispositivo (23/09/2026): "Nenhum" não é dispositivo; topografia "não associada" com
+     dispositivo anotado é inconsistência listada, não associação. */
+  const bancosDisp = { ...bancos, iras: { casos: [
+    { Prontuario: '1', DataInfeccao: '2026-08-02', Setor: 'CTI', Topografia: 'Pneumonia associada à ventilação mecânica (PAV)', DispositivoAssociado: 'VM', StatusInvestigacao: 'confirmado' },
+    { Prontuario: '2', DataInfeccao: '2026-08-03', Setor: 'CTI', Topografia: 'ITU não associada a cateter', DispositivoAssociado: 'Nenhum', StatusInvestigacao: 'confirmado' },
+    { Prontuario: '3', DataInfeccao: '2026-08-04', Setor: 'CTI', Topografia: 'Pneumonia não associada à VM', DispositivoAssociado: 'VM', StatusInvestigacao: 'em investigação' }
+  ] } };
+  const relDisp = rel.relatorioIRAS(bancosDisp, ['CTI'], '2026-08-01', '2026-08-31');
+  const itensDisp = Object.fromEntries(relDisp.secoes[0].itens);
+  verificar('IRAS: "Nenhum" e topografia "não associada" não contam como associadas a dispositivo (1 de 3)',
+    String(itensDisp['Associadas a dispositivo']).startsWith('1 '), itensDisp['Associadas a dispositivo']);
+  verificar('IRAS: inconsistência (não associada + dispositivo anotado) vira seção para corrigir',
+    relDisp.secoes.some(s => s.titulo === 'Inconsistências a corrigir' && s.linhas.length === 1 && s.linhas[0][1] === '3'));
+  verificar('IRAS: em investigação conta só o status, e digitadas aparecem à parte',
+    itensDisp['Em investigação'] === 1 && itensDisp['Digitadas no Tasy'] === 0 && itensDisp['Confirmadas (dupla assinatura)'] === 2);
   verificar('IRAS: densidade usa pacientes-dia', itens['Densidade por 1.000 pacientes-dia'] === (2 / 36 * 1000).toFixed(2));
   const irasCTI = rel.relatorioIRAS(bancos, ['CTI'], '2026-08-01', '2026-08-31');
   verificar('IRAS com escopo: filtra setor e NÃO mostra densidade',

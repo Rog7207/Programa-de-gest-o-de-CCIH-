@@ -212,8 +212,18 @@ function casosParaRelatorio(casos, conciliacaoDesde) {
 function relatorioIRAS(bancos, setoresEscopo, inicio, fim) {
   const casos = ((bancos.iras || {}).casos || [])
     .filter(k => relPeriodo(k.DataInfeccao, inicio, fim) && relEscopo(k.Setor, setoresEscopo));
-  const confirmadas = casosParaRelatorio(casos, bancos.conciliacaoDesde);
-  const comDispositivo = casos.filter(k => String(k.DispositivoAssociado || '').trim());
+  const validas = casosParaRelatorio(casos, bancos.conciliacaoDesde);
+  const status = k => normalizarTexto(k.StatusInvestigacao);
+  const confirmadas = casos.filter(k => status(k) === 'confirmado' || status(k) === 'digitado');
+  const digitadas = casos.filter(k => status(k) === 'digitado');
+  const emInvestigacao = casos.filter(k => status(k) === 'em investigacao' || status(k) === normalizarTexto('em investigação'));
+  /* "Associada a dispositivo" = dispositivo de verdade (não "Nenhum") E topografia que não
+     diga o contrário: "Pneumonia não associada à VM" com VM anotado é inconsistência, não
+     associação (achado do ensaio de 23/09/2026). As inconsistências são listadas para a CCIH. */
+  const dispositivoReal = k => { const d = normalizarTexto(k.DispositivoAssociado); return d && !/^(nenhum|nao|n|sem)$/.test(d); };
+  const topografiaNega = k => /naoassociad/.test(normalizarTexto(k.Topografia));
+  const comDispositivo = casos.filter(k => dispositivoReal(k) && !topografiaNega(k));
+  const inconsistentes = casos.filter(k => dispositivoReal(k) && topografiaNega(k));
   /* O censo agregado dá o denominador POR SETOR; sem ele, só o total do hospital, a
      partir do censo individual (ver pacientesDia). */
   const doCenso = pacientesDiaDoCenso(bancos, inicio, fim, setoresEscopo);
@@ -228,7 +238,10 @@ function relatorioIRAS(bancos, setoresEscopo, inicio, fim) {
     { titulo: 'Panorama', tipo: 'numeros', itens: [
       ['IRAS no período', casos.length],
       ['Confirmadas (dupla assinatura)', confirmadas.length],
-      ['Em investigação', casos.length - confirmadas.length],
+      ['Digitadas no Tasy', digitadas.length],
+      ['Válidas para os indicadores', validas.length + (bancos.conciliacaoDesde
+        ? ` (até ${String(bancos.conciliacaoDesde).split('-').reverse().join('/')}: confirmadas; depois: só digitadas)` : '')],
+      ['Em investigação', emInvestigacao.length],
       ['Associadas a dispositivo', `${comDispositivo.length} (${relPct(comDispositivo.length, casos.length)})`],
       ['Densidade por 1.000 pacientes-dia', densidade || '—'],
       ...(densidade ? [['Pacientes-dia no período', Math.round(pd)],
@@ -254,9 +267,16 @@ function relatorioIRAS(bancos, setoresEscopo, inicio, fim) {
         + 'foi feita não entra em nenhum dos dois lados da divisão. Cateter central soma '
         + 'CVC, PICC, femoral e cateter de hemodiálise, como o NHSN define linha central.' });
   }
+  if (inconsistentes.length) {
+    secoes.push({ titulo: 'Inconsistências a corrigir', tipo: 'tabela',
+      colunas: ['Data', 'Prontuário', 'Topografia', 'Dispositivo anotado'],
+      linhas: inconsistentes.map(k => [String(k.DataInfeccao || '').slice(0, 10), k.Prontuario, k.Topografia, k.DispositivoAssociado]) });
+    secoes.push({ titulo: 'Sobre as inconsistências', tipo: 'texto',
+      corpo: 'A topografia diz "não associada" mas há dispositivo anotado no caso. Estes casos NÃO foram contados como associados a dispositivo; corrija o dispositivo (ou a topografia) na aba Infecções.' });
+  }
   if (setoresEscopo && !doCenso) secoes.push({ titulo: 'Nota', tipo: 'texto', corpo: TEXTO_SEM_DENSIDADE_SETOR });
   return { titulo: 'IRAS do período', secoes,
-    resumo: [['IRAS', casos.length], ['IRAS confirmadas', confirmadas.length],
+    resumo: [['IRAS', casos.length], ['IRAS confirmadas', confirmadas.length], ['Válidas para os indicadores', validas.length],
       ['Densidade IRAS/1.000 pac-dia', densidade || '—']] };
 }
 

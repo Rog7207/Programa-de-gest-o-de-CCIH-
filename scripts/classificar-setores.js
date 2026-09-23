@@ -48,6 +48,8 @@ const TIPOS = {
   'Unidade 21 - Provida': 'Internação',
   /* Ambulatório (ortopedia, neurocirurgia, pré-natal de alto risco) — confirmado por ele em 22/09/2026. */
   'Alta Complexidade - 01': 'Ambulatório',
+  /* "Uti" veio na planilha de higiene de mãos (ago/2026) sem dizer qual UTI — tipo provisório; a unificação fica para a CCIH. */
+  'Uti': 'Internação',
   'Berçário RN': 'Internação',
 
   /* Só a entrada de verdade é porta de entrada (fora da detecção de surto). As esperas

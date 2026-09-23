@@ -412,10 +412,11 @@ async function montarPainel(conteudo) {
   if (mdr.length) {
     areaAlertas.append(el('div', { class: 'aviso-alerta' },
       el('div', { class: 'alerta-titulo' }, `Multirresistentes nos últimos ${MDR_JANELA_PAINEL_DIAS} dias (${mdr.length})`),
-      mdr.slice(0, 12).map(m => el('div', { class: 'linha-clicavel alerta-item', onclick: () => {
-        app.filtroCulturas = { status: 'todas', busca: m.Prontuario };
-        navegar('culturas');
-      } }, `${m.DataColeta} · ${m.Microrganismo} (${m.Mecanismo}${m.Origem === 'antibiograma' ? ', inferido do antibiograma' : ''}) · ${m.Setor || 'sem setor'} · prontuário ${m.Prontuario}`)),
+      /* Clicar abre a FICHA do paciente (pedido de 23/09/2026): é lá que se vê internação,
+         isolamento e as outras culturas dele. */
+      mdr.slice(0, 12).map(m => el('div', { class: 'linha-clicavel alerta-item', title: 'Abrir a ficha do paciente',
+        onclick: () => abrirPaciente(m.Prontuario) },
+        `${m.DataColeta} · ${m.Microrganismo} (${m.Mecanismo}${m.Origem === 'antibiograma' ? ', inferido do antibiograma' : ''}) · ${m.Setor || 'sem setor'} · prontuário ${m.Prontuario}`)),
       mdr.length > 12 ? el('p', { class: 'texto-suave' }, `… e mais ${fmtInt(mdr.length - 12)}.`) : null));
   }
   if (!surtos.length && descartados) {

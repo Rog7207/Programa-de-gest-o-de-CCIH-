@@ -254,6 +254,55 @@ async function montarInfeccoes(conteudo) {
       tabela));
   }
 
+  /* Caso já registrado (confirmado, digitado ou em investigação): vincular/trocar o agente
+     sem passar de novo pela confirmação. Mesma lista de culturas do episódio. */
+  function editarAgente(caso, tr) {
+    const candidatas = culturasDoEpisodio(culturas, caso, { identidadeDe });
+    const sel = el('select', {},
+      el('option', { value: '' }, '— escolher —'),
+      ...candidatas.map(c => el('option', { value: c.ID_Cultura, selected: c.ID_Cultura === caso.ID_CulturaAgente ? '' : null },
+        `${c.DataColeta} · ${c.Material} · ${c.Microrganismo}${c.MecanismoResistencia ? ' (' + c.MecanismoResistencia + ')' : ''}`)),
+      el('option', { value: '__sem__', selected: caso.Microrganismo === SEM_CULTURA_VALIDA ? '' : null }, SEM_CULTURA_VALIDA),
+      el('option', { value: '__outro__' }, 'Outro (digitar)…'));
+    const campo = el('input', { type: 'text', value: caso.ID_CulturaAgente ? '' : (caso.Microrganismo === SEM_CULTURA_VALIDA ? '' : caso.Microrganismo || ''), placeholder: 'microrganismo', style: 'display:none' });
+    sel.addEventListener('change', () => { campo.style.display = sel.value === '__outro__' ? '' : 'none'; });
+    const msg = el('p', { class: 'aviso-erro-texto' });
+    const salvar = async () => {
+      try {
+        await comTrava(['iras', 'culturas'], async () => {
+          const atualIras = await lerBanco('iras');
+          const alvo = atualIras.casos.find(k => k.ID_IRAS === caso.ID_IRAS);
+          if (!alvo) throw new Error('Caso não encontrado no banco.');
+          const escolha = sel.value;
+          if (escolha === '__sem__') { alvo.Microrganismo = SEM_CULTURA_VALIDA; alvo.ID_CulturaAgente = ''; }
+          else if (escolha === '__outro__' || !escolha) { alvo.Microrganismo = campo.value.trim(); alvo.ID_CulturaAgente = ''; }
+          else { const cul = culturas.find(c => c.ID_Cultura === escolha); alvo.Microrganismo = cul ? cul.Microrganismo : alvo.Microrganismo; alvo.ID_CulturaAgente = escolha; }
+          if (!String(alvo.AgenteOriginal || '').trim() && String(alvo.Microrganismo || '').trim()) alvo.AgenteOriginal = alvo.Microrganismo;
+          alvo.Observacoes = acrescentarObservacao(alvo.Observacoes, 'Agente', `agente definido: ${alvo.Microrganismo || '—'}${alvo.ID_CulturaAgente ? ' (' + alvo.ID_CulturaAgente + ')' : ''}`, app.usuario, agoraCurto());
+          await gravarBanco('iras', atualIras);
+          const atualCul = await lerBanco('culturas');
+          let mudou = false;
+          for (const c of atualCul.culturas || []) {
+            const deve = c.ID_Cultura === alvo.ID_CulturaAgente;
+            if (deve && c.ID_IRAS !== alvo.ID_IRAS) { c.ID_IRAS = alvo.ID_IRAS; mudou = true; }
+            else if (!deve && c.ID_IRAS === alvo.ID_IRAS) { c.ID_IRAS = ''; mudou = true; }
+          }
+          if (mudou) await gravarBanco('culturas', atualCul);
+        });
+        navegar('iras', { historico: 'substituir' });
+      } catch (e) { msg.textContent = e.message; }
+    };
+    detalharNaLinha(tr, el('div', { class: 'cartao cartao-detalhe' },
+      el('h2', {}, `${caso.ID_IRAS} — ${caso.Topografia || 'sem topografia'} · ${caso.StatusInvestigacao}`),
+      el('p', { class: 'texto-suave' }, `${nomes.get(normalizarProntuario(caso.Prontuario)) || ''} (${caso.Prontuario}) · ${caso.Setor || ''} · ${caso.DataInfeccao}`
+        + (caso.Microrganismo ? ` · agente atual: ${caso.Microrganismo}${caso.ID_CulturaAgente ? ' (' + caso.ID_CulturaAgente + ')' : ' (sem cultura vinculada)'}` : ' · sem agente')),
+      el('div', { class: 'linha-campos' }, el('label', {}, 'Agente (cultura do episódio, ±14 dias): ', sel), campo),
+      el('div', { class: 'linha-botoes' },
+        el('button', { class: 'botao-primario', onclick: salvar }, 'Salvar agente'),
+        el('button', { class: 'botao-secundario', onclick: e => { e.stopPropagation(); abrirPaciente(caso.Prontuario); } }, 'Ver ficha do paciente')),
+      msg));
+  }
+
   function detalharSuspeita(caso, tr) {
     const topografias = (config.vocabulario.topografias || []);
     const selTopo = el('select', {},
@@ -493,10 +542,11 @@ async function montarInfeccoes(conteudo) {
           el('p', { class: 'texto-suave' }, 'Do banco IRAS — com topografia, dispositivo e critério.'),
           el('table', { class: 'tabela' },
             el('thead', {}, el('tr', {}, ['Data', 'Paciente', 'Setor', 'Topografia', 'Microrganismo', 'Situação', 'Notificou / Confirmou'].map(c => el('th', {}, c)))),
-            el('tbody', {}, casosPeriodo.slice(0, 200).map(k => el('tr', { class: 'linha-clicavel', onclick: () => abrirPaciente(k.Prontuario) },
+            el('tbody', {}, casosPeriodo.slice(0, 200).map(k => el('tr', { class: 'linha-clicavel', title: 'Clique para ver/trocar o agente ou abrir a ficha', onclick: e => editarAgente(k, e.currentTarget) },
               [k.DataInfeccao, nomes.get(normalizarProntuario(k.Prontuario)) || k.Prontuario, k.Setor,
-               k.Topografia, k.Microrganismo, k.StatusInvestigacao,
-               [k.CriadoPor, k.ConfirmadoPor].filter(Boolean).join(' / ')].map(v => el('td', {}, String(v || ''))))))))
+               k.Topografia, (k.Microrganismo || '') + (k.ID_CulturaAgente ? ' ✓' : ''), k.StatusInvestigacao,
+               [k.CriadoPor, k.ConfirmadoPor].filter(Boolean).join(' / ')].map(v => el('td', {}, String(v || ''))))))),
+          el('p', { class: 'texto-suave' }, '✓ = agente vinculado a uma cultura do episódio.'))
           : el('p', { class: 'texto-suave' },
               'Nenhum caso investigado registrado neste período. Os casos entram ao classificar uma cultura '
               + 'como IRAS na aba Culturas (que pede a topografia) ou importando um relatório de IRAS.')),

@@ -293,20 +293,23 @@ async function montarCulturas(conteudo) {
         alvo.StatusRevisao = descarte ? 'descartada' : 'avaliada';
         alvo.AvaliacaoCCIH = descarte ? 'Não é cultura' : (avaliacao === 'IRAS' ? `IRAS — ${topografia}` : avaliacao);
       }
-      await gravarBanco('culturas', bancoAtual);
       if (avaliacao === 'IRAS') {
         const bancoIras = await lerBanco('iras');
         /* Nasce como suspeita: a notificação oficial só existe depois que um segundo
            profissional confirmar na aba Infecções. Se o MESMO episódio já tem caso
-           aberto (outra cultura, pós-alta, visita da UTI), não duplica — só completa. */
-        registrarCasoIras(bancoIras.casos, {
+           aberto (outra cultura, pós-alta, visita da UTI), não duplica — só completa.
+           A cultura que motivou a suspeita já entra como AGENTE (ID_CulturaAgente) e
+           aponta de volta para o caso (ID_IRAS). */
+        const { caso } = registrarCasoIras(bancoIras.casos, {
           Prontuario: c.Prontuario, DataInfeccao: c.DataColeta, Topografia: topografia,
           CriterioDiagnostico: 'Revisão de culturas', Setor: c.Setor, DispositivoAssociado: dispositivo,
-          Microrganismo: c.Microrganismo, Desfecho: '', StatusInvestigacao: 'em investigação',
+          Microrganismo: c.Microrganismo, ID_CulturaAgente: c.ID_Cultura, Desfecho: '', StatusInvestigacao: 'em investigação',
           NotificadoANVISA: '', CriadoPor: app.usuario, CriadoEm: agoraCurto()
         }, () => proximoIDLista(bancoIras.casos, 'ID_IRAS', 'IRA'), identidadePorNome(bancoPacientes.pacientes));
         await gravarBanco('iras', bancoIras);
+        for (const alvo of alvos) if (!alvo.ID_IRAS) alvo.ID_IRAS = caso.ID_IRAS;
       }
+      await gravarBanco('culturas', bancoAtual);
     });
   }
 

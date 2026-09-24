@@ -163,6 +163,8 @@ async function montarPaciente(conteudo) {
     juntar(c.DataColeta, c.MecanismoResistencia ? 'mdr' : 'cultura',
       c.Microrganismo ? `Cultura: ${c.Microrganismo}` : 'Cultura negativa',
       [c.Material, c.Setor, c.MecanismoResistencia, c.AvaliacaoCCIH,
+        /* Várias amostras da MESMA infecção mostram o mesmo caso — não são várias IRAS. */
+        c.ID_IRAS ? `caso ${c.ID_IRAS}` : '',
         resistentes.length ? 'R: ' + resistentes.join(', ') : ''].filter(Boolean).join(' · '));
   });
   /* Um evento por CURSO, não por renovação: o extrato traz janelas de prescrição

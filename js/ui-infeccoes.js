@@ -553,13 +553,14 @@ async function montarInfeccoes(conteudo) {
 
       el('div', { class: 'cartao' },
         el('h2', {}, 'Isolados classificados como IRAS'),
-        el('p', { class: 'texto-suave' }, fmtInt(inf.length) + ' isolados' + (inf.length > 300 ? ' (mostrando 300)' : '')),
+        el('p', { class: 'texto-suave' }, fmtInt(inf.length) + ' isolados' + (inf.length > 300 ? ' (mostrando 300)' : '')
+          + ` — ${fmtInt(episodios.length)} episódio(s). Várias amostras da mesma infecção aparecem aqui uma por linha, com o mesmo caso na última coluna: é UMA infecção.`),
         el('table', { class: 'tabela' },
-          el('thead', {}, el('tr', {}, ['Coleta', 'Paciente', 'Setor', 'Material', 'Microrganismo', 'Mecanismo', 'Classificação'].map(c => el('th', {}, c)))),
+          el('thead', {}, el('tr', {}, ['Coleta', 'Paciente', 'Setor', 'Material', 'Microrganismo', 'Mecanismo', 'Classificação', 'Caso'].map(c => el('th', {}, c)))),
           el('tbody', {}, inf.slice().sort((a, b) => String(b.DataColeta).localeCompare(String(a.DataColeta)))
             .slice(0, 300).map(c => el('tr', { class: 'linha-clicavel', onclick: () => abrirPaciente(c.Prontuario) },
               [c.DataColeta, nomes.get(normalizarProntuario(c.Prontuario)) || c.Prontuario, c.Setor, c.Material,
-               c.Microrganismo, c.MecanismoResistencia, c.AvaliacaoCCIH].map(v => el('td', {}, String(v || ''))))))))
+               c.Microrganismo, c.MecanismoResistencia, c.AvaliacaoCCIH, c.ID_IRAS].map(v => el('td', {}, String(v || ''))))))))
     ].filter(Boolean));
   }
 

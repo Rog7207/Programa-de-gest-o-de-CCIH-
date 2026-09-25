@@ -1433,6 +1433,10 @@ const SINAIS_INFECCAO = [
   ['geral', 'antibiótico iniciado/escalonado', /inici(ad[oa]|o) (o )?(atb|antibi[oó]tico|antibioticoterapia)|escalon(ad[oa]|ar) (o )?(atb|antibi[oó]tico)|(atb|antibi[oó]tico) d[01]\b/, false]
 ];
 const NEGACAO_PLACEHOLDER = ' [negado] ';
+/* Período de silêncio da camada 1 (pedido de 25/09/2026): depois de um caso de IRAS aberto,
+   a evolução do MESMO paciente não volta a aparecer no cartão "sugere infecção" por estes
+   dias; passado o prazo, se ainda houver sinal, reaparece (foco persistente/novo). */
+const EVOLUCAO_SILENCIO_DIAS = 7;
 
 function textoEvolucaoNormalizado(texto) {
   return String(texto == null ? '' : texto).toLowerCase()
@@ -4206,7 +4210,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome, resolverProntuarioPorNomeEData, NAO_ANTIMICROBIANO, pareceNomeTruncado,
     enriquecerCirurgia, classificarProcedimentoNHSN, NHSN_CATEGORIAS, categoriasDeProcedimento, categoriaDoProcedimento, CATEGORIA_SEM_CLASSIFICACAO, contaminacaoPresumida, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, mesclarEvolucoes, sinaisDeInfeccaoNaEvolucao, extrairTemplateEvolucao, topografiaSugeridaPorSinais, lerFotoInternados, aplicarFotoInternados, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, mesclarEvolucoes, sinaisDeInfeccaoNaEvolucao, extrairTemplateEvolucao, topografiaSugeridaPorSinais, EVOLUCAO_SILENCIO_DIAS, lerFotoInternados, aplicarFotoInternados, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

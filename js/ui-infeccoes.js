@@ -141,12 +141,14 @@ async function montarInfeccoes(conteudo) {
       if (!casosPorId.has(i)) casosPorId.set(i, []);
       casosPorId.get(i).push(k);
     }
+    /* Silêncio de EVOLUCAO_SILENCIO_DIAS após um caso aberto: passado o prazo, evolução com
+       sinal reaparece. */
     const temCasoRecente = e => {
       const d = Date.parse(String(e.DataEvolucao || '').slice(0, 10) + 'T00:00:00Z');
       return (casosPorId.get(identidadeDe(normalizarProntuario(e.Prontuario))) || []).some(k => {
         if (normalizarTexto(k.StatusInvestigacao) === 'descartado') return false;
         const dk = Date.parse(String(k.DataInfeccao || '').slice(0, 10) + 'T00:00:00Z');
-        return isFinite(d) && isFinite(dk) && Math.abs(d - dk) / 86400000 <= 14;
+        return isFinite(d) && isFinite(dk) && Math.abs(d - dk) / 86400000 <= EVOLUCAO_SILENCIO_DIAS;
       });
     };
     const semCaso = evolucoes.filter(e => normalizarProntuario(e.Prontuario) && !temCasoRecente(e))
@@ -178,7 +180,7 @@ async function montarInfeccoes(conteudo) {
     areaEvolucoes.replaceChildren(el('div', { class: 'cartao' },
       el('h2', {}, `Evoluções que sugerem infecção — ${fmtInt(semCaso.length)} paciente(s) sem suspeita aberta`),
       el('p', { class: 'texto-suave' }, 'Termos achados no texto da última evolução do Tasy (negações como "afebril" já descontadas; "!" = o médico nomeou a infecção). '
-        + 'Não é diagnóstico: abra a suspeita se fizer sentido — ela segue para a confirmação como qualquer outra.'),
+        + `Não é diagnóstico: abra a suspeita se fizer sentido — ela segue para a confirmação como qualquer outra. Paciente com caso aberto nos últimos ${EVOLUCAO_SILENCIO_DIAS} dias não aparece aqui.`),
       el('table', { class: 'tabela' },
         el('thead', {}, el('tr', {}, ['Evolução', 'Paciente', 'Setor', 'Dia de internação', 'Sinais', ''].map(c => el('th', {}, c)))),
         el('tbody', {}, semCaso.slice(0, 60).map(e => el('tr', {},

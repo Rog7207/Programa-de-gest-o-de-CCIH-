@@ -1414,6 +1414,7 @@ console.log('\n== 88. Sinais de infecção na evolução (busca determinística)
   ], bancosVazios, '2026-09-15');
   verificar('sem pendência: fica só a evolução com sinais, com SinaisInfeccao preenchido',
     retidas.length === 1 && /febre/.test(retidas[0].SinaisInfeccao) && retidas[0].Prontuario === 'P7', JSON.stringify(retidas));
+  verificar('período de silêncio da camada 1 é 7 dias', imp.EVOLUCAO_SILENCIO_DIAS === 7);
 }
 
 console.log('\n== 32. Culturas do protocolo de sepse ==');

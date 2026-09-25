@@ -185,6 +185,11 @@ Contaminação / Repetição / Não é cultura.
 
 - Classificar como **IRAS abre uma suspeita de notificação** — que só vira notificação
   oficial depois que *outro profissional* confirmar (ver seção 7).
+- **A evolução do Tasy é lida**: termos que sugerem infecção (febre, secreção purulenta,
+  PAV, ITU, sepse, ferida infectada…; "afebril" e outras negações são descontadas) viram
+  um aviso na linha da cultura, na ficha do paciente e no cartão **"Evoluções que sugerem
+  infecção"** da aba Infecções — de onde se abre a suspeita com um clique. Não é
+  diagnóstico: a suspeita passa pela confirmação como qualquer outra.
 - Culturas colhidas em torno de um protocolo de sepse levam o selo **🩸 sepse** e nunca
   somem do relatório, mesmo negativas — a ausência de germe é o resultado do protocolo.
 

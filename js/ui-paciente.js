@@ -126,9 +126,10 @@ async function montarPaciente(conteudo) {
       ...evolucoesPessoa.slice(0, 3).map(e => el('div', {},
         el('p', {}, el('strong', {}, e.DataEvolucao),
           [e.Setor, e.Autor, e.Categoria === 'E' ? 'evolução médica' : ''].filter(Boolean).map(t => ' · ' + t).join('')),
+        e.SinaisInfeccao ? el('p', { class: 'aviso-erro-texto' }, `⚠ sugere infecção: ${e.SinaisInfeccao}`) : null,
         el('p', { class: 'texto-suave', style: 'white-space:pre-wrap' }, e.Texto))),
       el('p', { class: 'texto-suave' },
-        'Foto do dia da importação — some quando não houver mais cultura pendente nem antibiótico em curso.')));
+        'Foto do dia da importação — fica enquanto houver pendência (cultura, antibiótico, isolamento, suspeita de IRAS) ou o texto sugerir infecção.')));
   }
 
   /* ---- linha do tempo ---- */

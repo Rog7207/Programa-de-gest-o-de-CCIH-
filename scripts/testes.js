@@ -1384,6 +1384,38 @@ console.log('\n== 87. Foto dos internados (Tasy 2396): setor atual e passagem po
   verificar('pacientes-dia do CTI pelas passagens = 16 (censo agregado ausente)', pd && pd.dias === 16 && pd.origem === 'passagens', pd);
 }
 
+console.log('\n== 88. Sinais de infecção na evolução (busca determinística) ==');
+{
+  const sn = t => imp.sinaisDeInfeccaoNaEvolucao(t);
+  const r1 = sn('Paciente em D5 de internação, febre 38.5, secreção traqueal purulenta, RX com consolidação em base. Iniciado ATB.');
+  verificar('febre + secreção purulenta + consolidação + ATB iniciado são sinais (respiratória + geral)',
+    r1.sinais.length >= 4 && r1.sindromes.includes('respiratoria') && r1.sindromes.includes('geral') && r1.fortes === 0, r1.resumo);
+  const r2 = sn('Afebril, sem sinais flogísticos na ferida, nega secreção. Evoluindo bem.');
+  verificar('negações não viram sinal (afebril, sem sinais flogísticos, nega secreção)', r2.sinais.length === 0 && r2.negados.length === 3, JSON.stringify(r2));
+  const r3 = sn('03/09 choque séptico de foco abdominal. Hemocultura positiva para Klebsiella. PAV em tratamento.');
+  verificar('PAV, choque séptico são sinais FORTES; hemocultura positiva é sinal', r3.fortes === 2 && r3.sinais.some(s => s.rotulo === 'hemocultura positiva'), r3.resumo);
+  verificar('"hmc aguarda … sem crescimento" NÃO é hemocultura positiva',
+    !sn('17/09 hmc aguarda 14/09 urocultura sem crescimento').sinais.some(s => s.rotulo === 'hemocultura positiva'));
+  verificar('resumo marca os fortes com "!"', /PAV!/.test(r3.resumo) && /sepse\/choque séptico!/.test(r3.resumo), r3.resumo);
+  verificar('topografia sugerida: PAV → PAV; ITU → ITU não associada; só febre → nada',
+    imp.topografiaSugeridaPorSinais(r3) === 'Pneumonia associada à ventilação mecânica (PAV)'
+    && imp.topografiaSugeridaPorSinais(sn('ITU em tratamento')) === 'ITU não associada a cateter'
+    && imp.topografiaSugeridaPorSinais(sn('febre 38')) === '');
+
+  const tpl = imp.extrairTemplateEvolucao('# Data IH: 02/09 # Data admissão UTI: 03/09 # Dispositivos invasivos: CVC (03/09), PAi (03/09)\nANTIBIÓTICO D4 Meropenem (D0 14/09)\n# Culturas: Líquido abdominal (03/09) - Klebsiella sensível\n# Hemoderivados: -');
+  verificar('template do CTI: data IH, dispositivos com data, antibiótico com D0, culturas',
+    tpl.dataIH === '02/09' && tpl.dispositivos.length === 2 && tpl.dispositivos[0].nome === 'CVC' && tpl.antibioticos[0].nome === 'meropenem' && tpl.antibioticos[0].dia === 4 && tpl.culturas.length === 1, JSON.stringify(tpl));
+
+  /* Retenção: evolução sem pendência mas com sinais fica, com o resumo gravado. */
+  const bancosVazios = { pacientes: { internacoes: [{ Prontuario: 'P7', Atendimento: '777' }] }, culturas: { culturas: [] }, antibioticos: { prescricoes: [] } };
+  const retidas = imp.filtrarEvolucoesRetidas([
+    { Atendimento: '777', DataEvolucao: '2026-09-15', Texto: 'febre e secreção purulenta na ferida' },
+    { Atendimento: '777', DataEvolucao: '2026-09-15', Texto: 'afebril, boa evolução' }
+  ], bancosVazios, '2026-09-15');
+  verificar('sem pendência: fica só a evolução com sinais, com SinaisInfeccao preenchido',
+    retidas.length === 1 && /febre/.test(retidas[0].SinaisInfeccao) && retidas[0].Prontuario === 'P7', JSON.stringify(retidas));
+}
+
 console.log('\n== 32. Culturas do protocolo de sepse ==');
 {
   const indice = imp.indiceSepse([

@@ -1399,6 +1399,111 @@ function internacaoNaColeta(prontuario, dataColeta, internacoes) {
   return antes ? { situacao: 'fora', internacao: antes } : { situacao: 'sem-internacao' };
 }
 
+/* ---- Sinais de infecção no texto da evolução (pedido de 25/09/2026) ----
+   Busca DETERMINÍSTICA, por síndrome, no texto da evolução do Tasy. Não é diagnóstico: é
+   um sinal para a fila de culturas, a ficha e o cartão "evoluções sugerindo infecção" da
+   aba Infecções, de onde a CCIH abre a suspeita com um clique (a suspeita continua passando
+   pela dupla assinatura). Negações são tratadas antes ("afebril", "sem febre", "nega
+   secreção", "sem sinais flogísticos") — no banco real "afebril" aparece quase tanto quanto
+   "febre". Termo FORTE = o médico já nomeou a infecção (PAV, choque séptico, IRAS…). */
+const NEGACOES_EVOLUCAO = [
+  /afebril|apiretic/g,
+  /\b(sem|nega|negou|ausencia de|ausente|nao apresenta|nao ha|nao tem|nega(ndo)?)\s+(sinais? (de )?)?(febre|infec[cç][aã]o|secre[cç][aã]o|flogistic[oa]s?|purulent[oa]|leucocitose|hiperemia|piuria|deiscencia|disuria)/g
+];
+const SINAIS_INFECCAO = [
+  /* [síndrome, rótulo, regex, forte] */
+  ['respiratoria', 'PAV', /\bpav\b|pneumonia associada a ventila/, true],
+  ['respiratoria', 'pneumonia', /\bpneumonia\b|\bpnm\b|broncopneumonia|\bbcp\b/, true],
+  ['respiratoria', 'traqueobronquite', /traqueobronquite/, true],
+  ['respiratoria', 'secreção traqueal purulenta', /secre[cç][aã]o (traqueal |pulmonar )?(purulenta|amarelada|esverdeada|espessa)|aspirado (traqueal )?purulento/, false],
+  ['respiratoria', 'infiltrado/consolidação', /infiltrado|consolida[cç][aã]o|opacidade/, false],
+  ['urinaria', 'ITU', /\bitu\b|infec[cç][aã]o (do trato )?urin|pielonefrite|cistite/, true],
+  ['urinaria', 'piúria/urina turva', /piuria|urina turva|leucocituria|nitrito positivo/, false],
+  ['corrente sanguinea', 'bacteremia/IPCS', /bacteremia|\bipcs\b|\bicsl?\b|infec[cç][aã]o de corrente|infec[cç][aã]o (relacionada|associada) a? ?cateter/, true],
+  ['corrente sanguinea', 'sepse/choque séptico', /\bsepse\b|\bseptic[oa]\b|choque septico/, true],
+  ['corrente sanguinea', 'hemocultura positiva', /hemocultura[s]? (positiva|com crescimento|\+)|\bhmc\b[^.\n;]{0,25}(positiv|com crescimento)/, false],
+  ['ferida operatoria', 'ISC / infecção de ferida', /\bisc\b|infec[cç][aã]o (de |da )?(ferida|sitio|s[ií]tio) ?(cirurgic[oa]|operat[oó]ri[oa])?|ferida operatoria (infectada|com secre)/, true],
+  ['ferida operatoria', 'deiscência/secreção na ferida', /deiscencia|secre[cç][aã]o (purulenta )?(na|da|em) ferida|hiperemia (na|da) ferida|abscesso de parede/, false],
+  ['pele e partes moles', 'celulite/abscesso/flogose', /celulite|abscesso|erisipela|sinais flogisticos|flogose|fasceite/, false],
+  ['abdominal', 'peritonite/coleção', /peritonite|cole[cç][aã]o (abdominal|intra-?abdominal)|abscesso (abdominal|hepatico|pelvico)/, true],
+  ['geral', 'IRAS nomeada', /\biras\b|infec[cç][aã]o hospitalar|infec[cç][aã]o relacionada a assistencia/, true],
+  ['geral', 'febre', /\bfebre\b|\bfebril\b|hipertermia|pico febril|\btax\b ?(>|de )?3[89]|temperatura (de )?3[89]/, false],
+  ['geral', 'leucocitose/PCR/procalcitonina', /leucocitose|\bpcr\b (elevad|alto|em ascens)|procalcitonina (elevad|alta|positiv)|desvio (a|à) esquerda|bastonetes/, false],
+  ['geral', 'secreção purulenta', /purulent[oa]/, false],
+  ['geral', 'antibiótico iniciado/escalonado', /inici(ad[oa]|o) (o )?(atb|antibi[oó]tico|antibioticoterapia)|escalon(ad[oa]|ar) (o )?(atb|antibi[oó]tico)|(atb|antibi[oó]tico) d[01]\b/, false]
+];
+const NEGACAO_PLACEHOLDER = ' [negado] ';
+
+function textoEvolucaoNormalizado(texto) {
+  return String(texto == null ? '' : texto).toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+/* Devolve { sinais: [{ sindrome, rotulo, forte, trecho }], fortes, sindromes, negados, resumo }. */
+function sinaisDeInfeccaoNaEvolucao(texto) {
+  let t = textoEvolucaoNormalizado(texto);
+  const negados = [];
+  for (const re of NEGACOES_EVOLUCAO) {
+    t = t.replace(re, m => { negados.push(m.trim()); return NEGACAO_PLACEHOLDER; });
+  }
+  const sinais = [];
+  for (const [sindrome, rotulo, re, forte] of SINAIS_INFECCAO) {
+    const m = re.exec(t);
+    if (!m) continue;
+    const ini = Math.max(0, m.index - 40), fim = Math.min(t.length, m.index + m[0].length + 40);
+    sinais.push({ sindrome, rotulo, forte, trecho: '…' + t.slice(ini, fim).trim() + '…' });
+  }
+  const sindromes = [...new Set(sinais.map(s => s.sindrome))];
+  const fortes = sinais.filter(s => s.forte).length;
+  const resumo = sinais.map(s => s.rotulo + (s.forte ? '!' : '')).join('; ');
+  return { sinais, fortes, sindromes, negados, resumo };
+}
+
+/* Topografia que a suspeita aberta a partir da evolução leva para a confirmação (a CCIH
+   ajusta na segunda análise). Vai pela síndrome mais forte; "geral" não sugere nada. */
+function topografiaSugeridaPorSinais(resultado) {
+  const sinais = (resultado && resultado.sinais) || [];
+  const tem = rot => sinais.some(s => s.rotulo === rot);
+  const sind = new Set(sinais.map(s => s.sindrome));
+  if (tem('PAV')) return 'Pneumonia associada à ventilação mecânica (PAV)';
+  if (tem('traqueobronquite')) return 'Traqueobronquite';
+  if (sind.has('respiratoria')) return 'Pneumonia não associada à VM';
+  if (sind.has('urinaria')) return 'ITU não associada a cateter';
+  if (sind.has('ferida operatoria')) return 'ISC incisional superficial';
+  if (sind.has('corrente sanguinea')) return 'IPCS clínica';
+  if (sind.has('pele e partes moles')) return 'Infecção de pele e partes moles';
+  if (sind.has('abdominal')) return 'Outras Infecções Intra-abdominais (exceto fígado, esôfago, estômago e intestinos)';
+  return '';
+}
+
+/* O template das evoluções do CTI do HNSC traz dados prontos para a suspeita:
+   "# Data IH: 02/09", "# Dispositivos invasivos: CVC (03/09), PAi (03/09)",
+   "ANTIBIÓTICO D4 Meropenem (D0 14/09)", "# Culturas: Líquido abdominal (03/09) - Klebsiella…".
+   Extração tolerante: o que não casar volta vazio. */
+function extrairTemplateEvolucao(texto) {
+  const bruto = String(texto == null ? '' : texto);
+  const t = textoEvolucaoNormalizado(bruto);
+  const r = { dataIH: '', dispositivos: [], antibioticos: [], culturas: [] };
+  const mIH = /data ih:?\s*(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)/.exec(t);
+  if (mIH) r.dataIH = mIH[1];
+  const mDisp = /dispositivos? invasivos?:?\s*([^\n#]+)/.exec(t);
+  if (mDisp) {
+    for (const item of mDisp[1].split(/[;,]/)) {
+      const m = /([a-z][a-z .]{1,25}?)\s*\((\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\)/.exec(item.trim());
+      if (m) r.dispositivos.push({ nome: m[1].trim().toUpperCase(), data: m[2] });
+    }
+  }
+  const reAtb = /(?:antibi[oó]tico|atb)?\s*d(\d{1,2})\s+([a-z][a-z\-\/ ]{2,30}?)\s*\(d0\s*(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\)/g;
+  let m;
+  while ((m = reAtb.exec(t))) r.antibioticos.push({ nome: m[2].trim(), dia: Number(m[1]), d0: m[3] });
+  const mCul = /culturas?:?\s*([^#]+)/.exec(t);
+  if (mCul) {
+    r.culturas = mCul[1].split(/\n/).map(l => l.trim()).filter(l => /\d{1,2}\/\d{1,2}/.test(l)).slice(0, 8);
+  }
+  return r;
+}
+
 /* Retenção decidida pelo usuário (16/09/2026, ampliada em 23/09/2026): a evolução só fica
    no banco enquanto o paciente tem PENDÊNCIA — cultura no painel de revisão, antibiótico em
    curso, precaução de ISOLAMENTO ativa ou suspeita de IRAS em investigação. Quando a
@@ -1443,8 +1548,11 @@ function filtrarEvolucoesRetidas(evolucoes, bancos, hoje) {
        sumiu do censo (alta/óbito). */
     const pron = pronDoAt.get(atd) || normalizarProntuario(e.Prontuario) || '';
     const pendente = atdComATB.has(atd) || (pron && (pronPendentes.has(pron) || pronComATB.has(pron)));
-    if (!pendente) continue;
-    retidas.push({ ...e, Prontuario: pron });
+    /* Sem pendência, ainda fica se o TEXTO sugere infecção (pedido de 25/09/2026): o export
+       do Tasy traz todos os internados, e é aqui que a IRAS sem cultura pode ser vista. */
+    const sinais = sinaisDeInfeccaoNaEvolucao(e.Texto);
+    if (!pendente && !sinais.sinais.length) continue;
+    retidas.push({ ...e, Prontuario: pron, SinaisInfeccao: sinais.resumo });
   }
   return retidas;
 }
@@ -4098,7 +4206,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome, resolverProntuarioPorNomeEData, NAO_ANTIMICROBIANO, pareceNomeTruncado,
     enriquecerCirurgia, classificarProcedimentoNHSN, NHSN_CATEGORIAS, categoriasDeProcedimento, categoriaDoProcedimento, CATEGORIA_SEM_CLASSIFICACAO, contaminacaoPresumida, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, mesclarEvolucoes, lerFotoInternados, aplicarFotoInternados, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, mesclarEvolucoes, sinaisDeInfeccaoNaEvolucao, extrairTemplateEvolucao, topografiaSugeridaPorSinais, lerFotoInternados, aplicarFotoInternados, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

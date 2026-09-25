@@ -77,7 +77,7 @@ const ESQUEMAS = {
   evolucoes: {
     arquivo: 'evolucoes.xlsx',
     abas: {
-      evolucoes: ['ID_Evolucao', 'Atendimento', 'Prontuario', 'Setor', 'Categoria', 'DataEvolucao', 'Autor', 'Texto', 'CriadoPor', 'CriadoEm']
+      evolucoes: ['ID_Evolucao', 'Atendimento', 'Prontuario', 'Setor', 'Categoria', 'DataEvolucao', 'Autor', 'Texto', 'SinaisInfeccao', 'CriadoPor', 'CriadoEm']
     }
   },
   higiene_maos: {

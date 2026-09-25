@@ -88,6 +88,9 @@ function contextoDaColeta(c) {
     .sort((a, b) => String(b.DataEvolucao).localeCompare(String(a.DataEvolucao)));
   if (medicas.length) {
     const evo = medicas[0];
+    if (evo.SinaisInfeccao) {
+      partes.push(el('p', { class: 'aviso-erro-texto' }, `⚠ A evolução sugere infecção: ${evo.SinaisInfeccao} (! = o médico nomeou a infecção)`));
+    }
     partes.push(el('details', {},
       el('summary', {}, `Última evolução médica (${evo.DataEvolucao}` + (evo.Autor ? ` — ${evo.Autor}` : '') + ')'),
       el('p', { class: 'texto-suave', style: 'white-space:pre-wrap' }, evo.Texto)));

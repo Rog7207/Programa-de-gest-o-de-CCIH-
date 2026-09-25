@@ -52,10 +52,10 @@ function densidade(casos, diasPaciente) {
 
 async function montarInfeccoes(conteudo) {
   conteudo.append(el('h1', {}, 'Infecções relacionadas à assistência'));
-  let bancoIras, bancoCulturas, bancoPacientes;
+  let bancoIras, bancoCulturas, bancoPacientes, bancoEvolucoes;
   try {
-    [bancoIras, bancoCulturas, bancoPacientes] = await Promise.all([
-      lerBanco('iras'), lerBanco('culturas'), lerBanco('pacientes')
+    [bancoIras, bancoCulturas, bancoPacientes, bancoEvolucoes] = await Promise.all([
+      lerBanco('iras'), lerBanco('culturas'), lerBanco('pacientes'), lerBanco('evolucoes').catch(() => ({ evolucoes: [] }))
     ]);
   } catch (e) { conteudo.append(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message)); return; }
 
@@ -125,6 +125,73 @@ async function montarInfeccoes(conteudo) {
      digitado conta nos relatórios. */
   const areaDigitacao = el('div', {});
   conteudo.insertBefore(areaDigitacao, area);
+
+  /* ---- Evoluções que sugerem infecção (pedido de 25/09/2026) ----
+     Busca determinística no texto da última evolução (febre, secreção purulenta, PAV, ITU,
+     sepse…, com negações tratadas). Lista quem NÃO tem caso de IRAS nos últimos 14 dias; a
+     suspeita abre com um clique e segue para a dupla assinatura como qualquer outra. */
+  const areaEvolucoes = el('div', {});
+  conteudo.insertBefore(areaEvolucoes, area);
+  function desenharEvolucoes() {
+    const evolucoes = (bancoEvolucoes.evolucoes || []).filter(e => String(e.SinaisInfeccao || '').trim());
+    if (!evolucoes.length) { areaEvolucoes.replaceChildren(); return; }
+    const casosPorId = new Map();
+    for (const k of casos) {
+      const i = identidadeDe(normalizarProntuario(k.Prontuario));
+      if (!casosPorId.has(i)) casosPorId.set(i, []);
+      casosPorId.get(i).push(k);
+    }
+    const temCasoRecente = e => {
+      const d = Date.parse(String(e.DataEvolucao || '').slice(0, 10) + 'T00:00:00Z');
+      return (casosPorId.get(identidadeDe(normalizarProntuario(e.Prontuario))) || []).some(k => {
+        if (normalizarTexto(k.StatusInvestigacao) === 'descartado') return false;
+        const dk = Date.parse(String(k.DataInfeccao || '').slice(0, 10) + 'T00:00:00Z');
+        return isFinite(d) && isFinite(dk) && Math.abs(d - dk) / 86400000 <= 14;
+      });
+    };
+    const semCaso = evolucoes.filter(e => normalizarProntuario(e.Prontuario) && !temCasoRecente(e))
+      .sort((a, b) => String(b.DataEvolucao).localeCompare(String(a.DataEvolucao)));
+    if (!semCaso.length) { areaEvolucoes.replaceChildren(); return; }
+    const diaInternacao = e => { const s = internacaoNaColeta(e.Prontuario, e.DataEvolucao, internacoes); return s && s.situacao === 'internado' ? s.diaDaInternacao : null; };
+    const msg = el('p', { class: 'aviso-erro-texto' });
+    const abrir = async e => {
+      try {
+        const r = sinaisDeInfeccaoNaEvolucao(e.Texto);
+        const template = extrairTemplateEvolucao(e.Texto);
+        const disp = template.dispositivos.map(d => d.nome).find(n => /cvc|picc/.test(n.toLowerCase())) ? 'CVC'
+          : template.dispositivos.some(d => /vm|tot|ventil/.test(d.nome.toLowerCase())) ? 'VM' : '';
+        await comTrava(['iras'], async () => {
+          const atual = await lerBanco('iras');
+          registrarCasoIras(atual.casos, {
+            Prontuario: e.Prontuario, DataInfeccao: String(e.DataEvolucao || '').slice(0, 10),
+            Topografia: topografiaSugeridaPorSinais(r), CriterioDiagnostico: 'Termos na evolução: ' + r.resumo,
+            Setor: e.Setor || '', DispositivoAssociado: disp, Microrganismo: '', Desfecho: '',
+            StatusInvestigacao: 'em investigação', NotificadoANVISA: '',
+            Observacoes: acrescentarObservacao('', 'Evolução', r.sinais.map(s => `${s.rotulo}: ${s.trecho}`).join(' | ').slice(0, 900), app.usuario, agoraCurto()),
+            CriadoPor: app.usuario, CriadoEm: agoraCurto()
+          }, () => proximoIDLista(atual.casos, 'ID_IRAS', 'IRA'), identidadeDe);
+          await gravarBanco('iras', atual);
+        });
+        navegar('iras', { historico: 'substituir' });
+      } catch (err) { msg.textContent = err.message; }
+    };
+    areaEvolucoes.replaceChildren(el('div', { class: 'cartao' },
+      el('h2', {}, `Evoluções que sugerem infecção — ${fmtInt(semCaso.length)} paciente(s) sem suspeita aberta`),
+      el('p', { class: 'texto-suave' }, 'Termos achados no texto da última evolução do Tasy (negações como "afebril" já descontadas; "!" = o médico nomeou a infecção). '
+        + 'Não é diagnóstico: abra a suspeita se fizer sentido — ela segue para a confirmação como qualquer outra.'),
+      el('table', { class: 'tabela' },
+        el('thead', {}, el('tr', {}, ['Evolução', 'Paciente', 'Setor', 'Dia de internação', 'Sinais', ''].map(c => el('th', {}, c)))),
+        el('tbody', {}, semCaso.slice(0, 60).map(e => el('tr', {},
+          el('td', {}, e.DataEvolucao),
+          el('td', { class: 'linha-clicavel', onclick: () => abrirPaciente(e.Prontuario) }, nomes.get(normalizarProntuario(e.Prontuario)) || e.Prontuario),
+          el('td', {}, e.Setor || ''),
+          el('td', {}, diaInternacao(e) ? `${diaInternacao(e)}º` : '—'),
+          el('td', {}, e.SinaisInfeccao),
+          el('td', {}, el('button', { class: 'botao-secundario', onclick: () => abrir(e) }, 'Abrir suspeita')))))),
+      semCaso.length > 60 ? el('p', { class: 'texto-suave' }, `… e mais ${fmtInt(semCaso.length - 60)}.`) : null,
+      msg));
+  }
+  desenharEvolucoes();
   function desenharDigitacao() {
     const desde = config.conciliacaoDesde || '';
     const aguardando = casos.filter(k => k.StatusInvestigacao === 'confirmado' && String(k.DataInfeccao || '').slice(0, 10) >= desde)

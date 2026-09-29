@@ -135,30 +135,30 @@ function gerarHTMLAvaliacao(cifrado, meta) {
 <title>CCIH — Avaliação de antimicrobianos</title>
 <style>
 * { box-sizing: border-box; } body { font-family: system-ui, sans-serif; margin: 0; background: #f2f4f7; color: #1f2933; }
-header { background: #14532d; color: #fff; padding: 14px 16px; }
+header { background: #0d3f7a; color: #fff; padding: 14px 16px; }
 header h1 { font-size: 18px; margin: 0; } header p { margin: 2px 0 0; font-size: 12px; opacity: .8; }
 main { padding: 12px; max-width: 760px; margin: 0 auto; }
 .cartao { background: #fff; border: 1px solid #dde3ea; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
 label { display: block; font-size: 13px; color: #61707f; margin-top: 8px; }
 input, select, textarea { width: 100%; font-size: 15px; padding: 9px; border: 1px solid #c3ccd6; border-radius: 8px; background: #fff; font-family: inherit; }
 button { font-size: 15px; font-weight: 600; border-radius: 8px; padding: 11px 14px; border: none; cursor: pointer; }
-.principal { background: #14532d; color: #fff; width: 100%; margin-top: 10px; }
-.secundario { background: #fff; color: #14532d; border: 1px solid #14532d; }
+.principal { background: #0d3f7a; color: #fff; width: 100%; margin-top: 10px; }
+.secundario { background: #fff; color: #0d3f7a; border: 1px solid #0d3f7a; }
 .paciente { cursor: pointer; }
 .paciente h3 { margin: 0; font-size: 16px; }
-.selo { display: inline-block; background: #e8f3ec; color: #14532d; border-radius: 10px; padding: 2px 8px; font-size: 12px; margin: 2px 4px 0 0; }
+.selo { display: inline-block; background: #e7effb; color: #0d3f7a; border-radius: 10px; padding: 2px 8px; font-size: 12px; margin: 2px 4px 0 0; }
 .selo-alerta { background: #fbe9e7; color: #b03a2e; }
-.selo-ok { background: #cfe3d6; }
+.selo-ok { background: #d0e0f5; }
 .aviso { border-radius: 8px; padding: 10px 12px; margin: 10px 0; font-size: 14px; }
 .aviso-amarelo { background: #fdf3dd; border: 1px solid #e5b95c; }
 .aviso-vermelho { background: #fbe9e7; border: 1px solid #d98177; }
-.aviso-verde { background: #e8f3ec; border: 1px solid #7ddca3; }
+.aviso-verde { background: #e7effb; border: 1px solid #7db0ec; }
 .suave { color: #61707f; font-size: 13px; }
 table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 6px 0; }
 th { text-align: left; padding: 4px 6px; border-bottom: 2px solid #dde3ea; font-size: 11px; text-transform: uppercase; color: #61707f; }
 td { padding: 4px 6px; border-bottom: 1px solid #eef1f5; vertical-align: top; }
 .res-R { color: #b03a2e; font-weight: 700; }
-.bloco-presc { border-left: 3px solid #cfe3d6; padding-left: 10px; margin: 10px 0; }
+.bloco-presc { border-left: 3px solid #d0e0f5; padding-left: 10px; margin: 10px 0; }
 .evolucao { background: #f7f9f8; border-radius: 8px; padding: 10px; font-size: 14px; white-space: pre-wrap; }
 .oculto { display: none; }
 </style>
@@ -392,7 +392,7 @@ function seletor(opcoes, valor) {
 function csvCampo(v) { v = String(v == null ? '' : v); return /[;"\\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
 function avisar(texto, erro) {
   var s = $('statusExporte');
-  s.style.cssText = 'font-weight:600;color:' + (erro ? '#b03a2e' : '#14532d');
+  s.style.cssText = 'font-weight:600;color:' + (erro ? '#b03a2e' : '#0d3f7a');
   s.textContent = texto;
 }
 async function exportar() {
@@ -434,7 +434,7 @@ async function exportar() {
     var ancora = document.createElement('a');
     ancora.href = 'mailto:' + META.emailDestino + '?subject=' + encodeURIComponent('CCIH — ' + nome);
     ancora.textContent = 'Abrir e-mail já endereçado';
-    ancora.style.cssText = 'display:block;margin-top:6px;color:#14532d;font-weight:700';
+    ancora.style.cssText = 'display:block;margin-top:6px;color:#0d3f7a;font-weight:700';
     $('statusExporte').appendChild(ancora);
     ancora.click();
   } catch (e) {

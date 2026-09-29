@@ -171,7 +171,7 @@ async function montarSepse(conteudo) {
   }
 
   function barraPercentual(rotulo, r) {
-    const cor = r.percentual === null ? '#c3ccd6' : r.percentual >= 80 ? '#14532d' : r.percentual >= 60 ? '#e5b95c' : '#b03a2e';
+    const cor = r.percentual === null ? '#c3ccd6' : r.percentual >= 80 ? '#0d3f7a' : r.percentual >= 60 ? '#e5b95c' : '#b03a2e';
     return el('div', { class: 'barra-linha' },
       el('span', { class: 'barra-rotulo', title: rotulo }, rotulo),
       el('div', { class: 'barra-trilho' },

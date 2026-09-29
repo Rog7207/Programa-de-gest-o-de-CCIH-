@@ -4,10 +4,10 @@
    permite dizer se a infecção é relacionada à assistência. */
 
 const CORES_EVENTO = {
-  internacao: '#14532d', alta: '#61707f', obito: '#b03a2e',
+  internacao: '#0d3f7a', alta: '#61707f', obito: '#b03a2e',
   cultura: '#185fa5', mdr: '#b03a2e', cirurgia: '#7a4fb5',
   dispositivo: '#c77f0a', antibiotico: '#0a7d7d', sepse: '#b03a2e',
-  iras: '#b03a2e', isolamento: '#c77f0a', uti: '#14532d'
+  iras: '#b03a2e', isolamento: '#c77f0a', uti: '#0d3f7a'
 };
 
 function diasEntreDatas(a, b) {

@@ -61,7 +61,7 @@ function agruparEventos(eventos, granularidade, limite) {
 
 /* ---- gráfico de linhas em SVG puro ---- */
 
-const CORES_SERIES = ['#14532d', '#185fa5', '#b03a2e', '#854f0b', '#533ab7', '#0f6e56'];
+const CORES_SERIES = ['#0d3f7a', '#185fa5', '#b03a2e', '#854f0b', '#533ab7', '#0f6e56'];
 
 function grafLinhas(periodos, series) {
   const largura = 820, altura = 280, mx = 46, my = 24;

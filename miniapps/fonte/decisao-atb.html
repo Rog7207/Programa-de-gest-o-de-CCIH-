@@ -44,7 +44,7 @@ td.alta { color: #b03a2e; font-weight: 700; }
 </style>
 </head>
 <body>
-<header>Decisão de ATB empírica <span class="versao">v10.03</span></header>
+<header>Decisão de ATB empírica <span class="versao" id="versao"></span></header>
 <main>
   <div class="cartao aviso" id="avisoAbertura">
     <strong>Este arquivo precisa ser aberto no navegador.</strong>
@@ -59,22 +59,28 @@ td.alta { color: #b03a2e; font-weight: 700; }
 
   <div class="cartao">
     <p class="suave" id="publico" style="margin:0 0 4px"></p>
+    <!-- Médico: CRM + senha cadastrados pela CCIH (aba "medicos" da planilha). Sem servidor
+         (versão offline), CRM e nome são digitados. -->
+    <div id="blocoMedico" style="border:1px solid #d0e0f5;border-radius:8px;padding:8px 10px;margin:6px 0;background:#f2f7fd">
+      <div id="loginMedico">
+        <div class="linha">
+          <div><label>CRM</label><input type="text" id="crm" inputmode="numeric" autocomplete="off"></div>
+          <div id="campoSenhaMedico"><label>Senha (fornecida pela CCIH)</label><input type="password" id="senhaMedico" autocomplete="off"></div>
+          <div id="campoNomeMedico" class="oculto"><label>Nome</label><input type="text" id="medico" placeholder="seu nome"></div>
+        </div>
+        <button class="secundario" id="entrar">Entrar</button>
+        <p class="suave" id="erroLogin" style="margin:4px 0 0"></p>
+      </div>
+      <p id="medicoLogado" class="oculto" style="margin:0"></p>
+    </div>
     <!-- Busca do paciente nos internados de hoje (só com a planilha da CCIH ligada). -->
     <div id="blocoBusca" class="oculto">
       <label>Paciente — prontuário ou nome</label>
       <input type="text" id="busca" placeholder="digite o número ou parte do nome" autocomplete="off">
       <div id="resultadosBusca"></div>
       <p class="suave" id="pacienteEscolhido" style="margin:4px 0 0"></p>
-      <div id="blocoSenhaBusca" class="oculto">
-        <label>Senha dos médicos (fornecida pela CCIH) para buscar os internados</label>
-        <input type="password" id="senhaBusca" autocomplete="off">
-        <button class="secundario" id="guardarSenhaBusca">Guardar neste aparelho</button>
-      </div>
     </div>
-    <div class="linha">
-      <div><label>Prontuário (opcional)</label><input type="text" id="prontuario" inputmode="numeric"></div>
-      <div><label>Quem decide</label><input type="text" id="medico" placeholder="seu nome"></div>
-    </div>
+    <label>Prontuário</label><input type="text" id="prontuario" inputmode="numeric">
     <label>Síndrome</label><select id="sindrome"><option value="">escolha a síndrome…</option></select>
     <p class="suave" id="germes" style="margin:6px 0 0"></p>
     <div id="perguntas"></div>
@@ -95,8 +101,10 @@ td.alta { color: #b03a2e; font-weight: 700; }
 <!--PROTOCOLO-ATB-->
 <!--ANTIBIOGRAMA-->
 <script>
+const VERSAO_MINIAPP = 'v10.03b';
 const CHAVE = 'ccih.decisao.atb.v1';
-const CHAVE_MEDICO = 'ccih.decisao.atb.medico';
+const CHAVE_MEDICO = 'ccih.decisao.atb.medico.v2';   /* {crm, nome, senha} */
+const CHAVE_MEDICO_ANTIGA = 'ccih.decisao.atb.medico'; /* só o nome, versões anteriores */
 const EMAIL_DESTINO = 'defina-o-email-da-ccih@exemplo.br';
 const ENVIO_URL = '';
 const ENVIO_SEGREDO = 'troque-este-segredo';
@@ -146,9 +154,57 @@ function el(tag, attrs, ...filhos) {
 }
 
 /* ---- caso ---- */
+$('versao').textContent = VERSAO_MINIAPP + ' · protocolo ' + versaoDoProtocolo();
 $('publico').textContent = PROTOCOLO_ATB.publico;
-$('medico').value = lerLocal(CHAVE_MEDICO) || '';
-$('medico').oninput = () => gravarLocal(CHAVE_MEDICO, $('medico').value.trim());
+
+/* ---- médico (pedido de 03/10/2026: CRM no registro e senha individual) ----
+   Com servidor (ENVIO_URL): CRM + senha conferidos no Apps Script contra a aba "medicos"
+   da planilha da CCIH; o nome vem de lá. Sem servidor: CRM e nome digitados. A credencial
+   fica neste aparelho até "sair". */
+let medico = {};
+try { medico = JSON.parse(lerLocal(CHAVE_MEDICO) || '{}') || {}; } catch (e) { medico = {}; }
+if (!medico.nome && lerLocal(CHAVE_MEDICO_ANTIGA)) medico.nome = lerLocal(CHAVE_MEDICO_ANTIGA);
+function medicoIdentificado() { return Boolean(medico.crm && medico.nome && (!ENVIO_URL || medico.senha)); }
+function desenharMedico() {
+  const ok = medicoIdentificado();
+  $('loginMedico').classList.toggle('oculto', ok);
+  $('medicoLogado').classList.toggle('oculto', !ok);
+  $('campoSenhaMedico').classList.toggle('oculto', !ENVIO_URL);
+  $('campoNomeMedico').classList.toggle('oculto', Boolean(ENVIO_URL));
+  if (ok) {
+    $('medicoLogado').replaceChildren(el('strong', {}, medico.nome), ' · CRM ' + medico.crm + ' ',
+      el('button', { class: 'excluir', type: 'button', onclick: () => { medico = {}; gravarLocal(CHAVE_MEDICO, '{}'); desenharMedico(); } }, 'sair'));
+  } else {
+    $('crm').value = medico.crm || '';
+    if (!ENVIO_URL) $('medico').value = medico.nome || '';
+  }
+  if (ENVIO_URL) $('blocoBusca').classList.toggle('oculto', !ok);
+}
+$('entrar').onclick = async () => {
+  const crm = $('crm').value.trim().replace(/\D/g, '');
+  $('erroLogin').textContent = '';
+  if (!crm) { $('erroLogin').textContent = 'Informe o CRM (só números).'; return; }
+  if (!ENVIO_URL) {
+    const nome = $('medico').value.trim();
+    if (!nome) { $('erroLogin').textContent = 'Informe o nome.'; return; }
+    medico = { crm, nome }; gravarLocal(CHAVE_MEDICO, JSON.stringify(medico)); desenharMedico(); return;
+  }
+  const senha = $('senhaMedico').value;
+  if (!senha) { $('erroLogin').textContent = 'Informe a senha fornecida pela CCIH.'; return; }
+  $('erroLogin').textContent = 'conferindo…';
+  try {
+    const r = await fetch(ENVIO_URL + '?tipo=login&crm=' + encodeURIComponent(crm) + '&senha=' + encodeURIComponent(senha), { redirect: 'follow' });
+    const info = await r.json();
+    if (!info.ok) { $('erroLogin').textContent = info.erro || 'CRM ou senha inválidos.'; return; }
+    medico = { crm, nome: info.nome, senha };
+    gravarLocal(CHAVE_MEDICO, JSON.stringify(medico));
+    $('senhaMedico').value = '';
+    desenharMedico();
+  } catch (e) {
+    $('erroLogin').textContent = 'Sem conexão para conferir o CRM — tente de novo com rede.';
+  }
+};
+desenharMedico();
 for (const s of PROTOCOLO_ATB.sindromes) $('sindrome').append(el('option', { value: s.id }, s.rotulo));
 
 const controles = new Map();
@@ -206,7 +262,7 @@ $('analisar').onclick = () => {
   const avisosLocais = AB ? avisosDeResistenciaLocal(decisao.esquemas, antibiograma, AB.periodoTexto) : [];
   const avisos = [...avisosLocais, ...decisao.avisos];
   const renal = ajusteRenalDosEsquemas(decisao.esquemas);
-  ultimaAnalise = { sindrome: s.rotulo, respostas: legivel.join(' | '),
+  ultimaAnalise = { sindrome: s.rotulo, fluxo: idDoFluxo(s.id, respostas), respostas: legivel.join(' | '),
     esquema: decisao.esquemas.map(e => e.rotulo + ' — ' + e.posologia).join(' | '), avisosLocais: avisosLocais.length };
 
   const conduta = el('input', { type: 'text', id: 'conduta', placeholder: 'só se diferente da sugestão' });
@@ -249,13 +305,19 @@ function gravar() { gravarLocal(CHAVE, JSON.stringify(registros)); conferirArmaz
 
 function registrar() {
   if (!ultimaAnalise) return;
+  if (!medicoIdentificado()) { avisar('Identifique-se (CRM) antes de registrar.', true); $('blocoMedico').scrollIntoView({ behavior: 'smooth' }); return; }
   const agora = new Date();
+  /* O que a CCIH pediu no registro (03/10/2026): prontuário, CRM, ID do fluxo percorrido,
+     data — e as versões do protocolo e do miniapp, porque os fluxos mudam. Nome do
+     paciente nunca. */
   registros.push({
     Data: agora.toISOString().slice(0, 10), Hora: agora.toTimeString().slice(0, 5),
-    Prontuario: $('prontuario').value.trim(), Sindrome: ultimaAnalise.sindrome, Respostas: ultimaAnalise.respostas,
+    Prontuario: $('prontuario').value.trim(), CRM: medico.crm || '',
+    Sindrome: ultimaAnalise.sindrome, ID_Fluxo: ultimaAnalise.fluxo, Respostas: ultimaAnalise.respostas,
     EsquemaSugerido: ultimaAnalise.esquema, AvisosLocais: String(ultimaAnalise.avisosLocais),
     CondutaAdotada: ($('conduta') || {}).value || '', AntibiogramaPeriodo: AB ? AB.periodoTexto : '',
-    CriadoPor: $('medico').value.trim(), CriadoEm: agora.toISOString().slice(0, 16).replace('T', ' '), enviadoEm: null
+    VersaoProtocolo: versaoDoProtocolo(), VersaoMiniapp: VERSAO_MINIAPP,
+    CriadoPor: medico.nome || '', CriadoEm: agora.toISOString().slice(0, 16).replace('T', ' '), enviadoEm: null
   });
   gravar();
   $('prontuario').value = '';
@@ -272,7 +334,7 @@ function desenharLista() {
   registros.forEach((r, i) => {
     const div = el('div', { class: 'item' },
       el('button', { class: 'excluir', style: 'float:right', onclick: () => { registros.splice(i, 1); gravar(); } }, 'excluir'),
-      el('div', {}, el('strong', {}, r.Sindrome), (r.Prontuario ? ' · pront. ' + r.Prontuario : '') + ' · ' + r.Data + ' ' + r.Hora),
+      el('div', {}, el('strong', {}, r.Sindrome), (r.Prontuario ? ' · pront. ' + r.Prontuario : '') + (r.CRM ? ' · CRM ' + r.CRM : '') + ' · ' + r.Data + ' ' + r.Hora),
       el('div', { class: 'suave' }, r.EsquemaSugerido),
       el('div', { class: 'selos' },
         Number(r.AvisosLocais) ? el('span', {}, r.AvisosLocais + ' aviso(s) local(is)') : null,
@@ -338,7 +400,7 @@ async function entregarArquivo(nome, texto) {
 $('enviar').onclick = async () => {
   const pendentes = registros.filter(r => !r.enviadoEm);
   if (!pendentes.length) { avisar('Nada aguardando envio.', true); return; }
-  const quem = ($('medico').value.trim() || 'medico').replace(/[^A-Za-z0-9]+/g, '-');
+  const quem = (medico.crm ? 'CRM' + medico.crm : (medico.nome || 'medico')).replace(/[^A-Za-z0-9]+/g, '-');
   const hoje = new Date().toISOString().slice(0, 10);
   const nome = `DECISAO-ATB_${quem}_${hoje}_${Date.now().toString(36)}.csv`;
   const linhas = pendentes.map(({ enviadoEm, ...r }) => r);
@@ -362,24 +424,23 @@ conferirArmazenamento();
 /* ---- busca do paciente nos internados de hoje (pedido de 03/10/2026) ----
    Para não haver erro de identificação: o médico digita o número e vê o nome, ou digita
    parte do nome e escolhe entre os internados parecidos. A lista fica no servidor da CCIH
-   (Apps Script, mesma URL do envio); cada consulta traz só os melhores resultados, exige a
-   "senha dos médicos" (conferida no servidor) e nada disso é guardado: o registro e o
-   envio continuam levando só o prontuário. Sem ENVIO_URL (versão sem servidor), o bloco
-   nem aparece. */
-const CHAVE_SENHA_BUSCA = 'ccih.decisao.atb.senhaBusca';
+   (Apps Script, mesma URL do envio); cada consulta traz só os melhores resultados, é
+   autenticada pelo CRM + senha do médico (conferidos no servidor) e nada disso é guardado:
+   o registro e o envio continuam levando só o prontuário. Sem ENVIO_URL (versão sem
+   servidor), o bloco nem aparece. */
 let temporizadorBusca = null;
 function mostrarResultados(filhos) { $('resultadosBusca').replaceChildren(...filhos); }
 async function buscarPaciente() {
   const q = $('busca').value.trim();
   if (q.length < 2) { mostrarResultados([]); return; }
-  const senha = lerLocal(CHAVE_SENHA_BUSCA) || '';
-  if (!senha) { $('blocoSenhaBusca').classList.remove('oculto'); return; }
+  if (!medicoIdentificado()) { desenharMedico(); return; }
   mostrarResultados([el('p', { class: 'suave' }, 'buscando…')]);
   try {
-    const r = await fetch(ENVIO_URL + '?tipo=buscar&q=' + encodeURIComponent(q) + '&chave=' + encodeURIComponent(senha), { redirect: 'follow' });
+    const r = await fetch(ENVIO_URL + '?tipo=buscar&q=' + encodeURIComponent(q) + '&crm=' + encodeURIComponent(medico.crm) + '&senha=' + encodeURIComponent(medico.senha || ''), { redirect: 'follow' });
     const info = await r.json();
     if (!info.ok) {
-      if (/senha/.test(info.erro || '')) { gravarLocal(CHAVE_SENHA_BUSCA, ''); $('blocoSenhaBusca').classList.remove('oculto'); }
+      /* Senha trocada pela CCIH ou médico desativado: volta para a tela de entrada. */
+      if (/senha|CRM|inativ/i.test(info.erro || '')) { medico = {}; gravarLocal(CHAVE_MEDICO, '{}'); desenharMedico(); $('erroLogin').textContent = info.erro; }
       mostrarResultados([el('p', { class: 'suave' }, info.erro || 'não foi possível buscar')]);
       return;
     }
@@ -398,14 +459,6 @@ async function buscarPaciente() {
   }
 }
 if (ENVIO_URL) {
-  $('blocoBusca').classList.remove('oculto');
-  if (!lerLocal(CHAVE_SENHA_BUSCA)) $('blocoSenhaBusca').classList.remove('oculto');
-  $('guardarSenhaBusca').onclick = () => {
-    gravarLocal(CHAVE_SENHA_BUSCA, $('senhaBusca').value.trim());
-    $('senhaBusca').value = '';
-    $('blocoSenhaBusca').classList.add('oculto');
-    if ($('busca').value.trim()) buscarPaciente();
-  };
   $('busca').addEventListener('input', () => { clearTimeout(temporizadorBusca); temporizadorBusca = setTimeout(buscarPaciente, 350); });
 }
 </script>

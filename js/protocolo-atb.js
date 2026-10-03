@@ -583,7 +583,28 @@ function antibiogramaConsolidado(bancos, germes, de, ate) {
   return { periodo: { de, ate }, germes: antibiogramaLocalPorGermes(recorte, germes, ate, meses) };
 }
 
+/* Identificador do caminho percorrido no protocolo (pedido de 03/10/2026): síndrome +
+   respostas em ordem fixa — "pneumonia|grave=S|mrsa=N". É individual por FLUXO: duas
+   combinações de respostas são dois fluxos, mesmo que caiam no mesmo esquema. Não é
+   regra clínica — é rótulo do registro, para a CCIH analisar adesão por caminho. */
+function idDoFluxo(sindromeId, respostas) {
+  const partes = Object.keys(respostas || {}).sort().map(k => {
+    const v = respostas[k];
+    return k + '=' + (v === true ? 'S' : v === false ? 'N' : String(v == null ? '' : v));
+  });
+  return [String(sindromeId || '')].concat(partes).join('|');
+}
+
+/* Versão do protocolo = data do último adendo validado pela CCIH ("original" se nenhum).
+   Vai em cada decisão registrada: os fluxos mudam, e a análise precisa saber com qual
+   versão o médico decidiu. */
+function versaoDoProtocolo() {
+  const datas = (PROTOCOLO_ATB.adendos || []).map(a => String(a.data || '')).filter(Boolean).sort();
+  return datas.length ? datas[datas.length - 1] : 'original';
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { PROTOCOLO_ATB, REVISAO_PROTOCOLO_ATB, ORIENTACAO_RENAL, AJUSTE_RENAL, ajusteRenalDosEsquemas,
-    contextoLocalDoPaciente, antibiogramaLocalPorGermes, antibiogramaConsolidado, avisosDeResistenciaLocal, drogaCanonicaATB };
+    contextoLocalDoPaciente, antibiogramaLocalPorGermes, antibiogramaConsolidado, avisosDeResistenciaLocal, drogaCanonicaATB,
+    idDoFluxo, versaoDoProtocolo };
 }

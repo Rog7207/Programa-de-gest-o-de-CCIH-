@@ -1632,8 +1632,16 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
     JSON.stringify(f('SILVA')) === '["2340000","1002345","1000234"]' && JSON.stringify(f('silva souza')) === '["1000234"]' && JSON.stringify(f('ána')) === '["2000001","2340000"]', JSON.stringify([f('SILVA'), f('silva souza'), f('ána')]));
   verificar('consulta curta não devolve nada (1 dígito, 2 letras); vazio idem', f('1').length === 0 && f('an').length === 0 && f('').length === 0);
   verificar('respeita o máximo', ctxGs.filtrarInternados(internados, 'a', 8).length === 0 && ctxGs.filtrarInternados(internados, 'ana', 1).length === 1);
-  verificar('doGet serve ?app= e ?tipo=buscar sem o segredo da CCIH (busca exige a senha dos médicos)',
-    /if \(p\.app\) return servirMiniapp/.test(ctxGs.doGet.toString()) && /=== 'buscar'\) return resposta\(buscarInternados/.test(ctxGs.doGet.toString()) && /SENHA_BUSCA_HASH/.test(ctxGs.buscarInternados.toString()));
+  verificar('doGet serve ?app=, ?tipo=login e ?tipo=buscar sem o segredo da CCIH (busca autenticada como médico)',
+    /if \(p\.app\) return servirMiniapp/.test(ctxGs.doGet.toString()) && /=== 'login'\) return resposta\(autenticarMedico/.test(ctxGs.doGet.toString())
+    && /=== 'buscar'\) return resposta\(buscarInternados/.test(ctxGs.doGet.toString()) && /autenticarMedico\(lerMedicos\(\)/.test(ctxGs.buscarInternados.toString()));
+  /* Médicos: CRM + senha da aba "medicos" (pedido de 03/10/2026). */
+  const medicos = [{ CRM: '12.345', Nome: 'Dra. Ana', Senha: 'abc123', Ativo: 'S' }, { CRM: '999', Nome: 'Dr. Inativo', Senha: 'x', Ativo: 'N' }, { CRM: '777', Nome: '', Senha: 'y', Ativo: '' }];
+  const aut = (c, s) => ctxGs.autenticarMedico(medicos, c, s);
+  verificar('CRM casa só por dígitos, senha exata, nome volta; Ativo=N bloqueia; sem nome vira "CRM n"',
+    aut('12345', 'abc123').ok && aut('12345', 'abc123').nome === 'Dra. Ana' && aut('12.345', 'abc123').ok
+    && !aut('12345', 'ABC123').ok && !aut('999', 'x').ok && /inativ/i.test(aut('999', 'x').erro) && aut('777', 'y').nome === 'CRM 777'
+    && !aut('', 'x').ok && !aut('12345', '').ok, JSON.stringify([aut('12345', 'abc123'), aut('999', 'x')]));
   const bancosInt = { pacientes: {
     pacientes: [{ Prontuario: 'P1', Nome: 'Zélia Moura' }, { Prontuario: 'P2', Nome: 'Abel Dias' }, { Prontuario: 'P3', Nome: 'Carla' }],
     internacoes: [
@@ -1645,14 +1653,27 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
   const listaInt = sg.montarListaInternados(bancosInt);
   verificar('lista de internados = internações abertas, um por paciente, com nome/setor/leito, ordenada por nome',
     listaInt.length === 2 && listaInt[0].nome === 'Abel Dias' && listaInt[0].leito === '501' && listaInt[1].prontuario === 'P1' && listaInt[1].setor === 'CTI', JSON.stringify(listaInt));
-  const corpoInt = sg.corpoPublicacaoInternados(cfgS, listaInt, 'senha-medicos');
-  verificar('POST de internados leva segredo, acao e a senha dos médicos (o script guarda só o hash)',
-    corpoInt.acao === 'publicar-internados' && corpoInt.internados.length === 2 && corpoInt.senhaBusca === 'senha-medicos' && corpoInt.segredo === 'frase longa');
+  const corpoInt = sg.corpoPublicacaoInternados(cfgS, listaInt);
+  verificar('POST de internados leva segredo, acao e a lista (a senha dos médicos vive na aba "medicos", não aqui)',
+    corpoInt.acao === 'publicar-internados' && corpoInt.internados.length === 2 && !('senhaBusca' in corpoInt) && corpoInt.segredo === 'frase longa');
+  /* Registro da decisão: prontuário, CRM, ID do fluxo, data, versões (pedido de 03/10/2026). */
+  const prot = require(path.join(__dirname, '..', 'js', 'protocolo-atb.js'));
+  verificar('ID do fluxo = síndrome + respostas em ordem fixa, individual por caminho',
+    prot.idDoFluxo('pneumonia', { mrsa: false, grave: true }) === 'pneumonia|grave=S|mrsa=N'
+    && prot.idDoFluxo('pneumonia', { grave: true, mrsa: false }) === 'pneumonia|grave=S|mrsa=N'
+    && prot.idDoFluxo('pneumonia', { grave: true, mrsa: true }) !== prot.idDoFluxo('pneumonia', { grave: true, mrsa: false })
+    && prot.idDoFluxo('itu', { tipo: 'cistite' }) === 'itu|tipo=cistite');
+  verificar('versão do protocolo = data do último adendo', /^\d{4}-\d{2}-\d{2}$/.test(prot.versaoDoProtocolo()) && prot.versaoDoProtocolo() === prot.PROTOCOLO_ATB.adendos.map(a => a.data).sort().pop());
+  const colsDecisao = esquemas.ESQUEMAS.antibioticos.abas.decisoes_empiricas;
+  verificar('esquema de decisões tem CRM, ID_Fluxo, VersaoProtocolo e VersaoMiniapp', ['CRM', 'ID_Fluxo', 'VersaoProtocolo', 'VersaoMiniapp'].every(c => colsDecisao.includes(c)));
   verificar('endereço dos médicos = URL do script + ?app=decisao-atb', sg.urlAppMedicos(cfgS, 'decisao-atb') === 'https://script.google.com/macros/s/ABC/exec?app=decisao-atb' && sg.urlAppMedicos({}, 'x') === '');
   const fonteDecisao = fs.readFileSync(path.join(__dirname, '..', 'miniapps', 'fonte', 'decisao-atb.html'), 'utf-8');
-  verificar('miniapp de decisão: busca só com ENVIO_URL, senha dos médicos no aparelho, e o registro continua sem nome',
-    /if \(ENVIO_URL\) \{\s*\$\('blocoBusca'\)\.classList\.remove/.test(fonteDecisao) && /tipo=buscar&q=/.test(fonteDecisao)
-    && !/Nome:/.test(fonteDecisao.slice(fonteDecisao.indexOf('function registrar'), fonteDecisao.indexOf('function desenharLista'))));
+  const registroFonte = fonteDecisao.slice(fonteDecisao.indexOf('function registrar'), fonteDecisao.indexOf('function desenharLista'));
+  verificar('miniapp de decisão: login por CRM+senha (tipo=login), busca autenticada (tipo=buscar com crm), registro com CRM/ID_Fluxo/versões e sem nome do paciente',
+    /tipo=login&crm=/.test(fonteDecisao) && /tipo=buscar&q=[^\n]*&crm=/.test(fonteDecisao)
+    && /CRM: medico\.crm/.test(registroFonte) && /ID_Fluxo: ultimaAnalise\.fluxo/.test(registroFonte)
+    && /VersaoProtocolo: versaoDoProtocolo\(\)/.test(registroFonte) && /VersaoMiniapp: VERSAO_MINIAPP/.test(registroFonte)
+    && !/Nome:/.test(registroFonte) && /if \(!medicoIdentificado\(\)\)/.test(registroFonte));
 }
 
 console.log('\n== 32. Culturas do protocolo de sepse ==');

@@ -22,8 +22,8 @@ async function montarDecisaoATB(conteudo) {
       el('div', { style: 'max-width:520px' },
         el('h2', {}, 'Leve no celular (abre direto no navegador — iPhone inclusive)'),
         el('p', { class: 'texto-suave', style: 'word-break:break-all' }, el('a', { href: urlMedicos, target: '_blank' }, urlMedicos)),
-        el('p', { class: 'texto-suave' }, 'O médico digita o prontuário e vê o nome, ou digita parte do nome e escolhe entre os internados de hoje '
-          + '(com a senha dos médicos definida em Configurações). O registro e o envio continuam levando só o prontuário.'),
+        el('p', { class: 'texto-suave' }, 'O médico entra com CRM + senha (aba "medicos" da planilha da CCIH), digita o prontuário e vê o nome, ou digita parte do nome e escolhe entre os internados de hoje. '
+          + 'Cada decisão registra prontuário, CRM, ID do fluxo, data e as versões do protocolo e do miniapp — nunca o nome do paciente.'),
         el('button', { class: 'botao-secundario', onclick: () =>
           window.open('https://wa.me/?text=' + encodeURIComponent('CCIH — apoio à decisão de antibioticoterapia empírica (protocolo institucional). Abra no navegador do celular:\n' + urlMedicos), '_blank') },
           'Enviar pelo WhatsApp'))));

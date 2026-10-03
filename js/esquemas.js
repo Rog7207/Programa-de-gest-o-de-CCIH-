@@ -51,9 +51,9 @@ const ESQUEMAS = {
       /* Decisões empíricas registradas pelos médicos assistentes no miniapp: o que foi
          perguntado (Respostas), o que o protocolo sugeriu e o que foi de fato prescrito.
          É a matéria-prima do cruzamento futuro entre conduta e desfecho microbiológico. */
-      decisoes_empiricas: ['ID_Decisao', 'Data', 'Hora', 'Prontuario', 'Sindrome', 'Respostas',
+      decisoes_empiricas: ['ID_Decisao', 'Data', 'Hora', 'Prontuario', 'CRM', 'Sindrome', 'ID_Fluxo', 'Respostas',
         'EsquemaSugerido', 'AvisosLocais', 'CondutaAdotada', 'SeguiuProtocolo', 'AntibiogramaPeriodo',
-        'CriadoPor', 'CriadoEm', 'ImportadoPor', 'ImportadoEm']
+        'VersaoProtocolo', 'VersaoMiniapp', 'CriadoPor', 'CriadoEm', 'ImportadoPor', 'ImportadoEm']
     }
   },
   cirurgias: {

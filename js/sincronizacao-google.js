@@ -19,7 +19,7 @@ const SINCRONIZACAO_MARGEM_DIAS = 1;
 /* Linhas da aba meta ({Chave, Valor}) → { url, segredo, email }. */
 function configSincronizacao(meta) {
   const valor = chave => { const l = (meta || []).find(x => x.Chave === chave); return l ? String(l.Valor || '').trim() : ''; };
-  return { url: valor('envio_url'), segredo: valor('envio_segredo'), email: valor('email_ccih'), senhaBusca: valor('senha_busca_miniapp') };
+  return { url: valor('envio_url'), segredo: valor('envio_segredo'), email: valor('email_ccih') };
 }
 
 /* ---- Lista de internados para a busca do paciente no miniapp de decisão de ATB ----
@@ -39,8 +39,8 @@ function montarListaInternados(bancos) {
   }
   return lista.sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
 }
-function corpoPublicacaoInternados(cfg, lista, senhaBusca) {
-  return { segredo: (cfg || {}).segredo || '', acao: 'publicar-internados', internados: lista || [], senhaBusca: senhaBusca || '' };
+function corpoPublicacaoInternados(cfg, lista) {
+  return { segredo: (cfg || {}).segredo || '', acao: 'publicar-internados', internados: lista || [] };
 }
 /* Endereço que o médico abre no celular (o script serve o miniapp por https). */
 function urlAppMedicos(cfg, app) {
@@ -114,7 +114,8 @@ const sincronizacaoGoogle = {
       const info = JSON.parse(corpo);
       if (!info.ok) return { ok: false, mensagem: 'Apps Script respondeu: ' + (info.erro || corpo.slice(0, 200)) };
       const pasta = info.pastaMiniapps ? `; pasta dos miniapps no Drive: "${info.pastaMiniapps}"` : '; sem PASTA_MINIAPPS_ID no script (publicação no Drive desligada)';
-      return { ok: true, mensagem: `OK: planilha "${info.planilha}" — abas: ${(info.abas || []).join(', ') || 'nenhuma ainda'}${pasta}.` };
+      const medicos = info.medicos === undefined ? '' : `; médicos cadastrados na aba "medicos": ${info.medicos}`;
+      return { ok: true, url: info.url || '', mensagem: `OK: planilha "${info.planilha}" — abas: ${(info.abas || []).join(', ') || 'nenhuma ainda'}${pasta}${medicos}.` };
     } catch (e) {
       return { ok: false, mensagem: 'Resposta inesperada do Apps Script: ' + corpo.slice(0, 200) };
     }
@@ -143,7 +144,7 @@ const sincronizacaoGoogle = {
     const b = bancos || { pacientes: await lerBanco('pacientes') };
     const lista = montarListaInternados(b);
     const r = await fetch(cfg.url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(corpoPublicacaoInternados(cfg, lista, cfg.senhaBusca)) });
+      body: JSON.stringify(corpoPublicacaoInternados(cfg, lista)) });
     const corpo = await r.text();
     let info;
     try { info = JSON.parse(corpo); } catch (e) { throw new Error('Resposta inesperada do Apps Script: ' + corpo.slice(0, 200)); }

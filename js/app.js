@@ -995,7 +995,6 @@ async function montarPlanilhaGoogle() {
   const [lUrl, iUrl] = campo('URL do app da Web (termina em /exec)', cfg.url, { placeholder: 'https://script.google.com/macros/s/…/exec' });
   const [lSeg, iSeg] = campo('Segredo (o mesmo da propriedade SEGREDO do script)', cfg.segredo, { type: 'password', autocomplete: 'new-password' });
   const [lEmail, iEmail] = campo('E-mail da CCIH (destino quando o envio direto falha)', cfg.email, { placeholder: 'ccih@…' });
-  const [lSenhaB, iSenhaB] = campo('Senha dos médicos (busca de internados no miniapp de decisão de ATB)', cfg.senhaBusca, { type: 'password', autocomplete: 'new-password' });
   const status = el('p', { class: 'texto-suave' }, sincronizacaoConfigurada(cfg) ? 'Configurado.' : 'Ainda não configurado — os miniapps saem por CSV + e-mail e a entrada é pela aba Importar.');
   /* Médicos no celular: o script serve o miniapp por https (iPhone inclusive) e responde
      à busca do paciente na lista de internados publicada daqui. */
@@ -1007,12 +1006,13 @@ async function montarPlanilhaGoogle() {
     el('div', { style: 'max-width:520px' },
       el('strong', {}, 'Decisão de ATB para os médicos (abre no navegador do celular, iPhone inclusive)'),
       el('p', { class: 'texto-suave', style: 'word-break:break-all' }, el('a', { href: urlMedicos, target: '_blank' }, urlMedicos)),
-      el('p', { class: 'texto-suave' }, 'A busca do paciente usa a lista de internados publicada daqui (automática a cada foto 2396) e a senha dos médicos acima. '
-        + 'Requer "☁ Publicar miniapps" com decisao-atb.html na pasta do Drive.'),
+      el('p', { class: 'texto-suave' }, 'O médico entra com CRM + senha cadastrados pela CCIH na aba "medicos" da planilha (colunas CRM, Nome, Senha, Ativo — o cabeçalho nasce no "Testar conexão"); '
+        + 'o CRM vai em cada decisão registrada, junto com o ID do fluxo e as versões do protocolo e do miniapp. '
+        + 'A busca do paciente usa a lista de internados publicada daqui (automática a cada foto 2396). Requer "☁ Publicar miniapps" com decisao-atb.html na pasta do Drive.'),
       el('div', { class: 'linha-botoes' },
         el('button', { class: 'botao-secundario', onclick: async e => {
           e.target.disabled = true; statusInternados.textContent = 'Publicando…';
-          try { const r = await sincronizacaoGoogle.publicarInternados(); statusInternados.textContent = `lista de ${fmtInt(r.total)} internados publicada em ${r.atualizadoEm}` + (r.senhaDefinida ? '' : ' — defina a senha dos médicos e salve'); }
+          try { const r = await sincronizacaoGoogle.publicarInternados(); statusInternados.textContent = `lista de ${fmtInt(r.total)} internados publicada em ${r.atualizadoEm}`; }
           catch (err) { statusInternados.className = 'aviso-erro-texto'; statusInternados.textContent = 'Erro: ' + err.message; }
           e.target.disabled = false;
         } }, 'Publicar lista de internados agora'), statusInternados))) : null;
@@ -1021,7 +1021,7 @@ async function montarPlanilhaGoogle() {
     return el('li', {}, `${t.rotulo}: ${em ? 'última sincronização ' + em : 'nunca sincronizado'}`);
   }));
   const salvar = async () => {
-    await sincronizacaoGoogle.gravarMeta({ envio_url: iUrl.value.trim(), envio_segredo: iSeg.value.trim(), email_ccih: iEmail.value.trim(), senha_busca_miniapp: iSenhaB.value.trim() });
+    await sincronizacaoGoogle.gravarMeta({ envio_url: iUrl.value.trim(), envio_segredo: iSeg.value.trim(), email_ccih: iEmail.value.trim() });
     status.className = 'texto-suave';
     status.textContent = sincronizacaoConfigurada(await sincronizacaoGoogle.config())
       ? 'Salvo no config.xlsx. Grave de novo os miniapps na pasta espelhada para levarem a URL e o segredo.'
@@ -1034,7 +1034,7 @@ async function montarPlanilhaGoogle() {
       'Higiene das mãos e decisão de ATB não carregam dado sensível: os miniapps enviam direto para um Apps Script que grava numa planilha do Google '
       + 'no Drive da CCIH (espelhada, legível pela equipe), e o aplicativo puxa de lá o que chegou — mesma deduplicação da importação, sem arquivo. '
       + 'O script está em scripts/apps-script-recebimento.gs, com o passo a passo de implantação no cabeçalho.'),
-    el('div', { class: 'linha-campos', style: 'flex-direction:column;align-items:stretch;gap:6px' }, lUrl, lSeg, lEmail, lSenhaB),
+    el('div', { class: 'linha-campos', style: 'flex-direction:column;align-items:stretch;gap:6px' }, lUrl, lSeg, lEmail),
     el('div', { class: 'linha-botoes' },
       el('button', { class: 'botao-primario', onclick: salvar }, 'Salvar'),
       el('button', { class: 'botao-secundario', onclick: async () => {

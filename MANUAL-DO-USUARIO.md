@@ -312,10 +312,13 @@ erro de identificação, o médico **digita o prontuário e vê o nome, ou digit
 e escolhe entre os internados de hoje**: a lista (prontuário, nome, setor, leito) é
 publicada pelo aplicativo numa aba **privada** da planilha — sozinha a cada foto 2396, ou
 pelo botão "Publicar lista de internados agora" — e cada busca devolve só os 8 melhores
-resultados, mediante a **senha dos médicos** (definida em Configurações, conferida no
-servidor, guardada no celular na primeira vez). A lista nunca vai inteira para a página, e
-o registro/envio continua levando só o prontuário. Sem a planilha configurada, o miniapp é
-o de sempre (prontuário digitado à mão).
+resultados. O médico **entra com CRM + senha**, cadastrados pela CCIH na aba **`medicos`**
+da planilha privada (colunas CRM, Nome, Senha, Ativo; o cabeçalho nasce no "Testar
+conexão"; Ativo = N desliga o acesso sem apagar histórico); o nome volta do servidor e a
+credencial fica no celular até "sair". Cada decisão registra **prontuário, CRM, ID do
+fluxo** (síndrome + respostas, individual por caminho), **data/hora, versão do protocolo**
+(data do último adendo) **e versão do miniapp** — nunca o nome do paciente. Sem a planilha
+configurada, o miniapp é o de sempre (CRM e nome digitados, prontuário à mão).
 
 ---
 

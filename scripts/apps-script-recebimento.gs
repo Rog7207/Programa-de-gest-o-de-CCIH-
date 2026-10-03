@@ -22,8 +22,11 @@
  * 4. "Implantar" → "Nova implantação" → tipo "App da Web":
  *      Executar como: Eu · Quem pode acessar: Qualquer pessoa → Implantar → autorizar.
  * 5. Copie a "URL do app da Web" (termina em /exec) e cole, com o SEGREDO, em
- *    Configurações → "☁ Planilha do Google (miniapps)" do aplicativo. Depois grave de novo
- *    os miniapps na pasta espelhada (eles levam a URL e o segredo dentro).
+ *    Configurações → "☁ Planilha do Google (miniapps)" do aplicativo. Depois "Publicar
+ *    miniapps" (eles levam a URL e o segredo dentro).
+ * 6. Médicos do miniapp de decisão de ATB: preencha a aba "medicos" da planilha (CRM, Nome,
+ *    Senha, Ativo) — o script cria o cabeçalho no primeiro "Testar conexão". O médico entra
+ *    com CRM + senha; o CRM vai em cada decisão registrada.
  * Para atualizar o código depois: "Implantar" → "Gerenciar implantações" → ✎ → Nova versão.
  */
 
@@ -152,12 +155,8 @@ function filtrarInternados(lista, q, max) {
 
 /* ---------- Lado do servidor (Apps Script) ---------------------------------------------- */
 
-function hashTexto(s) {
-  return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(s == null ? '' : s), Utilities.Charset.UTF_8));
-}
-
 var COLUNAS_INTERNADOS = ['prontuario', 'nome', 'setor', 'leito', 'atendimento', 'dataInternacao'];
-/* Substitui a aba "internados" pela lista recebida e guarda o hash da senha dos médicos. */
+/* Substitui a aba "internados" pela lista recebida do aplicativo. */
 function publicarInternados(dados) {
   var lista = dados.internados || [];
   var ss = planilha();
@@ -166,11 +165,48 @@ function publicarInternados(dados) {
   var valores = [COLUNAS_INTERNADOS].concat(lista.map(function (p) { return COLUNAS_INTERNADOS.map(function (c) { return p[c] == null ? '' : String(p[c]); }); }));
   folha.getRange(1, 1, valores.length, COLUNAS_INTERNADOS.length).setValues(valores);
   folha.setFrozenRows(1);
-  var props = PropertiesService.getScriptProperties();
   var agora = new Date().toISOString().slice(0, 16).replace('T', ' ');
-  props.setProperty('INTERNADOS_EM', agora);
-  if (dados.senhaBusca) props.setProperty('SENHA_BUSCA_HASH', hashTexto(dados.senhaBusca));
-  return { ok: true, total: lista.length, atualizadoEm: agora, senhaDefinida: Boolean(dados.senhaBusca || props.getProperty('SENHA_BUSCA_HASH')) };
+  PropertiesService.getScriptProperties().setProperty('INTERNADOS_EM', agora);
+  return { ok: true, total: lista.length, atualizadoEm: agora };
+}
+
+/* ---------- Médicos: CRM + senha cadastrados pela CCIH na aba "medicos" ----------------
+   A CCIH mantém a aba à mão (CRM, Nome, Senha, Ativo). O miniapp entra com CRM + senha;
+   o nome volta para o aparelho e o CRM vai em cada decisão registrada. A planilha é
+   privada da CCIH — por isso a senha fica legível ali, para a CCIH poder informá-la ao
+   médico; nunca sai do servidor. "Ativo" = N desliga o acesso sem apagar o histórico. */
+var COLUNAS_MEDICOS = ['CRM', 'Nome', 'Senha', 'Ativo'];
+function garantirAbaMedicos() {
+  var ss = planilha();
+  var folha = ss.getSheetByName('medicos');
+  if (!folha) {
+    folha = ss.insertSheet('medicos');
+    folha.getRange(1, 1, 1, COLUNAS_MEDICOS.length).setValues([COLUNAS_MEDICOS]).setFontWeight('bold');
+    folha.setFrozenRows(1);
+  }
+  return folha;
+}
+function lerMedicos() {
+  var folha = garantirAbaMedicos();
+  if (folha.getLastRow() < 2) return [];
+  var valores = folha.getDataRange().getValues();
+  var colunas = valores[0].map(function (c) { return String(c).trim(); });
+  return valores.slice(1).map(function (v) {
+    var o = {};
+    colunas.forEach(function (c, j) { o[c] = v[j] == null ? '' : String(v[j]).trim(); });
+    return o;
+  }).filter(function (m) { return m.CRM; });
+}
+/* Pura: lista de médicos + credenciais → { ok, nome, crm } ou { ok: false, erro }. */
+function autenticarMedico(medicos, crm, senha) {
+  var c = String(crm == null ? '' : crm).replace(/\D/g, '');
+  var s = String(senha == null ? '' : senha);
+  if (!c || !s) return { ok: false, erro: 'Informe CRM e senha.' };
+  var achado = null;
+  (medicos || []).forEach(function (m) { if (String(m.CRM || '').replace(/\D/g, '') === c) achado = m; });
+  if (!achado || String(achado.Senha || '') !== s) return { ok: false, erro: 'CRM ou senha inválidos.' };
+  if (/^(n|nao|não|0|false|inativo)$/i.test(String(achado.Ativo || '').trim())) return { ok: false, erro: 'Acesso inativado pela CCIH.' };
+  return { ok: true, crm: c, nome: achado.Nome || ('CRM ' + c) };
 }
 
 function lerInternados() {
@@ -185,11 +221,10 @@ function lerInternados() {
   });
 }
 
-/* ?tipo=buscar&q=...&chave=<senha dos médicos> → até 8 internados. */
+/* ?tipo=buscar&q=...&crm=...&senha=... → até 8 internados (autenticado como médico). */
 function buscarInternados(p) {
-  var hash = propriedade('SENHA_BUSCA_HASH');
-  if (!hash) return { ok: false, erro: 'senha dos médicos ainda não definida pela CCIH' };
-  if (!p.chave || hashTexto(p.chave) !== hash) return { ok: false, erro: 'senha inválida' };
+  var auth = autenticarMedico(lerMedicos(), p.crm, p.senha);
+  if (!auth.ok) return auth;
   var resultados = filtrarInternados(lerInternados(), p.q, 8).map(function (x) {
     return { prontuario: x.prontuario, nome: x.nome, setor: x.setor, leito: x.leito };
   });
@@ -309,6 +344,7 @@ function doGet(e) {
     /* Sem segredo: a página do miniapp (pública, sem dado de paciente) e a busca de
        internados (protegida pela senha dos médicos). */
     if (p.app) return servirMiniapp(String(p.app));
+    if (String(p.tipo || '') === 'login') return resposta(autenticarMedico(lerMedicos(), p.crm, p.senha));
     if (String(p.tipo || '') === 'buscar') return resposta(buscarInternados(p));
     if (!p.segredo || p.segredo !== propriedade('SEGREDO')) return texto('##erro;segredo inválido', 403);
     var tipo = String(p.tipo || '');
@@ -316,8 +352,9 @@ function doGet(e) {
       var abas = planilha().getSheets().map(function (s) { return s.getName() + ' (' + Math.max(0, s.getLastRow() - 1) + ')'; });
       var pastaMiniapps = '';
       try { var pid = propriedade('PASTA_MINIAPPS_ID'); if (pid) pastaMiniapps = DriveApp.getFolderById(pid).getName(); } catch (err) { pastaMiniapps = '(PASTA_MINIAPPS_ID inválida)'; }
-      return resposta({ ok: true, planilha: planilha().getName(), abas: abas, pastaMiniapps: pastaMiniapps,
-        internadosEm: propriedade('INTERNADOS_EM'), senhaBuscaDefinida: Boolean(propriedade('SENHA_BUSCA_HASH')) });
+      var medicos = lerMedicos();
+      return resposta({ ok: true, planilha: planilha().getName(), url: planilha().getUrl(), abas: abas, pastaMiniapps: pastaMiniapps,
+        internadosEm: propriedade('INTERNADOS_EM'), medicos: medicos.length });
     }
     var desde = String(p.desde || '');
     var ss = planilha();

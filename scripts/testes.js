@@ -1611,6 +1611,12 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
   verificar('miniapp gravado na pasta leva ENVIO_URL, ENVIO_SEGREDO e EMAIL_DESTINO da instalação',
     higieneInst.includes("const ENVIO_URL = 'https://script.google.com/macros/s/ABC/exec';") && higieneInst.includes("const ENVIO_SEGREDO = 'frase longa';") && higieneInst.includes("const EMAIL_DESTINO = 'ccih@x.br';"));
   verificar('sem configuração, placeholders ficam', mp.montarMiniappParaPasta('higiene-maos.html', {}, sg.instalacaoParaMiniapps({})).includes("const ENVIO_URL = '';"));
+  /* Publicação no Drive pelo script (terminais sem cliente do Drive): corpo do POST. */
+  const corpoPub = sg.corpoPublicacaoDrive(cfgS, 'visita-uti-cifrada.html', '<html>x</html>');
+  verificar('POST de publicação leva segredo, acao=publicar, nome e o HTML',
+    corpoPub.segredo === 'frase longa' && corpoPub.acao === 'publicar' && corpoPub.nome === 'visita-uti-cifrada.html' && corpoPub.conteudo === '<html>x</html>');
+  verificar('Apps Script trata acao=publicar antes de ler o pacote (função publicarMiniapp existe e exige PASTA_MINIAPPS_ID)',
+    typeof ctxGs.publicarMiniapp === 'function' && /PASTA_MINIAPPS_ID/.test(ctxGs.publicarMiniapp.toString()) && /dados\.acao === 'publicar'/.test(ctxGs.doPost.toString()));
 }
 
 console.log('\n== 32. Culturas do protocolo de sepse ==');

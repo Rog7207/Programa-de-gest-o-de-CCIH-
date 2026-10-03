@@ -297,6 +297,14 @@ segredo (gravados no config.xlsx); o script e o passo a passo de implantação e
 pasta espelhada: eles levam a URL e o segredo dentro. Sem a planilha, tudo segue como antes
 (CSV + e-mail + aba Importar).
 
+**Sem cliente do Drive no computador** (os computadores da CCIH são terminais): com a
+planilha do Google configurada, "publicar" — os miniapps em Configurações, a visita cifrada
+na aba UTI e a avaliação de antimicrobianos na aba Antibióticos — **envia o arquivo ao Apps
+Script, que o grava na pasta "Miniapps" do Drive da CCIH** (propriedade `PASTA_MINIAPPS_ID`
+do script), sobrescrevendo o anterior e mantendo o mesmo arquivo para o tablet. Não é
+preciso espelhar pasta nenhuma; a pasta de publicação local fica só como alternativa quando
+a planilha não está configurada.
+
 ---
 
 ## 7. Isolamentos

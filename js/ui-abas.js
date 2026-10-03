@@ -989,8 +989,11 @@ function montarCartaoPublicacaoRemota(conteudo, banco, bancoPacientes, bancoCult
     }, hoje);
     if (!dados.pacientes.length) { statusEl.textContent = 'Nenhum paciente pendente — nada a publicar.'; return; }
     try {
-      if (!publicacao.handle) await publicacao.restaurar();
-      if (!publicacao.handle) await publicacao.escolher();
+      /* Destino: o Drive da CCIH pelo Apps Script (terminais sem cliente do Drive), quando a
+         planilha do Google está configurada; senão, a pasta de publicação local. */
+      const viaDrive = await sincronizacaoGoogle.configurada();
+      if (!viaDrive && !publicacao.handle) await publicacao.restaurar();
+      if (!viaDrive && !publicacao.handle) await publicacao.escolher();
       const geradoEm = new Date().toISOString();
       const cifrado = await criptografarDados(JSON.stringify(dados), senha);
       /* O e-mail de retorno é desta instalação, não do código: fica no config.xlsx
@@ -1001,9 +1004,16 @@ function montarCartaoPublicacaoRemota(conteudo, banco, bancoPacientes, bancoCult
         geradoEm, emailDestino: emailCCIH,
         avisoHoras: AVALIACAO_AVISO_HORAS, bloqueioDias: AVALIACAO_BLOQUEIO_DIAS
       });
-      await publicacao.gravar(AVALIACAO_ARQUIVO, html);
+      let onde;
+      if (viaDrive) {
+        const r = await sincronizacaoGoogle.publicarNoDrive(AVALIACAO_ARQUIVO, html);
+        onde = `no Drive da CCIH ("${r.pasta}/${AVALIACAO_ARQUIVO}", mesmo arquivo de sempre)`;
+      } else {
+        await publicacao.gravar(AVALIACAO_ARQUIVO, html);
+        onde = `em "${publicacao.handle.name}/${AVALIACAO_ARQUIVO}"`;
+      }
       statusEl.className = 'texto-suave';
-      statusEl.textContent = `Publicado: ${dados.pacientes.length} pacientes (${fmtInt(dados.totalPrescricoes)} prescrições, ${fmtInt(dados.totalCulturas || 0)} culturas pendentes) em "${publicacao.handle.name}/${AVALIACAO_ARQUIVO}". Informe a senha aos médicos por outro canal.`;
+      statusEl.textContent = `Publicado: ${dados.pacientes.length} pacientes (${fmtInt(dados.totalPrescricoes)} prescrições, ${fmtInt(dados.totalCulturas || 0)} culturas pendentes) ${onde}. Informe a senha aos médicos por outro canal.`;
     } catch (e) {
       if (e && e.name !== 'AbortError') statusEl.textContent = 'Erro ao publicar: ' + e.message;
     }
@@ -1292,13 +1302,21 @@ async function montarUti(conteudo) {
             el('a', { href: r.url, target: '_blank' }, r.url),
             ' — abra no celular (Safari ou Chrome) e digite a senha. Informe a senha por outro canal.',
             el('div', { style: 'margin-top:8px' }, typeof qrDe === 'function' ? qrDe(r.url, 'visita à UTI') : null));
+        } else if (publicar && await sincronizacaoGoogle.configurada()) {
+          /* Drive da CCIH pelo Apps Script: os terminais da CCIH não têm cliente do Drive. O
+             tablet abre o mesmo arquivo (mesmo id) pelo app do Drive. */
+          statusVisita.className = 'texto-suave';
+          statusVisita.textContent = 'Enviando para o Drive da CCIH…';
+          const r = await sincronizacaoGoogle.publicarNoDrive(VISITA_UTI_ARQUIVO, html);
+          statusVisita.textContent = `Publicado: ${prep.pacientes.length} leito(s), cifrado, no Drive da CCIH ("${r.pasta}/${VISITA_UTI_ARQUIVO}"). `
+            + 'No tablet: app do Drive → o arquivo → ⋮ → Abrir com → Chrome → senha. Informe a senha por outro canal.';
         } else if (publicar) {
           if (!publicacao.handle) await publicacao.restaurar();
           if (!publicacao.handle) await publicacao.escolher();
           await publicacao.gravar(VISITA_UTI_ARQUIVO, html);
           statusVisita.className = 'texto-suave';
           statusVisita.textContent = `Publicado: ${prep.pacientes.length} leito(s) em "${publicacao.handle.name}/${VISITA_UTI_ARQUIVO}". `
-            + 'Para abrir no iPhone, configure a publicação na web em Configurações. Informe a senha por outro canal.';
+            + 'Para o tablet receber direto, configure a planilha do Google em Configurações. Informe a senha por outro canal.';
         } else {
           const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
           const a = el('a', { href: URL.createObjectURL(blob), download: VISITA_UTI_ARQUIVO.replace('.html', `-${hojeISO()}.html`) });

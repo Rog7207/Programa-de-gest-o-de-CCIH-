@@ -1059,40 +1059,48 @@ function montarMiniappsNaPasta() {
   const gravarTodos = async () => {
     status.className = 'texto-suave';
     try {
-      if (!publicacao.handle) await publicacao.restaurar();
-      if (!publicacao.handle) await publicacao.escolher();
-      infoPasta.textContent = 'pasta: ' + publicacao.handle.name;
-      const vocab = { setores: config.vocabulario.setores, antibioticos: config.vocabulario.antibioticos };
       /* URL do Apps Script e segredo (Planilha do Google) vão dentro dos miniapps: é o que
-         faz o envio cair direto na planilha em vez de pedir e-mail. */
+         faz o envio cair direto na planilha em vez de pedir e-mail. E, com a planilha
+         configurada, o destino dos arquivos é o Drive da CCIH pelo próprio script — os
+         terminais da CCIH não têm cliente do Drive para espelhar pasta. */
       const cfgSync = await sincronizacaoGoogle.config();
+      const viaDrive = sincronizacaoConfigurada(cfgSync);
+      if (!viaDrive && !publicacao.handle) await publicacao.restaurar();
+      if (!viaDrive && !publicacao.handle) await publicacao.escolher();
+      if (!viaDrive) infoPasta.textContent = 'pasta: ' + publicacao.handle.name;
+      const vocab = { setores: config.vocabulario.setores, antibioticos: config.vocabulario.antibioticos };
       const instalacao = instalacaoParaMiniapps(cfgSync);
       const gravados = [];
+      let pastaDrive = '';
       for (const m of MINIAPPS_PARA_PASTA) {
-        await publicacao.gravar(m.arquivo, montarMiniappParaPasta(m.arquivo, vocab, instalacao));
+        const html = montarMiniappParaPasta(m.arquivo, vocab, instalacao);
+        if (viaDrive) { status.textContent = `Enviando ${m.arquivo} para o Drive da CCIH…`; pastaDrive = (await sincronizacaoGoogle.publicarNoDrive(m.arquivo, html)).pasta; }
+        else await publicacao.gravar(m.arquivo, html);
         gravados.push(m.arquivo);
       }
-      status.textContent = `Gravados em "${publicacao.handle.name}": ${gravados.join(', ')} — com ${config.vocabulario.setores.length} setores e ${config.vocabulario.antibioticos.length} antibióticos do hospital`
-        + (sincronizacaoConfigurada(cfgSync) ? ', enviando direto para a planilha do Google. ' : '. Sem planilha do Google configurada: o envio sai por CSV + e-mail. ')
+      status.textContent = (viaDrive ? `Publicados no Drive da CCIH (pasta "${pastaDrive}"): ` : `Gravados em "${publicacao.handle.name}": `)
+        + `${gravados.join(', ')} — com ${config.vocabulario.setores.length} setores e ${config.vocabulario.antibioticos.length} antibióticos do hospital`
+        + (viaDrive ? ', enviando direto para a planilha do Google. ' : '. Sem planilha do Google configurada: o envio sai por CSV + e-mail. ')
         + 'No tablet, abra pelo app do Drive → ⋮ → Abrir com → Chrome.';
     } catch (e) {
       if (e && e.name !== 'AbortError') { status.className = 'aviso-erro-texto'; status.textContent = 'Erro ao gravar: ' + e.message; }
     }
   };
   return el('div', { class: 'cartao' },
-    el('h2', {}, '📁 Miniapps na pasta espelhada (tablet da CCIH)'),
+    el('h2', {}, '📁 Miniapps no Drive da CCIH (tablet)'),
     el('p', { class: 'texto-suave' },
-      'Grava os miniapps na pasta de publicação — a mesma pasta espelhada com o Drive onde já vão a visita à UTI com a lista cifrada e a '
-      + 'avaliação de antimicrobianos. Um tablet Android dedicado abre os arquivos pelo Chrome e funciona offline; nenhum arquivo fica em site público. '
-      + 'Repita quando o vocabulário de setores/antibióticos mudar ou o aplicativo for atualizado.'),
+      'Publica os miniapps na pasta "Miniapps" do Drive da CCIH através do Apps Script (com a planilha do Google configurada acima) — '
+      + 'sem precisar de cliente do Drive no computador, que nos terminais da CCIH não existe. Sem a planilha configurada, grava na pasta de publicação local. '
+      + 'É a mesma pasta onde vão a visita à UTI com a lista cifrada e a avaliação de antimicrobianos. Um tablet Android dedicado abre os arquivos pelo Chrome e funciona offline; '
+      + 'nenhum arquivo fica em site público. Repita quando o vocabulário de setores/antibióticos mudar ou o aplicativo for atualizado.'),
     el('ul', { class: 'texto-suave' }, MINIAPPS_PARA_PASTA.map(m => el('li', {}, `${m.titulo} — ${m.arquivo}`)),
       el('li', {}, 'Visita à UTI com a lista cifrada — visita-uti-cifrada.html (aba UTI, "Gerar e publicar")'),
       el('li', {}, 'Avaliação de antimicrobianos — avaliacao-antimicrobianos.html (aba Antibióticos, "Gerar e publicar")')),
     el('div', { class: 'linha-botoes' },
-      el('button', { class: 'botao-primario', onclick: gravarTodos }, 'Gravar miniapps na pasta'),
+      el('button', { class: 'botao-primario', onclick: gravarTodos }, '☁ Publicar miniapps'),
       el('button', { class: 'botao-secundario', onclick: async () => {
         try { const h = await publicacao.escolher(); infoPasta.textContent = 'pasta: ' + h.name; } catch (e) { /* cancelado */ }
-      } }, 'Escolher pasta de publicação'),
+      } }, 'Escolher pasta local (sem planilha)'),
       infoPasta),
     status);
 }

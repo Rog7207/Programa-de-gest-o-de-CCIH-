@@ -14,9 +14,11 @@
  *    (o trecho entre /d/ e /edit).
  * 2. https://script.google.com → Novo projeto → apague o conteúdo e cole este arquivo.
  * 3. Menu ⚙ "Configurações do projeto" → "Propriedades do script" → adicione:
- *      PLANILHA_ID = <id da planilha>
- *      SEGREDO     = <uma frase longa; a mesma que vai em Configurações do aplicativo>
- *      PASTA_ID    = <opcional: id de uma pasta do Drive para guardar cópia dos CSVs>
+ *      PLANILHA_ID       = <id da planilha>
+ *      SEGREDO           = <uma frase longa; a mesma que vai em Configurações do aplicativo>
+ *      PASTA_MINIAPPS_ID = <id da pasta do Drive onde os miniapps ficam para o tablet abrir>
+ *      PASTA_ID          = <opcional: id de uma pasta do Drive para guardar cópia dos CSVs>
+ *    (id de pasta = trecho da URL depois de /folders/)
  * 4. "Implantar" → "Nova implantação" → tipo "App da Web":
  *      Executar como: Eu · Quem pode acessar: Qualquer pessoa → Implantar → autorizar.
  * 5. Copie a "URL do app da Web" (termina em /exec) e cole, com o SEGREDO, em
@@ -157,12 +159,34 @@ function gravarLinhas(tipo, versao, aba, linhas, nomeArquivo) {
   return { novas: paraGravar.length, repetidas: repetidas };
 }
 
-/* POST do miniapp: { segredo, nome, conteudo } — conteudo é o pacote CSV. */
+/* Publicação de um miniapp pelo APLICATIVO (acao=publicar): grava/sobrescreve o arquivo
+   HTML na pasta PASTA_MINIAPPS_ID do Drive da CCIH, de onde o tablet abre. Os computadores
+   da CCIH são terminais sem cliente do Drive — este é o único caminho do PC para o Drive.
+   Sobrescrever mantém o id do arquivo (atalhos e links do tablet continuam valendo). */
+function publicarMiniapp(nome, conteudo) {
+  var pastaId = propriedade('PASTA_MINIAPPS_ID');
+  if (!pastaId) return { ok: false, erro: 'Defina a propriedade do script PASTA_MINIAPPS_ID (pasta do Drive para os miniapps).' };
+  var pasta = DriveApp.getFolderById(pastaId);
+  var existentes = pasta.getFilesByName(nome);
+  var arquivo;
+  if (existentes.hasNext()) {
+    arquivo = existentes.next();
+    arquivo.setContent(String(conteudo || ''));
+    while (existentes.hasNext()) existentes.next().setTrashed(true);   /* duplicata antiga */
+  } else {
+    arquivo = pasta.createFile(nome, String(conteudo || ''), 'text/html');
+  }
+  return { ok: true, nome: nome, id: arquivo.getId(), url: arquivo.getUrl(), pasta: pasta.getName(), bytes: String(conteudo || '').length };
+}
+
+/* POST do miniapp: { segredo, nome, conteudo } — conteudo é o pacote CSV.
+   POST do aplicativo: { segredo, acao: 'publicar', nome, conteudo } — conteudo é o HTML. */
 function doPost(e) {
   try {
     var dados = JSON.parse(e.postData.contents);
     if (!dados.segredo || dados.segredo !== propriedade('SEGREDO')) return resposta({ ok: false, erro: 'segredo inválido' });
     var nome = String(dados.nome || 'ccih.csv').replace(/[^\w.\-]+/g, '_');
+    if (dados.acao === 'publicar') return resposta(publicarMiniapp(nome, dados.conteudo));
     var pacote = analisarPacoteTexto(dados.conteudo);
     if (!pacote) return resposta({ ok: false, erro: 'não é um pacote de miniapp' });
     var totais = {};
@@ -187,7 +211,9 @@ function doGet(e) {
     var tipo = String(p.tipo || '');
     if (tipo === 'ping') {
       var abas = planilha().getSheets().map(function (s) { return s.getName() + ' (' + Math.max(0, s.getLastRow() - 1) + ')'; });
-      return resposta({ ok: true, planilha: planilha().getName(), abas: abas });
+      var pastaMiniapps = '';
+      try { var pid = propriedade('PASTA_MINIAPPS_ID'); if (pid) pastaMiniapps = DriveApp.getFolderById(pid).getName(); } catch (err) { pastaMiniapps = '(PASTA_MINIAPPS_ID inválida)'; }
+      return resposta({ ok: true, planilha: planilha().getName(), abas: abas, pastaMiniapps: pastaMiniapps });
     }
     var desde = String(p.desde || '');
     var ss = planilha();

@@ -39,6 +39,13 @@ function urlDeConsulta(cfg, tipo, desde) {
   return base + '?' + partes.join('&');
 }
 
+/* Corpo do POST que publica um miniapp no Drive da CCIH através do Apps Script (os
+   computadores da CCIH são terminais sem cliente do Drive — este é o caminho do PC ao
+   Drive). O script grava/sobrescreve o arquivo na pasta PASTA_MINIAPPS_ID. */
+function corpoPublicacaoDrive(cfg, nome, html) {
+  return { segredo: (cfg || {}).segredo || '', acao: 'publicar', nome: String(nome), conteudo: String(html) };
+}
+
 /* Valores da instalação que os miniapps gravados na pasta espelhada levam dentro
    (constantes ENVIO_URL / ENVIO_SEGREDO / EMAIL_DESTINO). */
 function instalacaoParaMiniapps(cfg) {
@@ -79,11 +86,28 @@ const sincronizacaoGoogle = {
     if (corpo.startsWith('##erro')) return { ok: false, mensagem: corpo.replace('##erro;', 'Apps Script respondeu: ') };
     try {
       const info = JSON.parse(corpo);
-      return info.ok ? { ok: true, mensagem: `OK: planilha "${info.planilha}" — abas: ${(info.abas || []).join(', ') || 'nenhuma ainda'}.` }
-        : { ok: false, mensagem: 'Apps Script respondeu: ' + (info.erro || corpo.slice(0, 200)) };
+      if (!info.ok) return { ok: false, mensagem: 'Apps Script respondeu: ' + (info.erro || corpo.slice(0, 200)) };
+      const pasta = info.pastaMiniapps ? `; pasta dos miniapps no Drive: "${info.pastaMiniapps}"` : '; sem PASTA_MINIAPPS_ID no script (publicação no Drive desligada)';
+      return { ok: true, mensagem: `OK: planilha "${info.planilha}" — abas: ${(info.abas || []).join(', ') || 'nenhuma ainda'}${pasta}.` };
     } catch (e) {
       return { ok: false, mensagem: 'Resposta inesperada do Apps Script: ' + corpo.slice(0, 200) };
     }
+  },
+
+  /* Publica um miniapp no Drive da CCIH pelo Apps Script. Devolve { ok, url, pasta } ou
+     lança erro com a mensagem do script. */
+  async publicarNoDrive(nome, html) {
+    const cfg = await this.config();
+    if (!sincronizacaoConfigurada(cfg)) throw new Error('Planilha do Google não configurada (Configurações).');
+    /* Content-Type text/plain = requisição "simples", sem preflight; o Apps Script responde
+       pelo redirecionamento do Google com permissão de origem cruzada. */
+    const r = await fetch(cfg.url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(corpoPublicacaoDrive(cfg, nome, html)) });
+    const corpo = await r.text();
+    let info;
+    try { info = JSON.parse(corpo); } catch (e) { throw new Error('Resposta inesperada do Apps Script: ' + corpo.slice(0, 200)); }
+    if (!info.ok) throw new Error('Apps Script: ' + (info.erro || corpo.slice(0, 200)));
+    return info;
   },
 
   /* Puxa um tipo e ingere pelo caminho dos miniapps. Devolve o texto-resumo da ingestão. */
@@ -120,5 +144,5 @@ const sincronizacaoGoogle = {
 };
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { TIPOS_SINCRONIZAVEIS, SINCRONIZACAO_MARGEM_DIAS, configSincronizacao, sincronizacaoConfigurada, desdeComMargem, urlDeConsulta, instalacaoParaMiniapps };
+  module.exports = { TIPOS_SINCRONIZAVEIS, SINCRONIZACAO_MARGEM_DIAS, configSincronizacao, sincronizacaoConfigurada, desdeComMargem, urlDeConsulta, instalacaoParaMiniapps, corpoPublicacaoDrive };
 }

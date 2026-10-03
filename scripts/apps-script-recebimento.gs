@@ -109,7 +109,105 @@ function chaveDaLinha(linha) {
   return partes.join('|');
 }
 
+/* ---------- Busca do paciente nos internados (miniapp de decisão de ATB) ----------------
+   O aplicativo publica a lista de internados de hoje (prontuário, nome, setor, leito) numa
+   aba privada da planilha; o médico, no celular, digita número ou parte do nome e recebe só
+   os melhores resultados — a lista nunca vai inteira para a página. A busca exige a "senha
+   dos médicos" (hash guardado nas propriedades), conferida aqui no servidor. */
+function normalizarBusca(s) {
+  return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+}
+/* q só de dígitos → prontuário/atendimento igual (primeiro) ou que começa pelos dígitos;
+   q texto → nome que contém TODAS as palavras (quem começa pela primeira vem antes). */
+function filtrarInternados(lista, q, max) {
+  var termo = normalizarBusca(q);
+  max = max || 8;
+  if (!termo) return [];
+  var res = [];
+  if (/^[\d\s]+$/.test(termo)) {
+    var digitos = termo.replace(/\D/g, '');
+    if (digitos.length < 2) return [];
+    (lista || []).forEach(function (p) {
+      var pr = String(p.prontuario || '').replace(/\D/g, ''), at = String(p.atendimento || '').replace(/\D/g, '');
+      if (pr === digitos || (at && at === digitos)) res.push({ p: p, peso: 0 });
+      else if (pr.indexOf(digitos) === 0 || (at && at.indexOf(digitos) === 0)) res.push({ p: p, peso: 1 });
+    });
+  } else {
+    var palavras = termo.split(' ').filter(Boolean);
+    if (palavras.join('').length < 3) return [];
+    (lista || []).forEach(function (p) {
+      var nome = normalizarBusca(p.nome);
+      if (!nome) return;
+      if (palavras.every(function (w) { return nome.indexOf(w) >= 0; })) res.push({ p: p, peso: nome.indexOf(palavras[0]) === 0 ? 0 : 1 });
+    });
+  }
+  var numerica = /^[\d\s]+$/.test(termo);
+  res.sort(function (a, b) {
+    if (a.peso !== b.peso) return a.peso - b.peso;
+    return numerica ? String(a.p.prontuario).localeCompare(String(b.p.prontuario))
+      : normalizarBusca(a.p.nome).localeCompare(normalizarBusca(b.p.nome));
+  });
+  return res.slice(0, max).map(function (r) { return r.p; });
+}
+
 /* ---------- Lado do servidor (Apps Script) ---------------------------------------------- */
+
+function hashTexto(s) {
+  return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(s == null ? '' : s), Utilities.Charset.UTF_8));
+}
+
+var COLUNAS_INTERNADOS = ['prontuario', 'nome', 'setor', 'leito', 'atendimento', 'dataInternacao'];
+/* Substitui a aba "internados" pela lista recebida e guarda o hash da senha dos médicos. */
+function publicarInternados(dados) {
+  var lista = dados.internados || [];
+  var ss = planilha();
+  var folha = ss.getSheetByName('internados') || ss.insertSheet('internados');
+  folha.clearContents();
+  var valores = [COLUNAS_INTERNADOS].concat(lista.map(function (p) { return COLUNAS_INTERNADOS.map(function (c) { return p[c] == null ? '' : String(p[c]); }); }));
+  folha.getRange(1, 1, valores.length, COLUNAS_INTERNADOS.length).setValues(valores);
+  folha.setFrozenRows(1);
+  var props = PropertiesService.getScriptProperties();
+  var agora = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  props.setProperty('INTERNADOS_EM', agora);
+  if (dados.senhaBusca) props.setProperty('SENHA_BUSCA_HASH', hashTexto(dados.senhaBusca));
+  return { ok: true, total: lista.length, atualizadoEm: agora, senhaDefinida: Boolean(dados.senhaBusca || props.getProperty('SENHA_BUSCA_HASH')) };
+}
+
+function lerInternados() {
+  var folha = planilha().getSheetByName('internados');
+  if (!folha || folha.getLastRow() < 2) return [];
+  var valores = folha.getDataRange().getValues();
+  var colunas = valores[0].map(String);
+  return valores.slice(1).map(function (v) {
+    var o = {};
+    colunas.forEach(function (c, j) { o[c] = v[j] == null ? '' : String(v[j]); });
+    return o;
+  });
+}
+
+/* ?tipo=buscar&q=...&chave=<senha dos médicos> → até 8 internados. */
+function buscarInternados(p) {
+  var hash = propriedade('SENHA_BUSCA_HASH');
+  if (!hash) return { ok: false, erro: 'senha dos médicos ainda não definida pela CCIH' };
+  if (!p.chave || hashTexto(p.chave) !== hash) return { ok: false, erro: 'senha inválida' };
+  var resultados = filtrarInternados(lerInternados(), p.q, 8).map(function (x) {
+    return { prontuario: x.prontuario, nome: x.nome, setor: x.setor, leito: x.leito };
+  });
+  return { ok: true, resultados: resultados, atualizadoEm: propriedade('INTERNADOS_EM') };
+}
+
+/* ?app=decisao-atb → serve o miniapp publicado na pasta do Drive por https (é assim que
+   ele roda no iPhone, onde arquivo baixado não executa). */
+function servirMiniapp(nome) {
+  if (!/^[\w-]{1,40}$/.test(nome)) return HtmlService.createHtmlOutput('<p>Miniapp inválido.</p>');
+  var pastaId = propriedade('PASTA_MINIAPPS_ID');
+  if (!pastaId) return HtmlService.createHtmlOutput('<p>PASTA_MINIAPPS_ID não definida no script.</p>');
+  var arquivos = DriveApp.getFolderById(pastaId).getFilesByName(nome + '.html');
+  if (!arquivos.hasNext()) return HtmlService.createHtmlOutput('<p>Miniapp "' + nome + '" ainda não publicado pela CCIH.</p>');
+  var html = arquivos.next().getBlob().getDataAsString('UTF-8');
+  return HtmlService.createHtmlOutput(html).setTitle('CCIH — ' + nome)
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
 
 function propriedade(nome, padrao) {
   try { return PropertiesService.getScriptProperties().getProperty(nome) || padrao || ''; }
@@ -187,6 +285,7 @@ function doPost(e) {
     if (!dados.segredo || dados.segredo !== propriedade('SEGREDO')) return resposta({ ok: false, erro: 'segredo inválido' });
     var nome = String(dados.nome || 'ccih.csv').replace(/[^\w.\-]+/g, '_');
     if (dados.acao === 'publicar') return resposta(publicarMiniapp(nome, dados.conteudo));
+    if (dados.acao === 'publicar-internados') return resposta(publicarInternados(dados));
     var pacote = analisarPacoteTexto(dados.conteudo);
     if (!pacote) return resposta({ ok: false, erro: 'não é um pacote de miniapp' });
     var totais = {};
@@ -207,13 +306,18 @@ function doPost(e) {
 function doGet(e) {
   try {
     var p = (e && e.parameter) || {};
+    /* Sem segredo: a página do miniapp (pública, sem dado de paciente) e a busca de
+       internados (protegida pela senha dos médicos). */
+    if (p.app) return servirMiniapp(String(p.app));
+    if (String(p.tipo || '') === 'buscar') return resposta(buscarInternados(p));
     if (!p.segredo || p.segredo !== propriedade('SEGREDO')) return texto('##erro;segredo inválido', 403);
     var tipo = String(p.tipo || '');
     if (tipo === 'ping') {
       var abas = planilha().getSheets().map(function (s) { return s.getName() + ' (' + Math.max(0, s.getLastRow() - 1) + ')'; });
       var pastaMiniapps = '';
       try { var pid = propriedade('PASTA_MINIAPPS_ID'); if (pid) pastaMiniapps = DriveApp.getFolderById(pid).getName(); } catch (err) { pastaMiniapps = '(PASTA_MINIAPPS_ID inválida)'; }
-      return resposta({ ok: true, planilha: planilha().getName(), abas: abas, pastaMiniapps: pastaMiniapps });
+      return resposta({ ok: true, planilha: planilha().getName(), abas: abas, pastaMiniapps: pastaMiniapps,
+        internadosEm: propriedade('INTERNADOS_EM'), senhaBuscaDefinida: Boolean(propriedade('SENHA_BUSCA_HASH')) });
     }
     var desde = String(p.desde || '');
     var ss = planilha();

@@ -1617,6 +1617,42 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
     corpoPub.segredo === 'frase longa' && corpoPub.acao === 'publicar' && corpoPub.nome === 'visita-uti-cifrada.html' && corpoPub.conteudo === '<html>x</html>');
   verificar('Apps Script trata acao=publicar antes de ler o pacote (função publicarMiniapp existe e exige PASTA_MINIAPPS_ID)',
     typeof ctxGs.publicarMiniapp === 'function' && /PASTA_MINIAPPS_ID/.test(ctxGs.publicarMiniapp.toString()) && /dados\.acao === 'publicar'/.test(ctxGs.doPost.toString()));
+
+  console.log('\n== 93. Busca do paciente nos internados (miniapp de decisão de ATB) ==');
+  const internados = [
+    { prontuario: '1000234', nome: 'Maria da Silva Souza', setor: 'Unidade 05', leito: '501', atendimento: '70001' },
+    { prontuario: '1002345', nome: 'João Silva', setor: 'CTI', leito: '03', atendimento: '70002' },
+    { prontuario: '2000001', nome: 'Ana Beatriz Costa', setor: 'Unidade 09', leito: '901', atendimento: '70003' },
+    { prontuario: '2340000', nome: 'Silvana Pereira', setor: 'Unidade 05', leito: '502', atendimento: '70004' }
+  ];
+  const f = (q) => ctxGs.filtrarInternados(internados, q, 8).map(p => p.prontuario);
+  verificar('número exato primeiro, depois quem começa pelos dígitos (prontuário ou atendimento)',
+    JSON.stringify(f('1002345')) === '["1002345"]' && JSON.stringify(f('100')) === '["1000234","1002345"]' && JSON.stringify(f('70003')) === '["2000001"]', JSON.stringify([f('1002345'), f('100'), f('70003')]));
+  verificar('nome: todas as palavras, sem acento/caixa; quem começa pela primeira palavra vem antes; "silva" não traz "Silvana"? traz (contém) — mas "silva souza" só a Maria',
+    JSON.stringify(f('SILVA')) === '["2340000","1002345","1000234"]' && JSON.stringify(f('silva souza')) === '["1000234"]' && JSON.stringify(f('ána')) === '["2000001","2340000"]', JSON.stringify([f('SILVA'), f('silva souza'), f('ána')]));
+  verificar('consulta curta não devolve nada (1 dígito, 2 letras); vazio idem', f('1').length === 0 && f('an').length === 0 && f('').length === 0);
+  verificar('respeita o máximo', ctxGs.filtrarInternados(internados, 'a', 8).length === 0 && ctxGs.filtrarInternados(internados, 'ana', 1).length === 1);
+  verificar('doGet serve ?app= e ?tipo=buscar sem o segredo da CCIH (busca exige a senha dos médicos)',
+    /if \(p\.app\) return servirMiniapp/.test(ctxGs.doGet.toString()) && /=== 'buscar'\) return resposta\(buscarInternados/.test(ctxGs.doGet.toString()) && /SENHA_BUSCA_HASH/.test(ctxGs.buscarInternados.toString()));
+  const bancosInt = { pacientes: {
+    pacientes: [{ Prontuario: 'P1', Nome: 'Zélia Moura' }, { Prontuario: 'P2', Nome: 'Abel Dias' }, { Prontuario: 'P3', Nome: 'Carla' }],
+    internacoes: [
+      { Prontuario: 'P1', Atendimento: '1', DataInternacao: '2026-10-01', DataAlta: '', SetorAtual: 'CTI', Leito: '4' },
+      { Prontuario: 'P2', Atendimento: '2', DataInternacao: '2026-09-20', DataAlta: '', SetorAtual: 'Unidade 05', Leito: '501' },
+      { Prontuario: 'P2', Atendimento: '0', DataInternacao: '2026-01-01', DataAlta: '2026-01-05', SetorAtual: 'Unidade 05', Leito: '' },
+      { Prontuario: 'P3', Atendimento: '3', DataInternacao: '2026-09-01', DataAlta: '2026-09-10', SetorAtual: 'CTI', Leito: '1' }
+    ] } };
+  const listaInt = sg.montarListaInternados(bancosInt);
+  verificar('lista de internados = internações abertas, um por paciente, com nome/setor/leito, ordenada por nome',
+    listaInt.length === 2 && listaInt[0].nome === 'Abel Dias' && listaInt[0].leito === '501' && listaInt[1].prontuario === 'P1' && listaInt[1].setor === 'CTI', JSON.stringify(listaInt));
+  const corpoInt = sg.corpoPublicacaoInternados(cfgS, listaInt, 'senha-medicos');
+  verificar('POST de internados leva segredo, acao e a senha dos médicos (o script guarda só o hash)',
+    corpoInt.acao === 'publicar-internados' && corpoInt.internados.length === 2 && corpoInt.senhaBusca === 'senha-medicos' && corpoInt.segredo === 'frase longa');
+  verificar('endereço dos médicos = URL do script + ?app=decisao-atb', sg.urlAppMedicos(cfgS, 'decisao-atb') === 'https://script.google.com/macros/s/ABC/exec?app=decisao-atb' && sg.urlAppMedicos({}, 'x') === '');
+  const fonteDecisao = fs.readFileSync(path.join(__dirname, '..', 'miniapps', 'fonte', 'decisao-atb.html'), 'utf-8');
+  verificar('miniapp de decisão: busca só com ENVIO_URL, senha dos médicos no aparelho, e o registro continua sem nome',
+    /if \(ENVIO_URL\) \{\s*\$\('blocoBusca'\)\.classList\.remove/.test(fonteDecisao) && /tipo=buscar&q=/.test(fonteDecisao)
+    && !/Nome:/.test(fonteDecisao.slice(fonteDecisao.indexOf('function registrar'), fonteDecisao.indexOf('function desenharLista'))));
 }
 
 console.log('\n== 32. Culturas do protocolo de sepse ==');

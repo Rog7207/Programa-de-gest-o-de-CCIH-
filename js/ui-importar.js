@@ -615,11 +615,21 @@ async function telaFotoInternados(arquivo, leitura) {
             return resultado;
           });
           await arquivarOriginal(arquivo);
+          /* A foto é a lista de internados de hoje: com a planilha do Google ligada, publica
+             sozinha a lista para a busca do paciente no miniapp de decisão de ATB. */
+          let avisoInternados = null;
+          try {
+            if (await sincronizacaoGoogle.configurada()) {
+              const pub = await sincronizacaoGoogle.publicarInternados();
+              avisoInternados = `Lista de ${fmtInt(pub.total)} internados publicada para a busca do paciente no miniapp de decisão de ATB.`;
+            }
+          } catch (e) { avisoInternados = 'Lista de internados NÃO publicada para o miniapp de decisão: ' + e.message; }
           imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
             el('h2', {}, 'Importado'),
             el('p', {}, `Foto de ${campoData.value.split('-').reverse().join('/')}: ${fmtInt(r.setorAtualizado)} internações mudaram de setor, `
               + `${fmtInt(r.leitoAtualizado)} de leito; ${fmtInt(r.passagensNovas)} passagens abertas, ${fmtInt(r.transferencias)} transferências, ${fmtInt(r.encerradas)} encerradas.`),
-            r.desconhecidos ? el('p', { class: 'texto-suave' }, `${fmtInt(r.desconhecidos)} atendimentos sem internação no banco — entram na passagem por setores, mas o setor atual só aparece na internação depois do censo.`) : null));
+            r.desconhecidos ? el('p', { class: 'texto-suave' }, `${fmtInt(r.desconhecidos)} atendimentos sem internação no banco — entram na passagem por setores, mas o setor atual só aparece na internação depois do censo.`) : null,
+            avisoInternados ? el('p', { class: 'texto-suave' }, avisoInternados) : null));
         } catch (e) {
           imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao gravar: ' + e.message));
         }

@@ -10,7 +10,9 @@ header { background: #0d3f7a; color: #fff; padding: 14px 16px; font-size: 18px; 
 main { padding: 12px; max-width: 560px; margin: 0 auto; }
 .cartao { background: #fff; border: 1px solid #dde3ea; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
 label { display: block; font-size: 13px; color: #61707f; margin-top: 8px; }
-input[type=text], select { width: 100%; font-size: 16px; padding: 9px; border: 1px solid #c3ccd6; border-radius: 8px; background: #fff; }
+input[type=text], input[type=password], select { width: 100%; font-size: 16px; padding: 9px; border: 1px solid #c3ccd6; border-radius: 8px; background: #fff; }
+.achado { display: block; width: 100%; text-align: left; background: #f2f7fd; color: #1f2933; border: 1px solid #d0e0f5; margin-top: 6px; padding: 9px; font-weight: 500; }
+.achado b { color: #0d3f7a; }
 .linha { display: flex; gap: 8px; } .linha > div { flex: 1; }
 button { font-size: 15px; font-weight: 600; border-radius: 8px; padding: 11px; border: none; cursor: pointer; width: 100%; margin-top: 8px; }
 .principal { background: #0d3f7a; color: #fff; } .secundario { background: #fff; color: #0d3f7a; border: 1px solid #0d3f7a; }
@@ -42,7 +44,7 @@ td.alta { color: #b03a2e; font-weight: 700; }
 </style>
 </head>
 <body>
-<header>Decisão de ATB empírica <span class="versao">v06.09d</span></header>
+<header>Decisão de ATB empírica <span class="versao">v10.03</span></header>
 <main>
   <div class="cartao aviso" id="avisoAbertura">
     <strong>Este arquivo precisa ser aberto no navegador.</strong>
@@ -57,6 +59,18 @@ td.alta { color: #b03a2e; font-weight: 700; }
 
   <div class="cartao">
     <p class="suave" id="publico" style="margin:0 0 4px"></p>
+    <!-- Busca do paciente nos internados de hoje (só com a planilha da CCIH ligada). -->
+    <div id="blocoBusca" class="oculto">
+      <label>Paciente — prontuário ou nome</label>
+      <input type="text" id="busca" placeholder="digite o número ou parte do nome" autocomplete="off">
+      <div id="resultadosBusca"></div>
+      <p class="suave" id="pacienteEscolhido" style="margin:4px 0 0"></p>
+      <div id="blocoSenhaBusca" class="oculto">
+        <label>Senha dos médicos (fornecida pela CCIH) para buscar os internados</label>
+        <input type="password" id="senhaBusca" autocomplete="off">
+        <button class="secundario" id="guardarSenhaBusca">Guardar neste aparelho</button>
+      </div>
+    </div>
     <div class="linha">
       <div><label>Prontuário (opcional)</label><input type="text" id="prontuario" inputmode="numeric"></div>
       <div><label>Quem decide</label><input type="text" id="medico" placeholder="seu nome"></div>
@@ -245,6 +259,7 @@ function registrar() {
   });
   gravar();
   $('prontuario').value = '';
+  $('pacienteEscolhido').textContent = '';
   $('resultado').classList.add('oculto');
   ultimaAnalise = null;
   avisar('Decisão registrada. Envie à CCIH quando tiver rede.');
@@ -343,6 +358,56 @@ $('rodape').textContent = AB
   : 'Versão inicial: recomendações do protocolo institucional (consenso). O antibiograma do hospital entra numa versão futura, quando o banco tiver painel suficiente.';
 desenharLista();
 conferirArmazenamento();
+
+/* ---- busca do paciente nos internados de hoje (pedido de 03/10/2026) ----
+   Para não haver erro de identificação: o médico digita o número e vê o nome, ou digita
+   parte do nome e escolhe entre os internados parecidos. A lista fica no servidor da CCIH
+   (Apps Script, mesma URL do envio); cada consulta traz só os melhores resultados, exige a
+   "senha dos médicos" (conferida no servidor) e nada disso é guardado: o registro e o
+   envio continuam levando só o prontuário. Sem ENVIO_URL (versão sem servidor), o bloco
+   nem aparece. */
+const CHAVE_SENHA_BUSCA = 'ccih.decisao.atb.senhaBusca';
+let temporizadorBusca = null;
+function mostrarResultados(filhos) { $('resultadosBusca').replaceChildren(...filhos); }
+async function buscarPaciente() {
+  const q = $('busca').value.trim();
+  if (q.length < 2) { mostrarResultados([]); return; }
+  const senha = lerLocal(CHAVE_SENHA_BUSCA) || '';
+  if (!senha) { $('blocoSenhaBusca').classList.remove('oculto'); return; }
+  mostrarResultados([el('p', { class: 'suave' }, 'buscando…')]);
+  try {
+    const r = await fetch(ENVIO_URL + '?tipo=buscar&q=' + encodeURIComponent(q) + '&chave=' + encodeURIComponent(senha), { redirect: 'follow' });
+    const info = await r.json();
+    if (!info.ok) {
+      if (/senha/.test(info.erro || '')) { gravarLocal(CHAVE_SENHA_BUSCA, ''); $('blocoSenhaBusca').classList.remove('oculto'); }
+      mostrarResultados([el('p', { class: 'suave' }, info.erro || 'não foi possível buscar')]);
+      return;
+    }
+    if (!info.resultados.length) {
+      mostrarResultados([el('p', { class: 'suave' }, 'Nenhum internado encontrado' + (info.atualizadoEm ? ' (lista de ' + info.atualizadoEm + ')' : '') + ' — confira ou digite o prontuário à mão.')]);
+      return;
+    }
+    mostrarResultados(info.resultados.map(p => el('button', { class: 'achado', type: 'button', onclick: () => {
+      $('prontuario').value = p.prontuario;
+      $('pacienteEscolhido').textContent = p.nome + ' · pront. ' + p.prontuario + (p.setor ? ' · ' + p.setor : '') + (p.leito ? ' · leito ' + p.leito : '');
+      $('busca').value = '';
+      mostrarResultados([]);
+    } }, el('b', {}, p.nome || '(sem nome)'), ' — pront. ' + p.prontuario + (p.setor ? ' · ' + p.setor : '') + (p.leito ? ' · leito ' + p.leito : ''))));
+  } catch (e) {
+    mostrarResultados([el('p', { class: 'suave' }, 'Sem conexão para buscar — digite o prontuário à mão.')]);
+  }
+}
+if (ENVIO_URL) {
+  $('blocoBusca').classList.remove('oculto');
+  if (!lerLocal(CHAVE_SENHA_BUSCA)) $('blocoSenhaBusca').classList.remove('oculto');
+  $('guardarSenhaBusca').onclick = () => {
+    gravarLocal(CHAVE_SENHA_BUSCA, $('senhaBusca').value.trim());
+    $('senhaBusca').value = '';
+    $('blocoSenhaBusca').classList.add('oculto');
+    if ($('busca').value.trim()) buscarPaciente();
+  };
+  $('busca').addEventListener('input', () => { clearTimeout(temporizadorBusca); temporizadorBusca = setTimeout(buscarPaciente, 350); });
+}
 </script>
 </body>
 </html>

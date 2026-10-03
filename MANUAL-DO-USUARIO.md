@@ -305,6 +305,18 @@ do script), sobrescrevendo o anterior e mantendo o mesmo arquivo para o tablet. 
 preciso espelhar pasta nenhuma; a pasta de publicação local fica só como alternativa quando
 a planilha não está configurada.
 
+**Decisão de ATB para os médicos, no celular deles (iPhone inclusive)** (03/10/2026): o
+mesmo Apps Script **serve o miniapp por https** no endereço fixo `…/exec?app=decisao-atb`
+(QR e link na aba Decisão ATB e em Configurações) — é o que roda no Safari. Para não haver
+erro de identificação, o médico **digita o prontuário e vê o nome, ou digita parte do nome
+e escolhe entre os internados de hoje**: a lista (prontuário, nome, setor, leito) é
+publicada pelo aplicativo numa aba **privada** da planilha — sozinha a cada foto 2396, ou
+pelo botão "Publicar lista de internados agora" — e cada busca devolve só os 8 melhores
+resultados, mediante a **senha dos médicos** (definida em Configurações, conferida no
+servidor, guardada no celular na primeira vez). A lista nunca vai inteira para a página, e
+o registro/envio continua levando só o prontuário. Sem a planilha configurada, o miniapp é
+o de sempre (prontuário digitado à mão).
+
 ---
 
 ## 7. Isolamentos

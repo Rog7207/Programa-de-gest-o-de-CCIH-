@@ -19,7 +19,33 @@ const SINCRONIZACAO_MARGEM_DIAS = 1;
 /* Linhas da aba meta ({Chave, Valor}) → { url, segredo, email }. */
 function configSincronizacao(meta) {
   const valor = chave => { const l = (meta || []).find(x => x.Chave === chave); return l ? String(l.Valor || '').trim() : ''; };
-  return { url: valor('envio_url'), segredo: valor('envio_segredo'), email: valor('email_ccih') };
+  return { url: valor('envio_url'), segredo: valor('envio_segredo'), email: valor('email_ccih'), senhaBusca: valor('senha_busca_miniapp') };
+}
+
+/* ---- Lista de internados para a busca do paciente no miniapp de decisão de ATB ----
+   Uma linha por paciente com internação aberta: prontuário, nome, setor/leito de hoje
+   (foto 2396), atendimento. Vai para uma aba PRIVADA da planilha; o médico recebe só os
+   melhores resultados de cada busca, mediante a senha dos médicos. */
+function montarListaInternados(bancos) {
+  const nomes = new Map((((bancos || {}).pacientes || {}).pacientes || []).map(p => [normalizarProntuario(p.Prontuario), String(p.Nome || '').trim()]));
+  const lista = [], vistos = new Set();
+  for (const i of (((bancos || {}).pacientes || {}).internacoes || [])) {
+    if (String(i.DataAlta || '').trim()) continue;
+    const pront = normalizarProntuario(i.Prontuario);
+    if (!pront || vistos.has(pront)) continue;
+    vistos.add(pront);
+    lista.push({ prontuario: pront, nome: nomes.get(pront) || '', setor: String(i.SetorAtual || '').trim(), leito: String(i.Leito || '').trim(),
+      atendimento: normalizarProntuario(i.Atendimento), dataInternacao: String(i.DataInternacao || '').slice(0, 10) });
+  }
+  return lista.sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
+}
+function corpoPublicacaoInternados(cfg, lista, senhaBusca) {
+  return { segredo: (cfg || {}).segredo || '', acao: 'publicar-internados', internados: lista || [], senhaBusca: senhaBusca || '' };
+}
+/* Endereço que o médico abre no celular (o script serve o miniapp por https). */
+function urlAppMedicos(cfg, app) {
+  const base = String((cfg || {}).url || '').trim();
+  return base ? base + '?app=' + encodeURIComponent(app) : '';
 }
 
 function sincronizacaoConfigurada(cfg) {
@@ -110,6 +136,22 @@ const sincronizacaoGoogle = {
     return info;
   },
 
+  /* Publica a lista de internados (e a senha dos médicos, se definida) na planilha. */
+  async publicarInternados(bancos) {
+    const cfg = await this.config();
+    if (!sincronizacaoConfigurada(cfg)) throw new Error('Planilha do Google não configurada (Configurações).');
+    const b = bancos || { pacientes: await lerBanco('pacientes') };
+    const lista = montarListaInternados(b);
+    const r = await fetch(cfg.url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(corpoPublicacaoInternados(cfg, lista, cfg.senhaBusca)) });
+    const corpo = await r.text();
+    let info;
+    try { info = JSON.parse(corpo); } catch (e) { throw new Error('Resposta inesperada do Apps Script: ' + corpo.slice(0, 200)); }
+    if (!info.ok) throw new Error('Apps Script: ' + (info.erro || corpo.slice(0, 200)));
+    await this.gravarMeta({ internados_publicados_em: info.atualizadoEm || new Date().toISOString().slice(0, 16).replace('T', ' ') });
+    return Object.assign({ total: lista.length }, info);
+  },
+
   /* Puxa um tipo e ingere pelo caminho dos miniapps. Devolve o texto-resumo da ingestão. */
   async sincronizarTipo(tipo) {
     const cfg = await this.config();
@@ -144,5 +186,6 @@ const sincronizacaoGoogle = {
 };
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { TIPOS_SINCRONIZAVEIS, SINCRONIZACAO_MARGEM_DIAS, configSincronizacao, sincronizacaoConfigurada, desdeComMargem, urlDeConsulta, instalacaoParaMiniapps, corpoPublicacaoDrive };
+  module.exports = { TIPOS_SINCRONIZAVEIS, SINCRONIZACAO_MARGEM_DIAS, configSincronizacao, sincronizacaoConfigurada, desdeComMargem, urlDeConsulta, instalacaoParaMiniapps, corpoPublicacaoDrive,
+    montarListaInternados, corpoPublicacaoInternados, urlAppMedicos };
 }

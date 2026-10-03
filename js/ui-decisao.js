@@ -12,7 +12,22 @@ async function montarDecisaoATB(conteudo) {
      mesmo gerador do cartão de Distribuição — o QR daqui nunca diverge do de lá. */
   const miniapp = (typeof CATALOGO_MINIAPPS !== 'undefined' ? CATALOGO_MINIAPPS : [])
     .find(m => m.titulo === 'Decisão de ATB empírica');
-  if (miniapp && miniapp.url) {
+  /* Com a planilha do Google ligada, o endereço dos médicos é o do Apps Script: abre no
+     navegador do celular (iPhone inclusive) e busca o paciente nos internados de hoje. */
+  const cfgSync = await sincronizacaoGoogle.config().catch(() => ({}));
+  if (sincronizacaoConfigurada(cfgSync)) {
+    const urlMedicos = urlAppMedicos(cfgSync, 'decisao-atb');
+    conteudo.append(el('div', { class: 'cartao', style: 'display:flex;gap:18px;align-items:center;flex-wrap:wrap' },
+      qrDe(urlMedicos, 'Decisão ATB'),
+      el('div', { style: 'max-width:520px' },
+        el('h2', {}, 'Leve no celular (abre direto no navegador — iPhone inclusive)'),
+        el('p', { class: 'texto-suave', style: 'word-break:break-all' }, el('a', { href: urlMedicos, target: '_blank' }, urlMedicos)),
+        el('p', { class: 'texto-suave' }, 'O médico digita o prontuário e vê o nome, ou digita parte do nome e escolhe entre os internados de hoje '
+          + '(com a senha dos médicos definida em Configurações). O registro e o envio continuam levando só o prontuário.'),
+        el('button', { class: 'botao-secundario', onclick: () =>
+          window.open('https://wa.me/?text=' + encodeURIComponent('CCIH — apoio à decisão de antibioticoterapia empírica (protocolo institucional). Abra no navegador do celular:\n' + urlMedicos), '_blank') },
+          'Enviar pelo WhatsApp'))));
+  } else if (miniapp && miniapp.url) {
     conteudo.append(el('div', { class: 'cartao', style: 'display:flex;gap:18px;align-items:center;flex-wrap:wrap' },
       qrDe(miniapp.url, miniapp.titulo),
       el('div', { style: 'max-width:520px' },

@@ -1530,6 +1530,14 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
   verificar('o miniapp sabe abrir a lista (tela de senha, lista, botão avaliar)',
     html.includes('id="telaSenha"') && html.includes('id="listaPacientes"') && html.includes('Avaliar este paciente'));
   verificar('a versão pública (sem CIFRADO) continua igual: marcador fica vazio de script', !fonteMiniapp.includes('var CIFRADO') && fonteMiniapp.includes("typeof CIFRADO !== 'undefined'"));
+  /* Pedido de 03/10/2026: depois do envio, a lista na tela perde nome/evolução; a lista
+     decifrada nunca vai ao localStorage (só `registros`, sem nome), e o CSV não leva nome. */
+  const posEnvio = fonteMiniapp.slice(fonteMiniapp.indexOf("registros.forEach(r => r.exportadoEm = Date.now());"));
+  verificar('ao exportar, a lista é anonimizada (nome, evolução, sinais zerados)',
+    /anonimizarLista\(\);/.test(posEnvio.slice(0, 200)) && /p\.nome = ''; p\.ultimaEvolucaoMedica = null/.test(fonteMiniapp));
+  verificar('a lista decifrada nunca é gravada no aparelho (nenhum gravarLocal/localStorage com listaPacientes)',
+    !/gravarLocal\([^)]*listaPacientes|localStorage\.setItem\([^)]*listaPacientes/.test(fonteMiniapp));
+  verificar('a planilha exportada não tem coluna de nome', !/Nome:\s*r\.|NomePaciente|p\.nome/.test(fonteMiniapp.slice(fonteMiniapp.indexOf('function montarPacote'), fonteMiniapp.indexOf('$(\'exportar\').onclick'))));
 
   console.log('\n== 91. Publicação na web (GitHub Pages) — montagem da requisição ==');
   const pw = require(path.join(__dirname, '..', 'js', 'publicacao-web.js'));

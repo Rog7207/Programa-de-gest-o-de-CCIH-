@@ -486,6 +486,7 @@ $('exportar').onclick = async () => {
   if (await entregarArquivo(nome, montarPacote())) {
     registros.forEach(r => r.exportadoEm = Date.now());
     gravar();
+    anonimizarLista();
   }
 };
 $('limpar').onclick = () => { if (confirm('Apagar todos os registros deste aparelho?')) { registros = []; limparFormulario(); gravar(); } };
@@ -540,11 +541,26 @@ function selo(texto, alerta) {
     + (alerta ? 'background:#fbe9e7;color:#b03a2e;font-weight:600' : 'background:#e7effb;color:#0d3f7a');
   return s;
 }
+/* Depois do envio (pedido de 03/10/2026), a lista aberta na tela perde o que identifica a
+   pessoa: nome, texto da evolução e sinais — ficam leito, prontuário, setor, dias e as
+   marcas da visita. O arquivo em si continua cifrado; para ver nome de novo é reabrir e
+   digitar a senha. Nada disto jamais passou pelo armazenamento do aparelho. */
+let listaAnonimizada = false;
+function anonimizarLista() {
+  if (!listaPacientes.length) return;
+  listaPacientes.forEach(p => {
+    p.nome = ''; p.ultimaEvolucaoMedica = null; p.sinaisInfeccao = ''; p.vitais = [];
+    p.isolamento = p.isolamento ? 'isolamento' : ''; p.irasAberta = p.irasAberta ? 'IRAS em investigação' : '';
+  });
+  listaAnonimizada = true;
+  desenharLista();
+}
 function desenharLista() {
   const alvo = $('listaPacientes');
   alvo.innerHTML = '';
   const avaliados = new Set(registros.map(r => String(r.Prontuario).replace(/\D/g, '')));
-  $('resumoLista').textContent = '— ' + listaPacientes.length + ' leito(s) · ' + listaPacientes.filter(p => avaliados.has(String(p.prontuario).replace(/\D/g, ''))).length + ' já avaliado(s)';
+  $('resumoLista').textContent = '— ' + listaPacientes.length + ' leito(s) · ' + listaPacientes.filter(p => avaliados.has(String(p.prontuario).replace(/\D/g, ''))).length + ' já avaliado(s)'
+    + (listaAnonimizada ? ' · enviado: nomes e evoluções removidos desta tela (reabra o arquivo com a senha para vê-los)' : '');
   listaPacientes.forEach(p => {
     const feito = avaliados.has(String(p.prontuario).replace(/\D/g, ''));
     const div = document.createElement('div');
@@ -553,7 +569,7 @@ function desenharLista() {
     const cab = document.createElement('div');
     cab.style.cssText = 'display:flex;align-items:baseline;gap:8px;flex-wrap:wrap';
     const leito = document.createElement('strong'); leito.textContent = 'Leito ' + (p.leito || '?'); leito.style.fontSize = '16px';
-    const nome = document.createElement('span'); nome.textContent = p.nome || '(sem nome no cadastro)';
+    const nome = document.createElement('span'); nome.textContent = p.nome || (listaAnonimizada ? '' : '(sem nome no cadastro)');
     const num = document.createElement('span'); num.className = 'suave'; num.textContent = 'pront. ' + p.prontuario + (p.dias != null ? ' · ' + p.dias + ' d' : '');
     cab.append(leito, nome, num);
     const selos = document.createElement('div');

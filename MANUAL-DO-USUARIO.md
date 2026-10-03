@@ -263,6 +263,16 @@ guarda, para quem está em UTI/CTI, **todas** as evoluções das últimas 48 h �
 última. Os sinais vêm do que a equipe escreveu, não do monitor: são lembrete para a
 conversa à beira do leito, não substituem a checagem.
 
+No mesmo cartão, **📱 Miniapp da visita de hoje**: com uma senha, o aplicativo gera o
+miniapp de visita à UTI **com essa lista dentro, cifrada** (AES-GCM, como a página de
+avaliação de antimicrobianos) — "Gerar e publicar" grava `visita-uti-cifrada.html` com nome
+fixo na pasta de publicação (o link do Drive não muda), "Baixar arquivo" salva para enviar
+ao celular. No telefone, a senha abre a lista dos leitos; **"Avaliar este paciente"**
+preenche leito e prontuário (e marca CVC/VM/SVD que o aplicativo já conhece) — acaba o
+número digitado errado que impedia o paciente de casar na importação. A lista vale 7 dias e,
+decifrada, fica só na memória da página; a planilha exportada continua levando só o
+prontuário. Sem senha/lista (versão pública do miniapp), tudo funciona como antes.
+
 ---
 
 ## 7. Isolamentos

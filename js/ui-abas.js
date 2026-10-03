@@ -1262,13 +1262,57 @@ async function montarUti(conteudo) {
     };
     selSetorLeitos.addEventListener('change', desenharLeitos);
     desenharLeitos();
+
+    /* ---- A mesma lista no celular ----
+       A visita acontece no miniapp (pedido de 03/10/2026). Gera o miniapp de visita com a
+       lista dos leitos CIFRADA dentro (senha), grava com nome fixo na pasta de publicação
+       (link do Drive não muda) ou baixa o arquivo. A enfermeira escolhe o leito na lista em
+       vez de digitar o prontuário. */
+    const campoSenhaVisita = el('input', { type: 'password', placeholder: 'senha da lista (mín. 6)', autocomplete: 'new-password' });
+    const statusVisita = el('span', { class: 'texto-suave' });
+    const gerarMiniappVisita = async (publicar) => {
+      statusVisita.className = 'aviso-erro-texto';
+      if ((campoSenhaVisita.value || '').length < 6) { statusVisita.textContent = 'Defina uma senha com pelo menos 6 caracteres.'; return; }
+      const prep = prepararVisitaUTI(bancosResumo, selSetorLeitos.value, hojeISO());
+      if (!prep.pacientes.length) { statusVisita.textContent = 'Nenhum paciente internado no setor — nada a gerar.'; return; }
+      try {
+        const geradoEm = new Date().toISOString();
+        const cifrado = await criptografarDados(JSON.stringify(montarDadosVisitaUTI(prep)), campoSenhaVisita.value);
+        const html = gerarHTMLVisitaUTI(cifrado, {
+          geradoEm, setor: selSetorLeitos.value || '', avisoHoras: VISITA_UTI_AVISO_HORAS, bloqueioDias: VISITA_UTI_BLOQUEIO_DIAS
+        }, { setores: config.vocabulario.setores, antibioticos: config.vocabulario.antibioticos });
+        if (publicar) {
+          if (!publicacao.handle) await publicacao.restaurar();
+          if (!publicacao.handle) await publicacao.escolher();
+          await publicacao.gravar(VISITA_UTI_ARQUIVO, html);
+          statusVisita.className = 'texto-suave';
+          statusVisita.textContent = `Publicado: ${prep.pacientes.length} leito(s) em "${publicacao.handle.name}/${VISITA_UTI_ARQUIVO}". Informe a senha por outro canal.`;
+        } else {
+          const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+          const a = el('a', { href: URL.createObjectURL(blob), download: VISITA_UTI_ARQUIVO.replace('.html', `-${hojeISO()}.html`) });
+          document.body.appendChild(a); a.click(); a.remove();
+          statusVisita.className = 'texto-suave';
+          statusVisita.textContent = `Arquivo gerado com ${prep.pacientes.length} leito(s). Envie ao celular e informe a senha por outro canal.`;
+        }
+      } catch (e) {
+        if (e && e.name !== 'AbortError') statusVisita.textContent = 'Erro ao gerar: ' + e.message;
+      }
+    };
     conteudo.append(el('div', { class: 'cartao' },
       el('h2', {}, '🛏 Leito a leito — preparação da visita'),
       el('div', { class: 'linha-campos' }, el('label', {}, 'Setor: ', selSetorLeitos)),
       alvoLeitos,
       el('p', { class: 'texto-suave' },
-        'Sinais vitais vêm do TEXTO das evoluções (PA, FC, FR, Tax, SatO2, droga vasoativa…), não do monitor — confirme à beira do leito. '
-        + 'Os dados ficam nesta tela; a lista cifrada para o miniapp é a próxima etapa.')));
+        'Sinais vitais vêm do TEXTO das evoluções (PA, FC, FR, Tax, SatO2, droga vasoativa…), não do monitor — confirme à beira do leito.'),
+      el('h3', {}, '📱 Miniapp da visita de hoje (com esta lista, cifrada)'),
+      el('div', { class: 'linha-campos' },
+        campoSenhaVisita,
+        el('button', { class: 'botao-primario', onclick: () => gerarMiniappVisita(true) }, 'Gerar e publicar'),
+        el('button', { class: 'botao-secundario', onclick: () => gerarMiniappVisita(false) }, 'Baixar arquivo'),
+        statusVisita),
+      el('p', { class: 'texto-suave' },
+        'É o miniapp de visita de sempre, com a lista dos leitos dentro: no celular, a senha abre a lista e "avaliar" preenche leito e prontuário. '
+        + 'Vale por ' + VISITA_UTI_BLOQUEIO_DIAS + ' dias; a lista decifrada fica só na memória da página.')));
     const setoresUTI = [...new Set((bCulturas.culturas || []).map(c => String(c.Setor || '').trim())
       .filter(ehSetorDeUTI))].sort();
     const selSetorResumo = el('select', {},

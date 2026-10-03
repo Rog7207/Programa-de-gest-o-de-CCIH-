@@ -1506,6 +1506,30 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
   const p3 = prep.pacientes.find(p => p.prontuario === 'P3');
   verificar('P3: sem evolução na foto conta em semEvolucao', p3.ultimaEvolucao === null && prep.semEvolucao === 1 && prep.comVitaisAlterados === 1);
   verificar('filtro por setor', alertas.prepararVisitaUTI(bancos, 'UTI Neonatal / Pediátrica', hoje).pacientes.length === 1);
+
+  console.log('\n== 90. Miniapp da visita com a lista cifrada (fonte única) ==');
+  /* O modelo é gerado por scripts/montar-miniapps.js a partir do fonte do miniapp. */
+  const modelo = require(path.join(__dirname, '..', 'js', 'visita-uti-modelo.js'));
+  global.VISITA_UTI_MODELO = modelo.VISITA_UTI_MODELO;
+  const fonteMiniapp = fs.readFileSync(path.join(__dirname, '..', 'miniapps', 'fonte', 'visita-uti.html'), 'utf-8');
+  verificar('js/visita-uti-modelo.js é cópia fiel de miniapps/fonte/visita-uti.html (rode node scripts/montar-miniapps.js se falhar)',
+    modelo.VISITA_UTI_MODELO === fonteMiniapp);
+  const vc = require(path.join(__dirname, '..', 'js', 'visita-uti-cifrada.js'));
+  const dados = vc.montarDadosVisitaUTI(prep);
+  verificar('payload leva só o necessário (sem evoluções inteiras, sem campos extras)',
+    dados.pacientes.length === 3 && Object.keys(dados.pacientes[0]).sort().join(',') === 'antibioticos,atendimento,culturasPendentes,dias,dispositivos,irasAberta,isolamento,leito,nome,prontuario,setor,sinaisInfeccao,ultimaEvolucaoMedica,vitais', Object.keys(dados.pacientes[0]));
+  const longa = vc.montarDadosVisitaUTI({ pacientes: [{ ultimaEvolucaoMedica: { data: '2026-10-01', autor: 'x', texto: 'y'.repeat(5000) } }] });
+  verificar('texto da evolução é aparado para o celular', longa.pacientes[0].ultimaEvolucaoMedica.texto.length <= vc.VISITA_UTI_TEXTO_MAX + 10 && longa.pacientes[0].ultimaEvolucaoMedica.texto.endsWith('[…]'));
+  const cifradoFalso = { sal: 'c2Fs', iv: 'aXY=', dados: 'ZGFkb3M8L3NjcmlwdD4=' };
+  const html = vc.gerarHTMLVisitaUTI(cifradoFalso, { geradoEm: '2026-10-03T10:00:00Z', setor: 'CTI - Dr. Joaquim', avisoHoras: 48, bloqueioDias: 7 },
+    { setores: ['CTI - Dr. Joaquim', 'UTI Neonatal / Pediátrica'], antibioticos: ['Meropenem', 'Vancomicina'] });
+  verificar('página gerada traz CIFRADO, META e o marcador consumido',
+    html.includes('var CIFRADO = {"sal":"c2Fs"') && html.includes('"setor":"CTI - Dr. Joaquim"') && !html.includes('<!--LISTA-CIFRADA-->'));
+  verificar('setores e antibióticos da instalação substituem os genéricos',
+    html.includes('const SETORES = ["CTI - Dr. Joaquim", "UTI Neonatal / Pediátrica"];') && html.includes('const ATBS = ["Meropenem", "Vancomicina"];') && !html.includes("'Amicacina'"));
+  verificar('o miniapp sabe abrir a lista (tela de senha, lista, botão avaliar)',
+    html.includes('id="telaSenha"') && html.includes('id="listaPacientes"') && html.includes('Avaliar este paciente'));
+  verificar('a versão pública (sem CIFRADO) continua igual: marcador fica vazio de script', !fonteMiniapp.includes('var CIFRADO') && fonteMiniapp.includes("typeof CIFRADO !== 'undefined'"));
 }
 
 console.log('\n== 32. Culturas do protocolo de sepse ==');

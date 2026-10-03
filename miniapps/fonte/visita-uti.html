@@ -6,24 +6,24 @@
 <title>CCIH — Visita à UTI</title>
 <style>
 * { box-sizing: border-box; } body { font-family: system-ui, sans-serif; margin: 0; background: #f2f4f7; color: #1f2933; }
-header { background: #14532d; color: #fff; padding: 14px 16px; font-size: 18px; font-weight: 700; }
+header { background: #0d3f7a; color: #fff; padding: 14px 16px; font-size: 18px; font-weight: 700; }
 main { padding: 12px; max-width: 560px; margin: 0 auto; }
 .cartao { background: #fff; border: 1px solid #dde3ea; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
 label { display: block; font-size: 13px; color: #61707f; margin-top: 8px; }
-input[type=text], input[type=date], select { width: 100%; font-size: 16px; padding: 9px; border: 1px solid #c3ccd6; border-radius: 8px; background: #fff; }
+input[type=text], input[type=password], input[type=date], select { width: 100%; font-size: 16px; padding: 9px; border: 1px solid #c3ccd6; border-radius: 8px; background: #fff; }
 .linha { display: flex; gap: 8px; } .linha > div { flex: 1; }
 .chk { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-weight: 600; }
 .chk input { width: 22px; height: 22px; }
-.bloco { border-left: 3px solid #cfe3d6; padding-left: 10px; margin: 6px 0 6px 6px; }
+.bloco { border-left: 3px solid #d0e0f5; padding-left: 10px; margin: 6px 0 6px 6px; }
 .itemlista { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
 .itemlista select { flex: 1; }
 button { font-size: 15px; font-weight: 600; border-radius: 8px; padding: 11px; border: none; cursor: pointer; width: 100%; margin-top: 8px; }
-.principal { background: #14532d; color: #fff; } .secundario { background: #fff; color: #14532d; border: 1px solid #14532d; }
-.mini { width: auto; padding: 6px 10px; font-size: 13px; margin: 6px 0 0; background: #e8f3ec; color: #14532d; }
+.principal { background: #0d3f7a; color: #fff; } .secundario { background: #fff; color: #0d3f7a; border: 1px solid #0d3f7a; }
+.mini { width: auto; padding: 6px 10px; font-size: 13px; margin: 6px 0 0; background: #e7effb; color: #0d3f7a; }
 .remover { width: auto; background: none; color: #b03a2e; font-size: 18px; padding: 4px 8px; margin: 0; }
 .item { border-bottom: 1px solid #eef1f5; padding: 10px 0; font-size: 14px; cursor: pointer; }
-.item:active { background: #f4faf6; }
-.selos span { background: #e8f3ec; color: #14532d; border-radius: 10px; padding: 2px 8px; font-size: 12px; margin-right: 4px; }
+.item:active { background: #f2f7fd; }
+.selos span { background: #e7effb; color: #0d3f7a; border-radius: 10px; padding: 2px 8px; font-size: 12px; margin-right: 4px; }
 .selos .enviado { background: #fdf3dd; color: #633806; }
 .excluir { background: none; border: none; color: #b03a2e; font-size: 13px; width: auto; padding: 2px 6px; margin: 0; float: right; }
 .suave { color: #61707f; font-size: 13px; }
@@ -34,7 +34,7 @@ button { font-size: 15px; font-weight: 600; border-radius: 8px; padding: 11px; b
 </style>
 </head>
 <body>
-<header>Visita da CCIH à UTI <span class="versao">v01.09</span></header>
+<header>Visita da CCIH à UTI <span class="versao">v01.10</span></header>
 <main>
   <div class="cartao aviso" id="avisoAbertura">
     <strong>Este arquivo precisa ser aberto no navegador.</strong>
@@ -45,6 +45,19 @@ button { font-size: 15px; font-weight: 600; border-radius: 8px; padding: 11px; b
   <div class="cartao aviso" id="avisoArmazenamento" style="display:none">
     <strong>Os registros não estão sendo salvos neste aparelho.</strong>
     <p>Se fechar a página, perde o que digitou. Baixe o arquivo e abra-o pelo navegador.</p>
+  </div>
+  <!-- Lista dos leitos de hoje (só na versão gerada pelo aplicativo, cifrada com senha). -->
+  <div class="cartao oculto" id="telaSenha">
+    <strong>Lista dos leitos de hoje — protegida.</strong>
+    <p class="suave" id="infoLista"></p>
+    <label>Senha fornecida pela CCIH</label><input type="password" id="senha" autocomplete="off">
+    <button class="principal" id="abrirLista">Abrir lista de pacientes</button>
+    <p class="suave" id="erroSenha"></p>
+  </div>
+  <div class="cartao oculto" id="cartaoLista">
+    <strong>Pacientes do setor hoje</strong> <span class="suave" id="resumoLista"></span>
+    <p class="suave">Toque em <b>avaliar</b> para preencher leito e prontuário sem digitar. Sinais vitais vêm do texto das evoluções — confirme no leito.</p>
+    <div id="listaPacientes"></div>
   </div>
   <div class="cartao">
     <div class="linha">
@@ -97,6 +110,7 @@ button { font-size: 15px; font-weight: 600; border-radius: 8px; padding: 11px; b
     <button class="excluir" id="limpar" style="width:100%">Apagar todos os registros do aparelho</button>
   </div>
 </main>
+<!--LISTA-CIFRADA-->
 <script>
 const CHAVE = 'ccih.visita.uti.v2';
 const EMAIL_DESTINO = 'defina-o-email-da-ccih@exemplo.br';
@@ -381,7 +395,7 @@ function avisar(texto, erro) {
     el.id = 'statusExporte';
     document.getElementById('exportar').after(el);
   }
-  el.style.cssText = 'font-weight:600;font-size:14px;margin-top:8px;color:' + (erro ? '#b03a2e' : '#14532d');
+  el.style.cssText = 'font-weight:600;font-size:14px;margin-top:8px;color:' + (erro ? '#b03a2e' : '#0d3f7a');
   el.textContent = texto;
 }
 async function entregarArquivo(nome, texto) {
@@ -413,8 +427,8 @@ async function entregarArquivo(nome, texto) {
     email.href = 'mailto:' + EMAIL_DESTINO + '?subject=' + encodeURIComponent('CCIH — ' + nome)
       + '&body=' + encodeURIComponent('Segue em anexo o arquivo ' + nome + ' (anexe-o pela pasta Downloads).');
     email.textContent = '✉ Abrir e-mail para ' + EMAIL_DESTINO + ' (anexe o arquivo baixado)';
-    email.style.cssText = 'display:block;margin-top:8px;padding:10px;border:1px solid #14532d;border-radius:8px;'
-      + 'color:#14532d;font-weight:700;text-align:center;text-decoration:none';
+    email.style.cssText = 'display:block;margin-top:8px;padding:10px;border:1px solid #0d3f7a;border-radius:8px;'
+      + 'color:#0d3f7a;font-weight:700;text-align:center;text-decoration:none';
     status.appendChild(email);
     const baixar = document.createElement('a');
     baixar.href = url;
@@ -462,6 +476,117 @@ $('exportar').onclick = async () => {
 };
 $('limpar').onclick = () => { if (confirm('Apagar todos os registros deste aparelho?')) { registros = []; limparFormulario(); gravar(); } };
 desenhar();
+
+/* ---- Lista dos leitos de hoje (versão gerada pelo aplicativo) ----
+   O aplicativo da CCIH gera esta mesma página com a lista dos pacientes internados no setor
+   (nome, leito, prontuário, última evolução médica, sinais vitais alterados) CIFRADA com
+   senha (AES-GCM, chave derivada por PBKDF2) — o arquivo pode circular que ninguém lê sem
+   a senha. Decifrada, a lista fica só na memória da página, nunca no armazenamento do
+   aparelho. Sem CIFRADO (versão pública), nada disto aparece e o miniapp é o de sempre. */
+const LISTA_CIFRADA = typeof CIFRADO !== 'undefined' ? CIFRADO : null;
+const META_LISTA = typeof META !== 'undefined' ? META : {};
+let listaPacientes = [];
+function deBase64(b64) {
+  const bin = atob(b64), u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return u8;
+}
+if (LISTA_CIFRADA) {
+  const idadeHoras = (Date.now() - new Date(META_LISTA.geradoEm).getTime()) / 3600000;
+  $('telaSenha').classList.remove('oculto');
+  $('infoLista').textContent = (META_LISTA.setor ? META_LISTA.setor + ' · ' : '') + 'dados extraídos em '
+    + new Date(META_LISTA.geradoEm).toLocaleString('pt-BR') + (idadeHoras > (META_LISTA.avisoHoras || 48) ? ' — atenção: mais de ' + Math.round(idadeHoras) + ' h' : '');
+  if (idadeHoras > (META_LISTA.bloqueioDias || 7) * 24) {
+    $('telaSenha').innerHTML = '<strong>Esta lista tem mais de ' + (META_LISTA.bloqueioDias || 7) + ' dias e foi bloqueada por segurança.</strong><p class="suave">Peça à CCIH uma versão atualizada. O formulário abaixo continua funcionando normalmente.</p>';
+  } else {
+    $('abrirLista').onclick = abrirLista;
+    $('senha').addEventListener('keydown', e => { if (e.key === 'Enter') abrirLista(); });
+  }
+  if (META_LISTA.setor) restaurarSetor(META_LISTA.setor);
+}
+async function abrirLista() {
+  try {
+    const material = await crypto.subtle.importKey('raw', new TextEncoder().encode($('senha').value), 'PBKDF2', false, ['deriveKey']);
+    const chave = await crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: deBase64(LISTA_CIFRADA.sal), iterations: 150000, hash: 'SHA-256' },
+      material, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    const aberto = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: deBase64(LISTA_CIFRADA.iv) }, chave, deBase64(LISTA_CIFRADA.dados));
+    listaPacientes = JSON.parse(new TextDecoder().decode(aberto)).pacientes || [];
+    $('telaSenha').classList.add('oculto');
+    $('cartaoLista').classList.remove('oculto');
+    desenharLista();
+  } catch (e) {
+    $('erroSenha').textContent = 'Senha incorreta.';
+  }
+}
+function selo(texto, alerta) {
+  const s = document.createElement('span');
+  s.textContent = texto;
+  s.style.cssText = 'display:inline-block;border-radius:10px;padding:2px 8px;font-size:12px;margin:2px 4px 0 0;'
+    + (alerta ? 'background:#fbe9e7;color:#b03a2e;font-weight:600' : 'background:#e7effb;color:#0d3f7a');
+  return s;
+}
+function desenharLista() {
+  const alvo = $('listaPacientes');
+  alvo.innerHTML = '';
+  const avaliados = new Set(registros.map(r => String(r.Prontuario).replace(/\D/g, '')));
+  $('resumoLista').textContent = '— ' + listaPacientes.length + ' leito(s) · ' + listaPacientes.filter(p => avaliados.has(String(p.prontuario).replace(/\D/g, ''))).length + ' já avaliado(s)';
+  listaPacientes.forEach(p => {
+    const feito = avaliados.has(String(p.prontuario).replace(/\D/g, ''));
+    const div = document.createElement('div');
+    div.className = 'item';
+    div.style.cursor = 'default';
+    const cab = document.createElement('div');
+    cab.style.cssText = 'display:flex;align-items:baseline;gap:8px;flex-wrap:wrap';
+    const leito = document.createElement('strong'); leito.textContent = 'Leito ' + (p.leito || '?'); leito.style.fontSize = '16px';
+    const nome = document.createElement('span'); nome.textContent = p.nome || '(sem nome no cadastro)';
+    const num = document.createElement('span'); num.className = 'suave'; num.textContent = 'pront. ' + p.prontuario + (p.dias != null ? ' · ' + p.dias + ' d' : '');
+    cab.append(leito, nome, num);
+    const selos = document.createElement('div');
+    (p.dispositivos || []).forEach(d => selos.appendChild(selo(d)));
+    (p.antibioticos || []).forEach(a => selos.appendChild(selo('💊 ' + a)));
+    if (p.culturasPendentes) selos.appendChild(selo('🧫 ' + p.culturasPendentes + ' cultura(s) pendente(s)'));
+    if (p.isolamento) selos.appendChild(selo('🚧 ' + p.isolamento, true));
+    if (p.irasAberta) selos.appendChild(selo('🩺 IRAS em investigação: ' + p.irasAberta, true));
+    if (p.sinaisInfeccao) selos.appendChild(selo('⚠ evolução sugere: ' + p.sinaisInfeccao, true));
+    (p.vitais || []).forEach(v => selos.appendChild(selo('📈 ' + v.sinal + ' (' + v.data.slice(5).split('-').reverse().join('/') + ')', true)));
+    div.append(cab, selos);
+    if (p.ultimaEvolucaoMedica) {
+      const det = document.createElement('details');
+      const sum = document.createElement('summary');
+      sum.className = 'suave';
+      sum.textContent = 'Última evolução médica — ' + p.ultimaEvolucaoMedica.data.split('-').reverse().join('/') + (p.ultimaEvolucaoMedica.autor ? ' · ' + p.ultimaEvolucaoMedica.autor : '');
+      const txt = document.createElement('p');
+      txt.className = 'suave'; txt.style.whiteSpace = 'pre-wrap'; txt.textContent = p.ultimaEvolucaoMedica.texto;
+      det.append(sum, txt);
+      div.appendChild(det);
+    } else {
+      const s = document.createElement('p'); s.className = 'suave'; s.textContent = 'sem evolução médica na foto do Tasy'; div.appendChild(s);
+    }
+    const btn = document.createElement('button');
+    btn.className = feito ? 'secundario' : 'principal';
+    btn.textContent = feito ? '✓ avaliado — editar' : 'Avaliar este paciente';
+    btn.style.marginTop = '6px';
+    btn.onclick = () => {
+      const i = registros.findIndex(r => String(r.Prontuario).replace(/\D/g, '') === String(p.prontuario).replace(/\D/g, ''));
+      if (i >= 0) { carregarNoFormulario(i); return; }
+      limparFormulario();
+      $('leito').value = p.leito || '';
+      $('prontuario').value = p.prontuario || '';
+      /* Dispositivos registrados no aplicativo já vêm marcados — a enfermeira só confirma. */
+      const temDisp = sigla => (p.dispositivos || []).some(d => new RegExp('^' + sigla + '\\b', 'i').test(d));
+      if (temDisp('CVC')) { $('temCvc').checked = true; $('blocoCvc').classList.remove('oculto'); if (!$('listaCateteres').children.length) adicionarCateter(); }
+      if (temDisp('VM')) { $('temVm').checked = true; $('blocoVm').classList.remove('oculto'); }
+      if (temDisp('SVD')) { $('temSvd').checked = true; $('blocoSvd').classList.remove('oculto'); }
+      $('formPaciente').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    div.appendChild(btn);
+    alvo.appendChild(div);
+  });
+}
+/* Quando um paciente é salvo, a lista marca o leito como avaliado. */
+const gravarOriginal = gravar;
+gravar = function () { gravarOriginal(); if (listaPacientes.length) desenharLista(); };
 </script>
 </body>
 </html>

@@ -6,7 +6,7 @@
 <title>CCIH — Higiene das mãos</title>
 <style>
 * { box-sizing: border-box; } body { font-family: system-ui, sans-serif; margin: 0; background: #f2f4f7; color: #1f2933; }
-header { background: #14532d; color: #fff; padding: 14px 16px; font-size: 18px; font-weight: 700; }
+header { background: #0d3f7a; color: #fff; padding: 14px 16px; font-size: 18px; font-weight: 700; }
 main { padding: 12px; max-width: 560px; margin: 0 auto; }
 .cartao { background: #fff; border: 1px solid #dde3ea; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
 label { display: block; font-size: 13px; color: #61707f; margin-top: 8px; }
@@ -14,16 +14,16 @@ input, select { width: 100%; font-size: 16px; padding: 9px; border: 1px solid #c
 .linha { display: flex; gap: 8px; } .linha > div { flex: 1; }
 button { font-size: 16px; font-weight: 700; border-radius: 10px; padding: 16px 8px; border: none; cursor: pointer; width: 100%; }
 .acoes { display: flex; gap: 8px; margin-top: 10px; }
-.alcool { background: #14532d; color: #fff; } .agua { background: #185fa5; color: #fff; } .nao { background: #a32d2d; color: #fff; }
+.alcool { background: #0d3f7a; color: #fff; } .agua { background: #185fa5; color: #fff; } .nao { background: #a32d2d; color: #fff; }
 button:disabled { opacity: .35; }
 .cronometro { text-align: center; margin-top: 10px; display: none; }
-.cronometro .tempo { font-size: 44px; font-weight: 700; color: #14532d; font-variant-numeric: tabular-nums; }
+.cronometro .tempo { font-size: 44px; font-weight: 700; color: #0d3f7a; font-variant-numeric: tabular-nums; }
 .concluir { background: #e5b95c; color: #412402; margin-top: 8px; }
 .numeros { display: flex; gap: 8px; text-align: center; margin-top: 10px; }
 .numeros div { flex: 1; background: #f2f4f7; border-radius: 8px; padding: 8px; }
 .numeros strong { font-size: 20px; display: block; }
 .suave { color: #61707f; font-size: 13px; }
-.secundario { background: #fff; color: #14532d; border: 1px solid #14532d; margin-top: 10px; font-weight: 600; }
+.secundario { background: #fff; color: #0d3f7a; border: 1px solid #0d3f7a; margin-top: 10px; font-weight: 600; }
 .desfazer { background: #fdf3dd; color: #633806; border: 1px solid #e5b95c; margin-top: 8px; font-weight: 600; }
 .excluir { background: none; border: none; color: #b03a2e; font-size: 14px; margin-top: 6px; }
 .aviso { border-left: 5px solid #e5b95c; background: #fdf3dd; color: #633806; }
@@ -240,7 +240,7 @@ function avisar(texto, erro) {
     el.id = 'statusExporte';
     document.getElementById('exportar').after(el);
   }
-  el.style.cssText = 'font-weight:600;font-size:14px;margin-top:8px;color:' + (erro ? '#b03a2e' : '#14532d');
+  el.style.cssText = 'font-weight:600;font-size:14px;margin-top:8px;color:' + (erro ? '#b03a2e' : '#0d3f7a');
   el.textContent = texto;
 }
 async function entregarArquivo(nome, texto) {
@@ -272,8 +272,8 @@ async function entregarArquivo(nome, texto) {
     email.href = 'mailto:' + EMAIL_DESTINO + '?subject=' + encodeURIComponent('CCIH — ' + nome)
       + '&body=' + encodeURIComponent('Segue em anexo o arquivo ' + nome + ' (anexe-o pela pasta Downloads).');
     email.textContent = '✉ Abrir e-mail para ' + EMAIL_DESTINO + ' (anexe o arquivo baixado)';
-    email.style.cssText = 'display:block;margin-top:8px;padding:10px;border:1px solid #14532d;border-radius:8px;'
-      + 'color:#14532d;font-weight:700;text-align:center;text-decoration:none';
+    email.style.cssText = 'display:block;margin-top:8px;padding:10px;border:1px solid #0d3f7a;border-radius:8px;'
+      + 'color:#0d3f7a;font-weight:700;text-align:center;text-decoration:none';
     status.appendChild(email);
     const baixar = document.createElement('a');
     baixar.href = url;

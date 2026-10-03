@@ -6,6 +6,12 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "http.server", "8741", "--bind", "127.0.0.1"],
       "port": 8741
+    },
+    {
+      "name": "demo-miniapp",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8742", "--bind", "127.0.0.1", "--directory", "/tmp/claude-1000/-home-rogerio-Documentos-Aplicativo-CCIH-online-hnsc--claude-worktrees-ecstatic-hawking-8d2745/8f58a2a2-f9ef-4c6f-82b4-9d76ad2e3b69/scratchpad/demo"],
+      "port": 8742
     }
   ]
 }

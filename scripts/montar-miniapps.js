@@ -61,6 +61,21 @@ if (process.argv.includes('--com-antibiograma')) {
   catch (e) { console.log('(sem antibiograma-consolidado.json — rode node scripts/consolidar-antibiograma.js antes)'); }
 } else console.log('decisao-atb: protocolo puro (use --com-antibiograma para embutir o antibiograma local)');
 
+/* O miniapp da visita à UTI também é gerado PELO APLICATIVO (aba UTI → "miniapp da visita
+   de hoje"), com a lista dos leitos cifrada dentro. Para o aplicativo não carregar uma cópia
+   divergente do miniapp, o fonte vira uma constante em js/visita-uti-modelo.js — gerado
+   aqui, a cada montagem, a partir do MESMO arquivo. Vai sem os valores da instalação: o
+   aplicativo injeta setores e antibióticos do próprio config.xlsx na hora de gerar. */
+{
+  const fonteVisita = fs.readFileSync(path.join(pastaFonte, 'visita-uti.html'), 'utf-8');
+  const modelo = '/* GERADO por scripts/montar-miniapps.js a partir de miniapps/fonte/visita-uti.html — não editar à mão.\n'
+    + '   Modelo do miniapp de visita à UTI que o aplicativo preenche com a lista cifrada dos leitos (js/visita-uti-cifrada.js). */\n'
+    + 'const VISITA_UTI_MODELO = ' + JSON.stringify(fonteVisita) + ';\n'
+    + "if (typeof module !== 'undefined' && module.exports) module.exports = { VISITA_UTI_MODELO };\n";
+  fs.writeFileSync(path.join(raiz, 'js', 'visita-uti-modelo.js'), modelo);
+  console.log('gerado: js/visita-uti-modelo.js', `(${Math.round(modelo.length / 1024)} KB)`);
+}
+
 for (const nome of fs.readdirSync(pastaFonte).filter(n => n.endsWith('.html'))) {
   let fonte = fs.readFileSync(path.join(pastaFonte, nome), 'utf-8');
   for (const [chave, valor] of Object.entries(configLocal)) {

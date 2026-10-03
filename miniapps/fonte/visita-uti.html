@@ -285,8 +285,22 @@ function nomeDoAntibiotico(bloco) {
   return (sel.value === OUTRO_ATB ? bloco.querySelector('.atbOutro').value : sel.value).trim();
 }
 
+/* O formulário é um só; quando a lista dos leitos está aberta, ele se MOVE para debaixo do
+   paciente escolhido (em vez de ficar lá embaixo, depois de todos os outros) e volta ao
+   lugar original ao salvar/cancelar. O marcador guarda esse lugar. */
+const marcadorFormulario = document.createComment('lugar do formulário');
+$('formPaciente').before(marcadorFormulario);
+function formularioParaOLugar() {
+  if ($('formPaciente').previousSibling !== marcadorFormulario) marcadorFormulario.after($('formPaciente'));
+}
+function formularioSob(elemento) {
+  elemento.after($('formPaciente'));
+  $('formPaciente').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function limparFormulario() {
   editando = -1;
+  formularioParaOLugar();
   $('salvar').textContent = 'Salvar paciente';
   $('cancelar').classList.add('oculto');
   ['leito', 'prontuario', 'obs'].forEach(id => $(id).value = '');
@@ -321,7 +335,7 @@ function carregarNoFormulario(i) {
   $('blocoAtb').classList.toggle('oculto', !r.atbs.length);
   $('listaAtbs').innerHTML = '';
   r.atbs.forEach(a => adicionarAtb(a));
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  $('formPaciente').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 $('cancelar').onclick = limparFormulario;
@@ -373,7 +387,7 @@ function desenhar() {
     btn.className = 'excluir'; btn.textContent = 'excluir';
     btn.onclick = e => { e.stopPropagation(); registros.splice(i, 1); if (editando === i) limparFormulario(); gravar(); };
     div.prepend(btn);
-    div.onclick = () => carregarNoFormulario(i);
+    div.onclick = () => { formularioParaOLugar(); carregarNoFormulario(i); };
     lista.appendChild(div);
   });
   $('resumo').textContent = registros.length + ' pacientes registrados';
@@ -569,7 +583,7 @@ function desenharLista() {
     btn.style.marginTop = '6px';
     btn.onclick = () => {
       const i = registros.findIndex(r => String(r.Prontuario).replace(/\D/g, '') === String(p.prontuario).replace(/\D/g, ''));
-      if (i >= 0) { carregarNoFormulario(i); return; }
+      if (i >= 0) { carregarNoFormulario(i); formularioSob(div); return; }
       limparFormulario();
       $('leito').value = p.leito || '';
       $('prontuario').value = p.prontuario || '';
@@ -578,7 +592,15 @@ function desenharLista() {
       if (temDisp('CVC')) { $('temCvc').checked = true; $('blocoCvc').classList.remove('oculto'); if (!$('listaCateteres').children.length) adicionarCateter(); }
       if (temDisp('VM')) { $('temVm').checked = true; $('blocoVm').classList.remove('oculto'); }
       if (temDisp('SVD')) { $('temSvd').checked = true; $('blocoSvd').classList.remove('oculto'); }
-      $('formPaciente').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      /* Antibióticos em curso (pelo aplicativo) já entram para avaliação — "Meropenem D4"
+         vira um bloco de avaliação do Meropenem; só falta indicação, avaliação e conduta. */
+      const emCurso = (p.antibioticos || []).map(a => String(a).replace(/\s+D\d+$/i, '').trim()).filter(Boolean);
+      if (emCurso.length) {
+        $('temAtb').checked = true; $('blocoAtb').classList.remove('oculto');
+        $('listaAtbs').innerHTML = '';
+        emCurso.forEach(atb => adicionarAtb({ atb }));
+      }
+      formularioSob(div);
     };
     div.appendChild(btn);
     alvo.appendChild(div);

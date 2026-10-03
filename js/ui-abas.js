@@ -1281,12 +1281,23 @@ async function montarUti(conteudo) {
         const html = gerarHTMLVisitaUTI(cifrado, {
           geradoEm, setor: selSetorLeitos.value || '', avisoHoras: VISITA_UTI_AVISO_HORAS, bloqueioDias: VISITA_UTI_BLOQUEIO_DIAS
         }, { setores: config.vocabulario.setores, antibioticos: config.vocabulario.antibioticos });
-        if (publicar) {
+        if (publicar && publicacaoWeb.configurada()) {
+          /* Na web (GitHub Pages): é o que abre no iPhone. URL fixa — o QR não muda. */
+          statusVisita.className = 'texto-suave';
+          statusVisita.textContent = 'Enviando para a web…';
+          const r = await publicacaoWeb.publicar(VISITA_UTI_ARQUIVO, html, `CCIH: visita à UTI ${hojeISO()} (${prep.pacientes.length} leitos, cifrado)`);
+          statusVisita.replaceChildren(
+            `Publicado: ${prep.pacientes.length} leito(s), cifrado. Em até ~1 minuto fica disponível em `,
+            el('a', { href: r.url, target: '_blank' }, r.url),
+            ' — abra no celular (Safari ou Chrome) e digite a senha. Informe a senha por outro canal.',
+            el('div', { style: 'margin-top:8px' }, typeof qrDe === 'function' ? qrDe(r.url, 'visita à UTI') : null));
+        } else if (publicar) {
           if (!publicacao.handle) await publicacao.restaurar();
           if (!publicacao.handle) await publicacao.escolher();
           await publicacao.gravar(VISITA_UTI_ARQUIVO, html);
           statusVisita.className = 'texto-suave';
-          statusVisita.textContent = `Publicado: ${prep.pacientes.length} leito(s) em "${publicacao.handle.name}/${VISITA_UTI_ARQUIVO}". Informe a senha por outro canal.`;
+          statusVisita.textContent = `Publicado: ${prep.pacientes.length} leito(s) em "${publicacao.handle.name}/${VISITA_UTI_ARQUIVO}". `
+            + 'Para abrir no iPhone, configure a publicação na web em Configurações. Informe a senha por outro canal.';
         } else {
           const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
           const a = el('a', { href: URL.createObjectURL(blob), download: VISITA_UTI_ARQUIVO.replace('.html', `-${hojeISO()}.html`) });
@@ -1307,12 +1318,16 @@ async function montarUti(conteudo) {
       el('h3', {}, '📱 Miniapp da visita de hoje (com esta lista, cifrada)'),
       el('div', { class: 'linha-campos' },
         campoSenhaVisita,
-        el('button', { class: 'botao-primario', onclick: () => gerarMiniappVisita(true) }, 'Gerar e publicar'),
+        el('button', { class: 'botao-primario', onclick: () => gerarMiniappVisita(true) },
+          publicacaoWeb.configurada() ? '🌐 Gerar e publicar na web' : 'Gerar e publicar'),
         el('button', { class: 'botao-secundario', onclick: () => gerarMiniappVisita(false) }, 'Baixar arquivo'),
         statusVisita),
       el('p', { class: 'texto-suave' },
         'É o miniapp de visita de sempre, com a lista dos leitos dentro: no celular, a senha abre a lista e "avaliar" preenche leito e prontuário. '
-        + 'Vale por ' + VISITA_UTI_BLOQUEIO_DIAS + ' dias; a lista decifrada fica só na memória da página.')));
+        + 'Vale por ' + VISITA_UTI_BLOQUEIO_DIAS + ' dias; a lista decifrada fica só na memória da página. '
+        + (publicacaoWeb.configurada()
+          ? `Endereço fixo: ${publicacaoWeb.urlDe(VISITA_UTI_ARQUIVO)} (abre no iPhone).`
+          : 'Para abrir no iPhone, configure a publicação na web em Configurações.'))));
     const setoresUTI = [...new Set((bCulturas.culturas || []).map(c => String(c.Setor || '').trim())
       .filter(ehSetorDeUTI))].sort();
     const selSetorResumo = el('select', {},

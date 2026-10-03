@@ -265,9 +265,12 @@ conversa à beira do leito, não substituem a checagem.
 
 No mesmo cartão, **📱 Miniapp da visita de hoje**: com uma senha, o aplicativo gera o
 miniapp de visita à UTI **com essa lista dentro, cifrada** (AES-GCM, como a página de
-avaliação de antimicrobianos) — "Gerar e publicar" grava `visita-uti-cifrada.html` com nome
-fixo na pasta de publicação (o link do Drive não muda), "Baixar arquivo" salva para enviar
-ao celular. No telefone, a senha abre a lista dos leitos; **"Avaliar este paciente"**
+avaliação de antimicrobianos) — "Gerar e publicar" **envia o arquivo para a web**
+(repositório do GitHub com Pages, configurado em Configurações → 🌐 Publicação na web),
+num endereço fixo como `https://dono.github.io/ccih-miniapps/visita-uti-cifrada.html`:
+é o único jeito de abrir no **iPhone**, onde arquivo HTML baixado não roda. Sem essa
+configuração, grava na pasta de publicação local (Drive); "Baixar arquivo" salva para
+enviar ao celular Android. No telefone, a senha abre a lista dos leitos; **"Avaliar este paciente"**
 preenche leito e prontuário (e marca CVC/VM/SVD que o aplicativo já conhece) — acaba o
 número digitado errado que impedia o paciente de casar na importação. A lista vale 7 dias e,
 decifrada, fica só na memória da página; a planilha exportada continua levando só o

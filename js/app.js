@@ -976,6 +976,51 @@ async function montarConfiguracoes(conteudo) {
     : el('p', { class: 'texto-suave' }, 'Nenhum sinônimo registrado ainda.');
   conteudo.append(vocabDiv, el('div', { class: 'cartao' }, el('h2', {}, 'Sinônimos (aliases)'), aliasesDiv));
   conteudo.append(montarDistribuicao());
+  conteudo.append(montarPublicacaoWeb());
+}
+
+/* Destino na web das páginas cifradas (miniapp da visita com a lista, avaliação remota):
+   repositório do GitHub com Pages ligado. O token fica só neste navegador. */
+function montarPublicacaoWeb() {
+  const cfg = publicacaoWeb.ler();
+  const campo = (rotulo, valor, attrs) => {
+    const input = el('input', Object.assign({ type: 'text', value: valor || '' }, attrs || {}));
+    return [el('label', {}, rotulo, input), input];
+  };
+  const [lRepo, iRepo] = campo('Repositório (dono/nome)', cfg.repo, { placeholder: 'ex.: Rog7207/ccih-miniapps' });
+  const [lBranch, iBranch] = campo('Branch', cfg.branch);
+  const [lPasta, iPasta] = campo('Pasta no repositório (opcional)', cfg.pasta, { placeholder: 'ex.: miniapps' });
+  const [lUrl, iUrl] = campo('URL base das páginas (opcional)', cfg.urlBase, { placeholder: 'vazio = https://dono.github.io/nome' });
+  const [lToken, iToken] = campo('Token do GitHub (granularidade fina, só "Contents: read and write" neste repositório)', cfg.token, { type: 'password', autocomplete: 'new-password' });
+  const status = el('p', { class: 'texto-suave' }, publicacaoWeb.configurada() ? `Configurado. Páginas em ${cfg.urlBase}/${cfg.pasta ? cfg.pasta + '/' : ''}` : 'Ainda não configurado — o botão "Gerar e publicar" da aba UTI grava na pasta de publicação local.');
+  const salvar = () => {
+    const c = publicacaoWeb.gravar({ repo: iRepo.value, branch: iBranch.value, pasta: iPasta.value, urlBase: iUrl.value, token: iToken.value });
+    iUrl.value = c.urlBase;
+    status.className = 'texto-suave';
+    status.textContent = publicacaoWeb.configurada() ? `Salvo neste navegador. Páginas em ${c.urlBase}/${c.pasta ? c.pasta + '/' : ''}` : 'Salvo, mas incompleto: faltam repositório (dono/nome) e/ou token.';
+  };
+  return el('div', { class: 'cartao' },
+    el('h2', {}, '🌐 Publicação na web (abre no iPhone)'),
+    el('p', { class: 'texto-suave' },
+      'No iPhone um arquivo HTML baixado não roda — só funciona servido por https. Com isto configurado, "Gerar e publicar" na aba UTI '
+      + 'envia o miniapp da visita (com a lista dos leitos CIFRADA) para um site estático de endereço fixo: o celular abre o link e digita a senha. '
+      + 'O repositório só recebe páginas cifradas ou miniapps sem dado de paciente, por isso pode ser público. O token fica só neste navegador.'),
+    el('div', { class: 'linha-campos', style: 'flex-direction:column;align-items:stretch;gap:6px' }, lRepo, lBranch, lPasta, lUrl, lToken),
+    el('div', { class: 'linha-botoes' },
+      el('button', { class: 'botao-primario', onclick: salvar }, 'Salvar'),
+      el('button', { class: 'botao-secundario', onclick: async () => {
+        salvar();
+        status.textContent = 'Testando…';
+        try { const r = await publicacaoWeb.testar(); status.className = r.ok ? 'texto-suave' : 'aviso-erro-texto'; status.textContent = r.mensagem; }
+        catch (e) { status.className = 'aviso-erro-texto'; status.textContent = 'Sem resposta do GitHub: ' + e.message; }
+      } }, 'Testar conexão')),
+    status,
+    el('details', {}, el('summary', { class: 'texto-suave' }, 'Como preparar (uma vez)'),
+      el('ol', { class: 'texto-suave' },
+        el('li', {}, 'No GitHub, criar um repositório (pode ser público) só para estas páginas, ex.: ccih-miniapps.'),
+        el('li', {}, 'Settings → Pages → Source: "Deploy from a branch", branch main, pasta /(root). O site fica em https://dono.github.io/nome/.'),
+        el('li', {}, 'Settings → Developer settings → Fine-grained tokens → Generate: só este repositório, permissão Contents: Read and write. Colar acima.'),
+        el('li', {}, 'Opcional: colocar nesse repositório também os miniapps públicos (node scripts/montar-miniapps.js --publico) — assim higiene, decisão de ATB e visita também abrem no iPhone.'))));
 }
 
 /* Os links apontam para os arquivos DENTRO da pasta do projeto sincronizada com o Drive

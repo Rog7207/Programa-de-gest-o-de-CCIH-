@@ -1530,6 +1530,23 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
   verificar('o miniapp sabe abrir a lista (tela de senha, lista, botão avaliar)',
     html.includes('id="telaSenha"') && html.includes('id="listaPacientes"') && html.includes('Avaliar este paciente'));
   verificar('a versão pública (sem CIFRADO) continua igual: marcador fica vazio de script', !fonteMiniapp.includes('var CIFRADO') && fonteMiniapp.includes("typeof CIFRADO !== 'undefined'"));
+
+  console.log('\n== 91. Publicação na web (GitHub Pages) — montagem da requisição ==');
+  const pw = require(path.join(__dirname, '..', 'js', 'publicacao-web.js'));
+  const cfg = pw.normalizarConfigPublicacao({ repo: 'https://github.com/Rog7207/ccih-miniapps.git/', pasta: '/visita/', token: ' tok ' });
+  verificar('repo aceita URL colada e vira dono/nome; pasta sem barras; URL base = GitHub Pages do dono',
+    cfg.repo === 'Rog7207/ccih-miniapps' && cfg.pasta === 'visita' && cfg.branch === 'main' && cfg.urlBase === 'https://rog7207.github.io/ccih-miniapps' && cfg.token === 'tok', JSON.stringify(cfg));
+  verificar('URL pública fixa do arquivo', pw.urlPublicaDe(cfg, 'visita-uti-cifrada.html') === 'https://rog7207.github.io/ccih-miniapps/visita/visita-uti-cifrada.html');
+  verificar('URL base própria (domínio customizado) prevalece',
+    pw.urlPublicaDe({ repo: 'a/b', urlBase: 'https://apps.ccih.exemplo/', token: 'x' }, 'p.html') === 'https://apps.ccih.exemplo/p.html');
+  verificar('configurada só com repo dono/nome E token',
+    pw.publicacaoWebConfigurada(cfg) && !pw.publicacaoWebConfigurada({ repo: 'semdono', token: 'x' }) && !pw.publicacaoWebConfigurada({ repo: 'a/b' }));
+  const req = pw.montarRequisicaoPublicacao(cfg, 'visita-uti-cifrada.html', '<p>Olá, visita à UTI 🛏</p>', 'abc123');
+  verificar('PUT na API de conteúdo, com sha quando o arquivo já existe, e conteúdo em base64 UTF-8',
+    req.metodo === 'PUT' && req.url === 'https://api.github.com/repos/Rog7207/ccih-miniapps/contents/visita/visita-uti-cifrada.html'
+    && req.corpo.sha === 'abc123' && req.corpo.branch === 'main' && req.cabecalhos.Authorization === 'Bearer tok'
+    && Buffer.from(req.corpo.content, 'base64').toString('utf8') === '<p>Olá, visita à UTI 🛏</p>', JSON.stringify(req).slice(0, 300));
+  verificar('primeira publicação vai sem sha', !('sha' in pw.montarRequisicaoPublicacao(cfg, 'x.html', 'x', '').corpo));
 }
 
 console.log('\n== 32. Culturas do protocolo de sepse ==');

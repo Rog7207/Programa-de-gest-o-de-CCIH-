@@ -978,7 +978,9 @@ async function montarConfiguracoes(conteudo) {
   conteudo.append(montarDistribuicao());
   conteudo.append(await montarPlanilhaGoogle());
   conteudo.append(montarMiniappsNaPasta());
-  conteudo.append(montarPublicacaoWeb());
+  /* GitHub Pages é o plano B para o iPhone: com a planilha do Google configurada, o
+     próprio Apps Script serve os miniapps por https (?app=…), e este cartão só confunde. */
+  if (!(await sincronizacaoGoogle.configurada())) conteudo.append(montarPublicacaoWeb());
 }
 
 /* Planilha do Google dos miniapps (decisão de 03/10/2026): higiene das mãos e decisão de

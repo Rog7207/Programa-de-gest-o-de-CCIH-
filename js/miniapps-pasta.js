@@ -9,7 +9,11 @@
 const MINIAPPS_PARA_PASTA = [
   { arquivo: 'visita-uti.html', titulo: 'Visita à UTI (sem lista — para outros aparelhos)' },
   { arquivo: 'higiene-maos.html', titulo: 'Higiene das mãos' },
-  { arquivo: 'decisao-atb.html', titulo: 'Decisão de ATB empírica' }
+  /* Decisão de ATB: um por protocolo/público (03/10/2026). O app abre pelo ?app=<nome sem .html>. */
+  { arquivo: 'decisao-atb.html', titulo: 'Decisão de ATB — emergência adulto', protocolo: 'emergencia-adulto' },
+  { arquivo: 'decisao-atb-uti.html', titulo: 'Decisão de ATB — UTI/nosocomial (em construção)', protocolo: 'uti-nosocomial' },
+  { arquivo: 'decisao-atb-gestante.html', titulo: 'Decisão de ATB — gestantes (em construção)', protocolo: 'gestante' },
+  { arquivo: 'decisao-atb-pediatria.html', titulo: 'Decisão de ATB — pediatria (em construção)', protocolo: 'pediatria' }
 ];
 
 /* Setores e antibióticos do hospital (config.vocabulario) no lugar das listas genéricas —

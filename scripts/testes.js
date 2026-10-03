@@ -1518,8 +1518,11 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
   const mp = require(path.join(__dirname, '..', 'js', 'miniapps-pasta.js'));
   global.injetarVocabularios = mp.injetarVocabularios;
   const protocoloFonte = fs.readFileSync(path.join(__dirname, '..', 'js', 'protocolo-atb.js'), 'utf-8');
-  verificar('modelos existem para visita, higiene e decisão de ATB (apps.html fica de fora)',
-    Object.keys(modelo.MINIAPPS_MODELOS).sort().join(',') === 'decisao-atb.html,higiene-maos.html,visita-uti.html');
+  verificar('modelos existem para visita, higiene e os 4 protocolos de decisão de ATB (apps.html fica de fora)',
+    Object.keys(modelo.MINIAPPS_MODELOS).sort().join(',') === 'decisao-atb-gestante.html,decisao-atb-pediatria.html,decisao-atb-uti.html,decisao-atb.html,higiene-maos.html,visita-uti.html');
+  verificar('cada variante da decisão leva o id do seu protocolo',
+    modelo.MINIAPPS_MODELOS['decisao-atb.html'].includes("const PROTOCOLO_ID = 'emergencia-adulto';") && modelo.MINIAPPS_MODELOS['decisao-atb-uti.html'].includes("const PROTOCOLO_ID = 'uti-nosocomial';")
+    && modelo.MINIAPPS_MODELOS['decisao-atb-gestante.html'].includes("const PROTOCOLO_ID = 'gestante';") && modelo.MINIAPPS_MODELOS['decisao-atb-pediatria.html'].includes("const PROTOCOLO_ID = 'pediatria';"));
   verificar('decisão de ATB leva o protocolo embutido e sem antibiograma; higiene é cópia do fonte',
     modelo.MINIAPPS_MODELOS['decisao-atb.html'].includes(protocoloFonte.slice(0, 400)) && !modelo.MINIAPPS_MODELOS['decisao-atb.html'].includes('ANTIBIOGRAMA_CONSOLIDADO =')
     && modelo.MINIAPPS_MODELOS['higiene-maos.html'] === fs.readFileSync(path.join(__dirname, '..', 'miniapps', 'fonte', 'higiene-maos.html'), 'utf-8'));
@@ -1528,7 +1531,8 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
   const higieneHosp = mp.montarMiniappParaPasta('higiene-maos.html', { setores: ['CTI - Dr. Joaquim', 'Unidade 05 - Dr Otto'], antibioticos: ['Meropenem'] });
   verificar('miniapp para a pasta recebe os setores do hospital (e ATBS só onde existe)',
     higieneHosp.includes('const SETORES = ["CTI - Dr. Joaquim", "Unidade 05 - Dr Otto"];') && !higieneHosp.includes('const ATBS'), higieneHosp.match(/const SETORES = \[[^\]]*\]/)[0]);
-  verificar('lista dos miniapps para a pasta: visita, higiene, decisão', mp.MINIAPPS_PARA_PASTA.map(m => m.arquivo).join(',') === 'visita-uti.html,higiene-maos.html,decisao-atb.html');
+  verificar('lista dos miniapps para a pasta: visita, higiene e as 4 decisões', mp.MINIAPPS_PARA_PASTA.map(m => m.arquivo).join(',') === 'visita-uti.html,higiene-maos.html,decisao-atb.html,decisao-atb-uti.html,decisao-atb-gestante.html,decisao-atb-pediatria.html'
+    && mp.MINIAPPS_PARA_PASTA.filter(m => m.protocolo).length === 4);
   const vc = require(path.join(__dirname, '..', 'js', 'visita-uti-cifrada.js'));
   const dados = vc.montarDadosVisitaUTI(prep);
   verificar('payload leva só o necessário (sem evoluções inteiras, sem campos extras)',
@@ -1658,21 +1662,83 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
     corpoInt.acao === 'publicar-internados' && corpoInt.internados.length === 2 && !('senhaBusca' in corpoInt) && corpoInt.segredo === 'frase longa');
   /* Registro da decisão: prontuário, CRM, ID do fluxo, data, versões (pedido de 03/10/2026). */
   const prot = require(path.join(__dirname, '..', 'js', 'protocolo-atb.js'));
-  verificar('ID do fluxo = síndrome + respostas em ordem fixa, individual por caminho',
-    prot.idDoFluxo('pneumonia', { mrsa: false, grave: true }) === 'pneumonia|grave=S|mrsa=N'
-    && prot.idDoFluxo('pneumonia', { grave: true, mrsa: false }) === 'pneumonia|grave=S|mrsa=N'
-    && prot.idDoFluxo('pneumonia', { grave: true, mrsa: true }) !== prot.idDoFluxo('pneumonia', { grave: true, mrsa: false })
-    && prot.idDoFluxo('itu', { tipo: 'cistite' }) === 'itu|tipo=cistite');
-  verificar('versão do protocolo = data do último adendo', /^\d{4}-\d{2}-\d{2}$/.test(prot.versaoDoProtocolo()) && prot.versaoDoProtocolo() === prot.PROTOCOLO_ATB.adendos.map(a => a.data).sort().pop());
+  verificar('ID do fluxo = protocolo + síndrome + respostas em ordem fixa, individual por caminho',
+    prot.idDoFluxo('emergencia-adulto', 'pneumonia', { mrsa: false, grave: true }) === 'emergencia-adulto|pneumonia|grave=S|mrsa=N'
+    && prot.idDoFluxo('emergencia-adulto', 'pneumonia', { grave: true, mrsa: false }) === 'emergencia-adulto|pneumonia|grave=S|mrsa=N'
+    && prot.idDoFluxo('emergencia-adulto', 'pneumonia', { grave: true, mrsa: true }) !== prot.idDoFluxo('emergencia-adulto', 'pneumonia', { grave: true, mrsa: false })
+    && prot.idDoFluxo('uti-nosocomial', 'pav', {}) === 'uti-nosocomial|pav');
+  verificar('versão do protocolo = data do último adendo; protocolo vazio = "em construção"',
+    /^\d{4}-\d{2}-\d{2}$/.test(prot.versaoDoProtocolo()) && prot.versaoDoProtocolo() === prot.PROTOCOLO_ATB.adendos.map(a => a.data).sort().pop()
+    && prot.versaoDoProtocolo(prot.PROTOCOLOS_ATB['gestante']) === 'em construção');
   const colsDecisao = esquemas.ESQUEMAS.antibioticos.abas.decisoes_empiricas;
-  verificar('esquema de decisões tem CRM, ID_Fluxo, VersaoProtocolo e VersaoMiniapp', ['CRM', 'ID_Fluxo', 'VersaoProtocolo', 'VersaoMiniapp'].every(c => colsDecisao.includes(c)));
+  verificar('esquema de decisões tem CRM, Protocolo, ID_Fluxo, VersaoProtocolo e VersaoMiniapp', ['CRM', 'Protocolo', 'ID_Fluxo', 'VersaoProtocolo', 'VersaoMiniapp'].every(c => colsDecisao.includes(c)));
+
+  console.log('\n== 94. Coleção de protocolos e fluxos do PCDT (IST, TB) ==');
+  const P = prot.PROTOCOLOS_ATB;
+  verificar('quatro protocolos: emergência adulto (homologado, com fluxos) e UTI/gestante/pediatria (vazios, não homologados)',
+    Object.keys(P).sort().join(',') === 'emergencia-adulto,gestante,pediatria,uti-nosocomial' && P['emergencia-adulto'] === prot.PROTOCOLO_ATB && P['emergencia-adulto'].homologado === true
+    && ['uti-nosocomial', 'gestante', 'pediatria'].every(k => P[k].homologado === false && P[k].sindromes.length === 0 && P[k].rotulo && P[k].publico));
+  const porId = id => prot.PROTOCOLO_ATB.sindromes.find(s => s.id === id);
+  verificar('fluxos do PCDT entraram no protocolo de emergência, todos marcados "pendente" e com fonte',
+    prot.SINDROMES_PCDT.length === 8 && prot.SINDROMES_PCDT.every(s => s.homologacao === 'pendente' && s.fonte && porId(s.id) === s)
+    && prot.PROTOCOLO_ATB.sindromes.filter(s => !s.homologacao).length >= 4);
+  const sif = porId('ist_sifilis').decidir.bind(porId('ist_sifilis'));
+  verificar('sífilis recente → benzatina 2,4 mi UI dose única; tardia → 3 doses semanais; neuro → cristalina 14 d; alergia (não gestante) → doxiciclina 15/30 d; gestante alérgica → NÃO doxiciclina',
+    /2,4 milhões UI IM, dose única/.test(sif({ estagio: 'recente' }).esquemas[0].posologia)
+    && /3 semanas/.test(sif({ estagio: 'tardia' }).esquemas[0].posologia)
+    && /cristalina.*14 dias/.test(sif({ estagio: 'neuro' }).esquemas[0].posologia)
+    && /Doxiciclina.*15 dias/.test(sif({ estagio: 'recente', alergiaPenicilina: true }).esquemas[0].posologia)
+    && /Doxiciclina.*30 dias/.test(sif({ estagio: 'tardia', alergiaPenicilina: true }).esquemas[0].posologia)
+    && /benzatina/i.test(sif({ estagio: 'recente', alergiaPenicilina: true, gestante: true }).esquemas[0].posologia));
+  const ure = porId('ist_corrimento_uretral').decidir;
+  verificar('uretrite/cervicite sindrômica → ceftriaxona 500 IM + azitro 1 g; só clamídia → azitro 1 g; persistente → metronidazol 2 g + azitro 5 dias',
+    /Ceftriaxona 500 mg IM.*Azitromicina 1 g/.test(ure({ quadro: 'uretrite', laboratorio: 'sem' }).esquemas[0].posologia)
+    && ure({ quadro: 'cervicite', laboratorio: 'clamidia' }).esquemas[0].posologia === 'Azitromicina 1 g VO, dose única'
+    && ure({ quadro: 'uretrite', laboratorio: 'sem', persistente: true }).esquemas.map(e => e.drogas[0]).join(',') === 'metronidazol,azitromicina');
+  const vag = porId('ist_corrimento_vaginal').decidir;
+  verificar('corrimento vaginal: candidíase tópica (+ fluconazol oral só fora da gestação); vaginose metronidazol 7 d; tricomoníase 7 d + parceria',
+    vag({ tipo: 'candidiase', gestante: true }).esquemas.length === 1 && vag({ tipo: 'candidiase' }).esquemas.length === 2
+    && /500 mg VO 12\/12h por 7 dias/.test(vag({ tipo: 'vaginose' }).esquemas[0].posologia)
+    && /10–14 dias/.test(vag({ tipo: 'vaginose', recorrente: true }).esquemas[0].posologia)
+    && vag({ tipo: 'tricomoniase' }).avisos.some(a => /parceria/i.test(a)));
+  const dip = porId('ist_dip').decidir;
+  verificar('DIP ambulatorial = ceftriaxona + doxiciclina + metronidazol 14 d; critério de internação ou gestante → hospitalar IV',
+    dip({}).esquemas[0].drogas.join(',') === 'ceftriaxona,doxiciclina,metronidazol' && /14 dias/.test(dip({}).esquemas[0].posologia)
+    && /hospitalar/.test(dip({ internacao: true }).esquemas[0].rotulo) && /hospitalar/.test(dip({ gestante: true }).esquemas[0].rotulo));
+  const ulc = porId('ist_ulcera_genital').decidir;
+  verificar('úlcera com vesículas → aciclovir (7–10 d no 1º episódio, 5 d na recorrência); sem vesículas → sífilis + cancro mole; ≥ 4 semanas → + doxiciclina 21 d e biópsia',
+    /7–10 dias/.test(ulc({ vesiculas: true, primeiroEpisodio: true }).esquemas[0].posologia) && /5 dias/.test(ulc({ vesiculas: true }).esquemas[0].posologia)
+    && ulc({ duracao: 'menos4' }).esquemas.length === 2 && ulc({ duracao: 'mais4' }).esquemas.length === 3 && ulc({ duracao: 'mais4' }).exames.some(x => /biópsia/i.test(x)));
+  const pep = porId('ist_profilaxia_violencia').decidir;
+  verificar('violência sexual: 4 drogas em dose única; PEP HIV só ≤ 72 h; HBV se não vacinada; contracepção de emergência fora da gestação',
+    pep({ ate72h: true, hbvVacinado: false }).esquemas.length === 3 && pep({ ate72h: false, hbvVacinado: true }).esquemas.length === 1
+    && pep({ ate72h: false }).avisos.some(a => /72 h/.test(a)) && pep({}).avisos.some(a => /levonorgestrel/.test(a)) && !pep({ gestante: true }).avisos.some(a => /levonorgestrel/.test(a)));
+  const tb = porId('tb_tratamento').decidir;
+  verificar('TB: comprimidos por peso (20–35: 2, 36–50: 3, 51–70: 4, > 70: 5); 2RHZE/4RH; meningo/osteo 12 meses + corticoide na meníngea; hepatopatia grave → referência',
+    prot.comprimidosTB('20-35') === 2 && prot.comprimidosTB('36-50') === 3 && prot.comprimidosTB('51-70') === 4 && prot.comprimidosTB('>70') === 5
+    && /2RHZE\/4RH/.test(tb({ forma: 'pulmonar', peso: '51-70' }).esquemas[0].rotulo) && /4 comprimido/.test(tb({ forma: 'pulmonar', peso: '51-70' }).esquemas[0].posologia)
+    && /2RHZE\/10RH/.test(tb({ forma: 'meningo', peso: '>70' }).esquemas[0].rotulo) && tb({ forma: 'meningo', peso: '>70' }).esquemas.length === 2
+    && /2RHZE\/10RH/.test(tb({ forma: 'osteo', peso: '36-50' }).esquemas[0].rotulo) && tb({ forma: 'osteo', peso: '36-50' }).esquemas.length === 1
+    && /referência/.test(tb({ forma: 'pulmonar', peso: '51-70', hepatopatia: true }).esquemas[0].posologia)
+    && tb({ forma: 'pulmonar', peso: '51-70', hiv: true }).avisos.some(a => /dolutegravir 50 mg 12\/12h/.test(a)));
+  const iltb = porId('tb_iltb').decidir;
+  verificar('ILTB: 3HP/4R/9H (≥ 50 anos ou hepatopata começa por 4R); gestante → 9H; inibidor de protease → 9H; sempre excluir TB ativa',
+    iltb({ indicacao: 'contato' }).esquemas[0].rotulo.startsWith('Rifapentina') && iltb({ indicacao: 'contato', maior50OuHepatopata: true }).esquemas[0].rotulo.startsWith('Rifampicina')
+    && iltb({ indicacao: 'hiv', gestante: true }).esquemas.length === 1 && /Isoniazida/.test(iltb({ indicacao: 'hiv', gestante: true }).esquemas[0].rotulo)
+    && /Isoniazida/.test(iltb({ indicacao: 'hiv', inibidorProtease: true }).esquemas[0].rotulo) && iltb({ indicacao: 'outros' }).exames[0].includes('EXCLUIR TB ativa'));
+  verificar('todo fluxo do PCDT devolve esquemas, exames e avisos com perguntas respondidas no padrão',
+    prot.SINDROMES_PCDT.every(s => {
+      const r = {}; s.perguntas.forEach(p => { r[p.id] = p.tipo === 'escolha' ? p.opcoes[0][0] : false; });
+      const d = s.decidir(r); return Array.isArray(d.esquemas) && d.esquemas.length && Array.isArray(d.exames) && Array.isArray(d.avisos);
+    }));
   verificar('endereço dos médicos = URL do script + ?app=decisao-atb', sg.urlAppMedicos(cfgS, 'decisao-atb') === 'https://script.google.com/macros/s/ABC/exec?app=decisao-atb' && sg.urlAppMedicos({}, 'x') === '');
   const fonteDecisao = fs.readFileSync(path.join(__dirname, '..', 'miniapps', 'fonte', 'decisao-atb.html'), 'utf-8');
   const registroFonte = fonteDecisao.slice(fonteDecisao.indexOf('function registrar'), fonteDecisao.indexOf('function desenharLista'));
   verificar('miniapp de decisão: login por CRM+senha (tipo=login), busca autenticada (tipo=buscar com crm), registro com CRM/ID_Fluxo/versões e sem nome do paciente',
     /tipo=login&crm=/.test(fonteDecisao) && /tipo=buscar&q=[^\n]*&crm=/.test(fonteDecisao)
-    && /CRM: medico\.crm/.test(registroFonte) && /ID_Fluxo: ultimaAnalise\.fluxo/.test(registroFonte)
-    && /VersaoProtocolo: versaoDoProtocolo\(\)/.test(registroFonte) && /VersaoMiniapp: VERSAO_MINIAPP/.test(registroFonte)
+    && /CRM: medico\.crm/.test(registroFonte) && /Protocolo: PROTOCOLO_ID/.test(registroFonte) && /ID_Fluxo: ultimaAnalise\.fluxo/.test(registroFonte)
+    && /idDoFluxo\(PROTOCOLO_ID, s\.id, respostas\)/.test(fonteDecisao) && /const PROTOCOLO_ID = 'emergencia-adulto';/.test(fonteDecisao)
+    && /VersaoProtocolo: versaoDoProtocolo\(PROTOCOLO\)/.test(registroFonte) && /VersaoMiniapp: VERSAO_MINIAPP/.test(registroFonte)
     && !/Nome:/.test(registroFonte) && /if \(!medicoIdentificado\(\)\)/.test(registroFonte));
 }
 

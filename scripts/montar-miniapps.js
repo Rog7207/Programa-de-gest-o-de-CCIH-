@@ -115,12 +115,26 @@ function aplicarInstalacao(base) {
    em js/miniapps-modelos.js, geradas aqui a cada montagem a partir dos MESMOS fontes. Vão
    sem valores da instalação: o aplicativo injeta setores e antibióticos do próprio
    config.xlsx na hora de gravar (apps.html, a página de QR, fica de fora: não é miniapp). */
+/* Decisão de ATB: um miniapp por protocolo (03/10/2026) — mesma página, só troca o id do
+   protocolo. Públicos diferentes recebem links diferentes. */
+const PROTOCOLOS_DECISAO = [
+  ['decisao-atb.html', 'emergencia-adulto'],
+  ['decisao-atb-uti.html', 'uti-nosocomial'],
+  ['decisao-atb-gestante.html', 'gestante'],
+  ['decisao-atb-pediatria.html', 'pediatria']
+];
 const modelos = {};
 const saidas = [];
 for (const nome of fs.readdirSync(pastaFonte).filter(n => n.endsWith('.html'))) {
-  const base = montarBase(fs.readFileSync(path.join(pastaFonte, nome), 'utf-8'));
-  if (nome !== 'apps.html') modelos[nome] = base;
-  saidas.push([nome, aplicarInstalacao(base)]);
+  const fonte = fs.readFileSync(path.join(pastaFonte, nome), 'utf-8');
+  const variantes = nome === 'decisao-atb.html'
+    ? PROTOCOLOS_DECISAO.map(([arquivo, id]) => [arquivo, fonte.replace(/const PROTOCOLO_ID = '[^']*';/, `const PROTOCOLO_ID = '${id}';`)])
+    : [[nome, fonte]];
+  for (const [arquivo, texto] of variantes) {
+    const base = montarBase(texto);
+    if (arquivo !== 'apps.html') modelos[arquivo] = base;
+    saidas.push([arquivo, aplicarInstalacao(base)]);
+  }
 }
 {
   const texto = '/* GERADO por scripts/montar-miniapps.js a partir de miniapps/fonte/*.html — não editar à mão.\n'

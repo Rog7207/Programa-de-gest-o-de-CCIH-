@@ -101,8 +101,12 @@ td.alta { color: #b03a2e; font-weight: 700; }
 <!--PROTOCOLO-ATB-->
 <!--ANTIBIOGRAMA-->
 <script>
-const VERSAO_MINIAPP = 'v10.03b';
-const CHAVE = 'ccih.decisao.atb.v1';
+const VERSAO_MINIAPP = 'v10.03c';
+/* Um miniapp por protocolo (emergência adulto, UTI, gestante, pediatria): o montador troca
+   este id em cada cópia; registros e envio ficam separados por protocolo. */
+const PROTOCOLO_ID = 'emergencia-adulto';
+const PROTOCOLO = (typeof PROTOCOLOS_ATB !== 'undefined' && PROTOCOLOS_ATB[PROTOCOLO_ID]) || (typeof PROTOCOLO_ATB !== 'undefined' ? PROTOCOLO_ATB : null);
+const CHAVE = 'ccih.decisao.atb.v1' + (PROTOCOLO_ID === 'emergencia-adulto' ? '' : '.' + PROTOCOLO_ID);
 const CHAVE_MEDICO = 'ccih.decisao.atb.medico.v2';   /* {crm, nome, senha} */
 const CHAVE_MEDICO_ANTIGA = 'ccih.decisao.atb.medico'; /* só o nome, versões anteriores */
 const EMAIL_DESTINO = 'defina-o-email-da-ccih@exemplo.br';
@@ -134,10 +138,16 @@ function conferirArmazenamento() { $('avisoArmazenamento').style.display = armaz
    é o protocolo puro — recomendações de consenso, sem avisos de resistência local. É o
    modo inicial: gera dados de uso (decisões registradas) enquanto o banco acumula painel. */
 const AB = typeof ANTIBIOGRAMA_CONSOLIDADO !== 'undefined' ? ANTIBIOGRAMA_CONSOLIDADO : null;
-if (typeof PROTOCOLO_ATB === 'undefined') {
+if (!PROTOCOLO) {
   document.querySelector('main').prepend(Object.assign(document.createElement('div'), { className: 'cartao aviso',
     textContent: 'Arquivo-fonte sem o protocolo embutido: monte com node scripts/montar-miniapps.js.' }));
   throw new Error('PROTOCOLO_ATB ausente');
+}
+document.querySelector('header').firstChild.textContent = 'Decisão de ATB — ' + PROTOCOLO.rotulo + ' ';
+document.title = 'CCIH — Decisão ATB — ' + PROTOCOLO.rotulo;
+if (!(PROTOCOLO.sindromes || []).length) {
+  document.querySelector('main').prepend(Object.assign(document.createElement('div'), { className: 'cartao aviso',
+    textContent: 'Protocolo "' + PROTOCOLO.rotulo + '" em construção: a CCIH ainda não homologou os fluxos deste público. Use o protocolo de emergência adulto quando couber.' }));
 }
 const antibiogramaDe = germes => germes.map(g => (AB && AB.germes.find(b => b.germe === g)) || { germe: g, culturas: 0, linhas: [] });
 
@@ -154,8 +164,8 @@ function el(tag, attrs, ...filhos) {
 }
 
 /* ---- caso ---- */
-$('versao').textContent = VERSAO_MINIAPP + ' · protocolo ' + versaoDoProtocolo();
-$('publico').textContent = PROTOCOLO_ATB.publico;
+$('versao').textContent = VERSAO_MINIAPP + ' · protocolo ' + versaoDoProtocolo(PROTOCOLO);
+$('publico').textContent = PROTOCOLO.publico;
 
 /* ---- médico (pedido de 03/10/2026: CRM no registro e senha individual) ----
    Com servidor (ENVIO_URL): CRM + senha conferidos no Apps Script contra a aba "medicos"
@@ -205,11 +215,11 @@ $('entrar').onclick = async () => {
   }
 };
 desenharMedico();
-for (const s of PROTOCOLO_ATB.sindromes) $('sindrome').append(el('option', { value: s.id }, s.rotulo));
+for (const s of PROTOCOLO.sindromes) $('sindrome').append(el('option', { value: s.id }, s.rotulo + (s.homologacao === 'pendente' ? ' (PCDT MS — a homologar)' : '')));
 
 const controles = new Map();
 let ultimaAnalise = null;
-function sindromeAtual() { return PROTOCOLO_ATB.sindromes.find(s => s.id === $('sindrome').value); }
+function sindromeAtual() { return PROTOCOLO.sindromes.find(s => s.id === $('sindrome').value); }
 
 function desenharPerguntas() {
   controles.clear();
@@ -217,7 +227,8 @@ function desenharPerguntas() {
   ultimaAnalise = null;
   const s = sindromeAtual();
   if (!s) { $('perguntas').replaceChildren(); $('germes').textContent = ''; $('analisar').classList.add('oculto'); return; }
-  $('germes').textContent = 'Germes prováveis (protocolo): ' + s.germes.join(', ') + '.';
+  $('germes').textContent = (s.germes.length ? 'Germes prováveis (protocolo): ' + s.germes.join(', ') + '. ' : '')
+    + (s.homologacao === 'pendente' ? 'Fluxo baseado em ' + (s.fonte || 'documento nacional') + ' — aguarda homologação pela CCIH do HNSC.' : '');
   $('perguntas').replaceChildren(...s.perguntas.map(p => {
     const controle = p.tipo === 'escolha'
       ? el('select', {}, p.opcoes.map(([v, r]) => el('option', { value: v }, r)))
@@ -261,8 +272,9 @@ $('analisar').onclick = () => {
   const antibiograma = antibiogramaDe(s.germes);
   const avisosLocais = AB ? avisosDeResistenciaLocal(decisao.esquemas, antibiograma, AB.periodoTexto) : [];
   const avisos = [...avisosLocais, ...decisao.avisos];
+  if (s.homologacao === 'pendente') avisos.unshift('Fluxo baseado em ' + (s.fonte || 'documento nacional') + ' — ainda NÃO homologado pela CCIH do HNSC. Use como referência e confirme com a CCIH.');
   const renal = ajusteRenalDosEsquemas(decisao.esquemas);
-  ultimaAnalise = { sindrome: s.rotulo, fluxo: idDoFluxo(s.id, respostas), respostas: legivel.join(' | '),
+  ultimaAnalise = { sindrome: s.rotulo, fluxo: idDoFluxo(PROTOCOLO_ID, s.id, respostas), respostas: legivel.join(' | '),
     esquema: decisao.esquemas.map(e => e.rotulo + ' — ' + e.posologia).join(' | '), avisosLocais: avisosLocais.length };
 
   const conduta = el('input', { type: 'text', id: 'conduta', placeholder: 'só se diferente da sugestão' });
@@ -291,9 +303,9 @@ $('analisar').onclick = () => {
     el('label', {}, 'Conduta adotada'), conduta,
     el('button', { class: 'principal', onclick: registrar }, 'Registrar decisão'),
     el('p', { class: 'suave', style: 'margin:10px 0 0' }, REVISAO_PROTOCOLO_ATB),
-    el('p', { class: 'suave' }, 'Fonte: ' + PROTOCOLO_ATB.fonte + '. Ferramenta de APOIO à decisão — não substitui o julgamento clínico nem a avaliação da CCIH para antimicrobianos auditados.'),
-    (PROTOCOLO_ATB.adendos || []).length ? el('p', { class: 'suave' }, 'Adendos validados pela CCIH: '
-      + PROTOCOLO_ATB.adendos.map(a => a.data.split('-').reverse().join('/') + ' — ' + a.texto).join(' · ')) : null));
+    el('p', { class: 'suave' }, 'Fonte: ' + (s.fonte || PROTOCOLO.fonte) + '. Ferramenta de APOIO à decisão — não substitui o julgamento clínico nem a avaliação da CCIH para antimicrobianos auditados.'),
+    (PROTOCOLO.adendos || []).length ? el('p', { class: 'suave' }, 'Adendos validados pela CCIH: '
+      + PROTOCOLO.adendos.map(a => a.data.split('-').reverse().join('/') + ' — ' + a.texto).join(' · ')) : null));
   $('resultado').classList.remove('oculto');
   $('resultado').scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
@@ -312,11 +324,11 @@ function registrar() {
      paciente nunca. */
   registros.push({
     Data: agora.toISOString().slice(0, 10), Hora: agora.toTimeString().slice(0, 5),
-    Prontuario: $('prontuario').value.trim(), CRM: medico.crm || '',
+    Prontuario: $('prontuario').value.trim(), CRM: medico.crm || '', Protocolo: PROTOCOLO_ID,
     Sindrome: ultimaAnalise.sindrome, ID_Fluxo: ultimaAnalise.fluxo, Respostas: ultimaAnalise.respostas,
     EsquemaSugerido: ultimaAnalise.esquema, AvisosLocais: String(ultimaAnalise.avisosLocais),
     CondutaAdotada: ($('conduta') || {}).value || '', AntibiogramaPeriodo: AB ? AB.periodoTexto : '',
-    VersaoProtocolo: versaoDoProtocolo(), VersaoMiniapp: VERSAO_MINIAPP,
+    VersaoProtocolo: versaoDoProtocolo(PROTOCOLO), VersaoMiniapp: VERSAO_MINIAPP,
     CriadoPor: medico.nome || '', CriadoEm: agora.toISOString().slice(0, 16).replace('T', ' '), enviadoEm: null
   });
   gravar();
@@ -402,7 +414,7 @@ $('enviar').onclick = async () => {
   if (!pendentes.length) { avisar('Nada aguardando envio.', true); return; }
   const quem = (medico.crm ? 'CRM' + medico.crm : (medico.nome || 'medico')).replace(/[^A-Za-z0-9]+/g, '-');
   const hoje = new Date().toISOString().slice(0, 10);
-  const nome = `DECISAO-ATB_${quem}_${hoje}_${Date.now().toString(36)}.csv`;
+  const nome = `DECISAO-ATB_${PROTOCOLO_ID}_${quem}_${hoje}_${Date.now().toString(36)}.csv`;
   const linhas = pendentes.map(({ enviadoEm, ...r }) => r);
   const pacote = '##ccih-miniapp;tipo=decisao_atb;versao=1\n' + tabelaCSV('decisoes', linhas);
   if (await entregarArquivo(nome, pacote)) {

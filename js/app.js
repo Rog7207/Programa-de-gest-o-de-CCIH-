@@ -1004,8 +1004,10 @@ async function montarPlanilhaGoogle() {
   const blocoMedicos = urlMedicos ? el('div', { style: 'display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:8px' },
     qrDe(urlMedicos, 'Decisão ATB para os médicos'),
     el('div', { style: 'max-width:520px' },
-      el('strong', {}, 'Decisão de ATB para os médicos (abre no navegador do celular, iPhone inclusive)'),
-      el('p', { class: 'texto-suave', style: 'word-break:break-all' }, el('a', { href: urlMedicos, target: '_blank' }, urlMedicos)),
+      el('strong', {}, 'Decisão de ATB para os médicos (abre no navegador do celular, iPhone inclusive) — um link por protocolo'),
+      el('ul', { class: 'texto-suave', style: 'word-break:break-all;margin:4px 0' },
+        (typeof MINIAPPS_PARA_PASTA !== 'undefined' ? MINIAPPS_PARA_PASTA : []).filter(m => m.protocolo).map(m =>
+          el('li', {}, m.titulo + ': ', el('a', { href: urlAppMedicos(cfg, m.arquivo.replace(/\.html$/, '')), target: '_blank' }, urlAppMedicos(cfg, m.arquivo.replace(/\.html$/, '')))))),
       el('p', { class: 'texto-suave' }, 'O médico entra com CRM + senha cadastrados pela CCIH na aba "medicos" da planilha (colunas CRM, Nome, Senha, Ativo — o cabeçalho nasce no "Testar conexão"); '
         + 'o CRM vai em cada decisão registrada, junto com o ID do fluxo e as versões do protocolo e do miniapp. '
         + 'A busca do paciente usa a lista de internados publicada daqui (automática a cada foto 2396). Requer "☁ Publicar miniapps" com decisao-atb.html na pasta do Drive.'),

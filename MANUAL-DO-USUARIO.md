@@ -320,6 +320,21 @@ fluxo** (síndrome + respostas, individual por caminho), **data/hora, versão do
 (data do último adendo) **e versão do miniapp** — nunca o nome do paciente. Sem a planilha
 configurada, o miniapp é o de sempre (CRM e nome digitados, prontuário à mão).
 
+**Um protocolo por público** (03/10/2026): emergência adulto, UTI/nosocomial, gestantes e
+pediatria são protocolos separados — donos, versões e adendos próprios — e cada um tem o
+seu link (`?app=decisao-atb`, `…-uti`, `…-gestante`, `…-pediatria`), para o pediatra nunca
+ver o da emergência. Por ora só o da emergência tem fluxos; os outros abrem com aviso "em
+construção" até a CCIH homologar os documentos de cada serviço. A adesão na aba Decisão
+ATB é mostrada por protocolo › síndrome.
+
+**Fluxos do PCDT do Ministério da Saúde** (03/10/2026), no protocolo de emergência: IST
+(sífilis, corrimento uretral/cervicite, corrimento vaginal, DIP, úlcera genital, profilaxia
+após violência sexual — PCDT-IST 2022/2024 e PCDT-PEP) e tuberculose (iniciar tratamento
+com comprimidos por peso, formas meníngea/osteoarticular, HIV, hepatopatia; ILTB — Manual
+MS 2019 e 3HP). Entram marcados **"PCDT MS — a homologar"**: a tela e o miniapp avisam que
+o fluxo ainda não foi homologado pela CCIH do HNSC. A homologação vira adendo e tira o
+aviso; qualquer ajuste local de conduta entra como adendo também.
+
 ---
 
 ## 7. Isolamentos

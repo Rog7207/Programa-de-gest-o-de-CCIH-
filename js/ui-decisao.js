@@ -16,17 +16,24 @@ async function montarDecisaoATB(conteudo) {
      navegador do celular (iPhone inclusive) e busca o paciente nos internados de hoje. */
   const cfgSync = await sincronizacaoGoogle.config().catch(() => ({}));
   if (sincronizacaoConfigurada(cfgSync)) {
+    /* Um link por protocolo/público (03/10/2026): o pediatra nunca vê o da emergência. */
+    const protocolos = (typeof MINIAPPS_PARA_PASTA !== 'undefined' ? MINIAPPS_PARA_PASTA : []).filter(m => m.protocolo);
     const urlMedicos = urlAppMedicos(cfgSync, 'decisao-atb');
-    conteudo.append(el('div', { class: 'cartao', style: 'display:flex;gap:18px;align-items:center;flex-wrap:wrap' },
-      qrDe(urlMedicos, 'Decisão ATB'),
-      el('div', { style: 'max-width:520px' },
+    conteudo.append(el('div', { class: 'cartao', style: 'display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap' },
+      qrDe(urlMedicos, 'Decisão ATB — emergência adulto'),
+      el('div', { style: 'max-width:560px' },
         el('h2', {}, 'Leve no celular (abre direto no navegador — iPhone inclusive)'),
-        el('p', { class: 'texto-suave', style: 'word-break:break-all' }, el('a', { href: urlMedicos, target: '_blank' }, urlMedicos)),
         el('p', { class: 'texto-suave' }, 'O médico entra com CRM + senha (aba "medicos" da planilha da CCIH), digita o prontuário e vê o nome, ou digita parte do nome e escolhe entre os internados de hoje. '
-          + 'Cada decisão registra prontuário, CRM, ID do fluxo, data e as versões do protocolo e do miniapp — nunca o nome do paciente.'),
+          + 'Cada decisão registra prontuário, CRM, protocolo, ID do fluxo, data e as versões do protocolo e do miniapp — nunca o nome do paciente.'),
+        el('ul', { class: 'texto-suave', style: 'word-break:break-all' }, protocolos.map(m => {
+          const p = (typeof PROTOCOLOS_ATB !== 'undefined' ? PROTOCOLOS_ATB[m.protocolo] : null) || {};
+          const url = urlAppMedicos(cfgSync, m.arquivo.replace(/\.html$/, ''));
+          return el('li', {}, el('strong', {}, p.rotulo || m.titulo), ` — ${(p.sindromes || []).length} fluxo(s), versão ${typeof versaoDoProtocolo === 'function' ? versaoDoProtocolo(p) : ''}: `,
+            el('a', { href: url, target: '_blank' }, url));
+        })),
         el('button', { class: 'botao-secundario', onclick: () =>
-          window.open('https://wa.me/?text=' + encodeURIComponent('CCIH — apoio à decisão de antibioticoterapia empírica (protocolo institucional). Abra no navegador do celular:\n' + urlMedicos), '_blank') },
-          'Enviar pelo WhatsApp'))));
+          window.open('https://wa.me/?text=' + encodeURIComponent('CCIH — apoio à decisão de antibioticoterapia empírica (protocolo institucional, emergência adulto). Abra no navegador do celular:\n' + urlMedicos), '_blank') },
+          'Enviar o da emergência pelo WhatsApp'))));
   } else if (miniapp && miniapp.url) {
     conteudo.append(el('div', { class: 'cartao', style: 'display:flex;gap:18px;align-items:center;flex-wrap:wrap' },
       qrDe(miniapp.url, miniapp.titulo),
@@ -71,7 +78,7 @@ async function montarDecisaoATB(conteudo) {
   /* ---- Síndrome e perguntas do protocolo ---- */
   const selSindrome = el('select', {},
     el('option', { value: '' }, 'escolha a síndrome…'),
-    PROTOCOLO_ATB.sindromes.map(s => el('option', { value: s.id }, s.rotulo)));
+    PROTOCOLO_ATB.sindromes.map(s => el('option', { value: s.id }, s.rotulo + (s.homologacao === 'pendente' ? ' (PCDT MS — a homologar)' : ''))));
   const areaPerguntas = el('div', {});
   const areaResultado = el('div', {});
   const controles = new Map();
@@ -116,6 +123,11 @@ async function montarDecisaoATB(conteudo) {
       respostas[id] = tipo === 'escolha' ? controle.value : controle.value === 'S';
     }
     const decisao = sindrome.decidir(respostas);
+    /* Fluxos vindos de PCDT/manual do MS (03/10/2026) ainda não homologados pela CCIH: o
+       aviso aparece aqui e no miniapp até a homologação virar adendo. */
+    if (sindrome.homologacao === 'pendente') {
+      decisao.avisos = ['Fluxo baseado em ' + (sindrome.fonte || 'documento nacional') + ' — ainda NÃO homologado pela CCIH do HNSC.', ...(decisao.avisos || [])];
+    }
     const antibiograma = antibiogramaLocalPorGermes(bancos, sindrome.germes, hoje, 24);
     const avisosLocais = avisosDeResistenciaLocal(decisao.esquemas, antibiograma);
     const avisosPaciente = (contexto && contexto.alertas) || [];
@@ -179,9 +191,11 @@ async function montarDecisaoATB(conteudo) {
     .sort((a, b) => String(b.Data + b.Hora).localeCompare(String(a.Data + a.Hora)));
   if (recebidas.length) {
     const seguiram = recebidas.filter(d => d.SeguiuProtocolo === 'S').length;
+    /* Adesão por protocolo › síndrome (03/10/2026): emergência e UTI são indicadores
+       distintos. Registros antigos, sem a coluna, caem em "emergencia-adulto". */
     const porSindrome = new Map();
     for (const d of recebidas) {
-      const s = String(d.Sindrome || '(sem síndrome)').trim();
+      const s = String(d.Protocolo || 'emergencia-adulto').trim() + ' › ' + String(d.Sindrome || '(sem síndrome)').trim();
       if (!porSindrome.has(s)) porSindrome.set(s, { total: 0, seguiu: 0 });
       const reg = porSindrome.get(s);
       reg.total++;
@@ -193,7 +207,7 @@ async function montarDecisaoATB(conteudo) {
         `Adesão ao protocolo: ${Math.round(seguiram / recebidas.length * 100)}% `
         + `(${fmtInt(seguiram)} de ${fmtInt(recebidas.length)}). Enviadas pelo miniapp e importadas na aba Importar.`),
       el('table', { class: 'tabela' },
-        el('thead', {}, el('tr', {}, ['Síndrome', 'Decisões', 'Seguiram o protocolo'].map(c => el('th', {}, c)))),
+        el('thead', {}, el('tr', {}, ['Protocolo › síndrome', 'Decisões', 'Seguiram o protocolo'].map(c => el('th', {}, c)))),
         el('tbody', {}, [...porSindrome.entries()].sort((a, b) => b[1].total - a[1].total)
           .map(([s, r]) => el('tr', {},
             el('td', {}, s), el('td', {}, fmtInt(r.total)),

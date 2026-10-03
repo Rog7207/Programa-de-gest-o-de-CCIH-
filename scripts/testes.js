@@ -1417,6 +1417,97 @@ console.log('\n== 88. Sinais de infecção na evolução (busca determinística)
   verificar('período de silêncio da camada 1 é 7 dias', imp.EVOLUCAO_SILENCIO_DIAS === 7);
 }
 
+console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UTI ==');
+{
+  const sv = (t, o) => imp.sinaisVitaisNaEvolucao(t, o);
+  const r1 = sv('Ap: mv+ bilateral\nPA: 85/50   FC 118  satpO2 89%  FR 30  Tax 38,4\nDiurese: 2350ml');
+  verificar('PA sistólica <90, FC >100, Sat <92, FR >22 e Tax ≥37,8 são alterados',
+    r1.alterados.includes('PA 85') && r1.alterados.includes('FC 118') && r1.alterados.includes('SatO2 89')
+    && r1.alterados.includes('FR 30') && r1.alterados.includes('Tax 38.4'), JSON.stringify(r1.alterados));
+  const r2 = sv('PA 130/80 FC 72 sat 96% FR 16 Tax 36,5. Afebril, estável.');
+  verificar('valores normais não geram alteração (e "afebril" não vira febre)', r2.alterados.length === 0 && r2.medidas.length === 5, JSON.stringify(r2));
+  const r3 = sv('Paciente hipotenso, em uso de noradrenalina 0,3, dessaturando. Oligúrico.');
+  verificar('qualitativos: hipotensão, droga vasoativa, dessaturação, oligúria',
+    r3.alterados.includes('hipotensão') && r3.alterados.includes('droga vasoativa') && r3.alterados.includes('dessaturação') && r3.alterados.includes('oligúria'), JSON.stringify(r3.alterados));
+  verificar('"febre" nomeada entra uma vez só, mesmo com Tax alterada', (() => {
+    const r = sv('pico febril, Tax 39');
+    return r.alterados.filter(a => /^tax|^febre/i.test(a)).length === 1 && r.alterados[0] === 'Tax 39';
+  })(), JSON.stringify(sv('pico febril, Tax 39').alterados));
+  verificar('PAM <65 é alterado', sv('PAM 58 em DVA').alterados.includes('PAM 58'));
+  verificar('janela das evoluções de UTI é 48 h', imp.EVOLUCAO_UTI_HORAS === 48);
+  /* Calibração no export real do CTI (02/10/2026): "sem DVA" era mais da metade das menções;
+     "PIP 21 PEEP 7 FR 35" é parâmetro do ventilador; na UTI Neo os limites de adulto não valem. */
+  verificar('"hemodinâmica: sem DVA" / "s/DVA" / "nora suspensa" NÃO são droga vasoativa; "com DVA" e "desmame de nora" são',
+    !sv('Hemodinâmica: sem DVA. Respiratório: VM').alterados.includes('droga vasoativa')
+    && !sv('estável, s/dva, perfusão ok').alterados.includes('droga vasoativa')
+    && !sv('nora suspensa pela manhã').alterados.includes('droga vasoativa')
+    && sv('Hemodinâmica: com DVA').alterados.includes('droga vasoativa')
+    && sv('em desmame de nora 0,1').alterados.includes('droga vasoativa'));
+  verificar('FR programada no ventilador (PIP/PEEP/FiO2) não é FR do paciente',
+    !sv('VM PC: PIP 21 PEEP 7 FR 35 Ti 0,45 FiO2 30%').medidas.some(x => x.sinal === 'FR')
+    && sv('taquipneico, FR 32, sat 93%').alterados.includes('FR 32'));
+  const neo = sv('RN em ar ambiente. FC 160 FR 55 PA 60/35 Tax 36,8 sat 96%. taquicárdico ao manuseio', { neoPed: true });
+  verificar('neoPed: FC/FR/PA e seus qualitativos não são avaliados; Tax e Sat continuam',
+    neo.alterados.length === 0 && neo.medidas.every(x => x.sinal === 'Tax' || x.sinal === 'SatO2'), JSON.stringify(neo));
+  verificar('neoPed: dessaturação e febre ainda contam', sv('RN dessaturando, Tax 38,2', { neoPed: true }).alterados.length === 2);
+
+  const alertas = require(path.join(__dirname, '..', 'js', 'alertas.js'));
+  global.sinaisVitaisNaEvolucao = imp.sinaisVitaisNaEvolucao;
+  const hoje = '2026-10-02';
+  const bancos = {
+    pacientes: {
+      pacientes: [{ Prontuario: 'P1', Nome: 'Ana Beatriz Souza' }, { Prontuario: 'P2', Nome: 'Bruno Lima' }, { Prontuario: 'P3', Nome: 'Carla Melo' }],
+      internacoes: [
+        { Prontuario: 'P1', Atendimento: '111', DataInternacao: '2026-09-20', DataAlta: '', SetorAtual: 'CTI - Dr. Joaquim', Leito: '12' },
+        { Prontuario: 'P2', Atendimento: '222', DataInternacao: '2026-09-30', DataAlta: '', SetorAtual: 'CTI - Dr. Joaquim', Leito: '3' },
+        { Prontuario: 'P3', Atendimento: '333', DataInternacao: '2026-09-25', DataAlta: '', SetorAtual: 'UTI Neonatal / Pediátrica', Leito: '1' },
+        { Prontuario: 'P9', Atendimento: '999', DataInternacao: '2026-09-01', DataAlta: '2026-09-28', SetorAtual: 'CTI - Dr. Joaquim', Leito: '4' },
+        { Prontuario: 'P8', Atendimento: '888', DataInternacao: '2026-09-29', DataAlta: '', SetorAtual: 'Unidade 05', Leito: '501' }
+      ]
+    },
+    evolucoes: { evolucoes: [
+      { Atendimento: '111', Prontuario: 'P1', Setor: 'CTI', Categoria: 'ENF', DataEvolucao: '2026-10-02', Autor: 'Enf. A', Texto: 'sat 88% em VM, Tax 38,5', SinaisInfeccao: 'febre' },
+      { Atendimento: '111', Prontuario: 'P1', Setor: 'CTI', Categoria: 'E', DataEvolucao: '2026-10-01', Autor: 'Dr. B', Texto: 'D12 de internação. PA 110/70 FC 95. Mantém meropenem.', SinaisInfeccao: '' },
+      { Atendimento: '111', Prontuario: 'P1', Setor: 'CTI', Categoria: 'ENF', DataEvolucao: '2026-09-28', Autor: 'Enf. C', Texto: 'FC 130 — antiga, fora das 48 h', SinaisInfeccao: '' },
+      { Atendimento: '222', Prontuario: 'P2', Setor: 'CTI', Categoria: 'ENF', DataEvolucao: '2026-10-02', Autor: 'Enf. D', Texto: 'PA 120/80 FC 80 sat 97%. Estável.', SinaisInfeccao: '' }
+    ] },
+    antibioticos: { prescricoes: [
+      { Atendimento: '111', Prontuario: 'P1', Antibiotico: 'Meropenem', DataInicio: '2026-09-29', DataFim: '2026-10-06' },
+      { Atendimento: '111', Prontuario: 'P1', Antibiotico: 'Vancomicina', DataInicio: '2026-09-20', DataFim: '2026-09-25' }
+    ] },
+    dispositivos: { dispositivos: [
+      { Prontuario: 'P1', Categoria: 'CVC', DataInstalacao: '2026-09-22', DataRetirada: '' },
+      { Prontuario: 'P1', Categoria: 'SVD', DataInstalacao: '2026-09-22', DataRetirada: '2026-09-30' }
+    ] },
+    culturas: { culturas: [{ Prontuario: 'P1', StatusRevisao: 'pendente', Microrganismo: 'Klebsiella pneumoniae' }] },
+    isolamentos: { precaucoes: [{ Prontuario: 'P1', TipoPrecaucao: 'Contato', Motivo: 'KPC', DataFim: '', Status: '' }] },
+    iras: { casos: [{ Prontuario: 'P2', StatusInvestigacao: 'em investigação', Topografia: 'PAV' }] }
+  };
+  const prep = alertas.prepararVisitaUTI(bancos, '', hoje);
+  verificar('lista só internações abertas em UTI/CTI (P9 teve alta, P8 está na enfermaria)',
+    prep.pacientes.length === 3 && !prep.pacientes.some(p => p.prontuario === 'P9' || p.prontuario === 'P8'), prep.pacientes.map(p => p.prontuario));
+  verificar('setores de UTI com internado agora', JSON.stringify(prep.setores) === JSON.stringify(['CTI - Dr. Joaquim', 'UTI Neonatal / Pediátrica']), prep.setores);
+  verificar('ordem: setor e depois leito numérico (3 antes de 12)',
+    prep.pacientes[0].leito === '3' && prep.pacientes[1].leito === '12' && prep.pacientes[2].setor.startsWith('UTI Neo'), prep.pacientes.map(p => p.setor + '/' + p.leito));
+  const p1 = prep.pacientes.find(p => p.prontuario === 'P1');
+  verificar('P1: nome, iniciais, atendimento, leito e dias de internação',
+    p1.nome === 'Ana Beatriz Souza' && p1.iniciais === 'A.B.S.' && p1.atendimento === '111' && p1.leito === '12' && p1.dias === 12, JSON.stringify([p1.nome, p1.iniciais, p1.dias]));
+  verificar('P1: última evolução MÉDICA é a do Dr. B (a de enfermagem é mais nova, mas não é médica)',
+    p1.ultimaEvolucaoMedica && p1.ultimaEvolucaoMedica.autor === 'Dr. B' && p1.ultimaEvolucao.autor === 'Enf. A', JSON.stringify(p1.ultimaEvolucaoMedica));
+  verificar('P1: vitais alterados das últimas 48 h (sat 88, Tax 38,5), sem o FC 130 de 4 dias atrás',
+    p1.vitais.some(v => v.sinal === 'SatO2 88') && p1.vitais.some(v => v.sinal === 'Tax 38.5') && !p1.vitais.some(v => /FC 130/.test(v.sinal)), JSON.stringify(p1.vitais));
+  verificar('P1: antibiótico em curso com dia (Meropenem D4), curso encerrado fora; CVC aberto 10 d, SVD retirada fora',
+    JSON.stringify(p1.antibioticos) === JSON.stringify(['Meropenem D4']) && JSON.stringify(p1.dispositivos) === JSON.stringify(['CVC 10 d']), JSON.stringify([p1.antibioticos, p1.dispositivos]));
+  verificar('P1: cultura pendente, isolamento e sinais de infecção da evolução',
+    p1.culturasPendentes === 1 && p1.isolamento === 'Contato — KPC' && p1.sinaisInfeccao === 'febre', JSON.stringify([p1.culturasPendentes, p1.isolamento, p1.sinaisInfeccao]));
+  const p2 = prep.pacientes.find(p => p.prontuario === 'P2');
+  verificar('P2: IRAS em investigação aparece; sem vitais alterados; sem evolução médica',
+    p2.irasAberta === 'PAV' && p2.vitais.length === 0 && p2.ultimaEvolucaoMedica === null && p2.ultimaEvolucao.autor === 'Enf. D', JSON.stringify(p2));
+  const p3 = prep.pacientes.find(p => p.prontuario === 'P3');
+  verificar('P3: sem evolução na foto conta em semEvolucao', p3.ultimaEvolucao === null && prep.semEvolucao === 1 && prep.comVitaisAlterados === 1);
+  verificar('filtro por setor', alertas.prepararVisitaUTI(bancos, 'UTI Neonatal / Pediátrica', hoje).pacientes.length === 1);
+}
+
 console.log('\n== 32. Culturas do protocolo de sepse ==');
 {
   const indice = imp.indiceSepse([
@@ -3664,18 +3755,25 @@ console.log('\n== 74. Evoluções do Tasy: foto operacional com retenção por p
   const cab = ['Nr atendimento', 'Cd evolucao', 'Ds setor atendimento', 'Ie evolucao clinica',
     'Dt evolucao', 'Dt inativacao', 'Nm pessoa evolucao', 'Ds evolucao'];
   const matriz = [cab,
+    ['111', 0, 'CTI', 'ENF', 46276, '', 'Enf. Z', 'anotação de 4 dias atrás — fora da janela de 48 h'],
     ['111', 1, 'CTI', 'ENF', 46279, '', 'Enf. A', 'anotação de enfermagem'],
     ['111', 2, 'CTI', 'E', 46279, '', 'Dr. B', 'evolução médica do dia'],
     ['111', 3, 'CTI', 'SAE', 46280, '', 'Enf. C', 'sistematização (a última geral)'],
     ['222', 4, 'Unidade 05', 'E', 46280, '', 'Dr. D', 'x'.repeat(2000)],
     ['333', 5, 'Emergência', 'E', 46280, 46280, 'Dr. E', 'evolução INATIVADA — fora'],
-    ['444', 6, 'Unidade 09', 'E', 46280, '', 'Dr. F', 'paciente sem pendência nenhuma']
+    ['444', 6, 'Unidade 09', 'E', 46280, '', 'Dr. F', 'paciente sem pendência nenhuma'],
+    ['555', 7, 'UTI Neonatal / Pediátrica', 'E', 46280, '', 'Dr. G', 'RN estável, sem pendência nenhuma'],
+    ['666', 8, 'Unidade 05', 'ENF', 46279, '', 'Enf. H', 'enfermagem de ontem — fora de UTI, só a última geral fica'],
+    ['666', 9, 'Unidade 05', 'ENF', 46280, '', 'Enf. H', 'enfermagem de hoje']
   ];
   const r = imp.lerEvolucoesTasy(matriz);
-  verificar('reconhece e guarda última geral + última médica por atendimento',
-    r.reconhecido && r.evolucoes.filter(e => e.Atendimento === '111').length === 2
+  verificar('em UTI/CTI guarda TODAS as evoluções das últimas 48 h (3 de 4 do 111; a de 4 dias atrás fica fora)',
+    r.reconhecido && r.evolucoes.filter(e => e.Atendimento === '111').length === 3
     && r.evolucoes.some(e => e.Atendimento === '111' && e.Categoria === 'SAE')
-    && r.evolucoes.some(e => e.Atendimento === '111' && e.Categoria === 'E'), JSON.stringify(r.evolucoes.map(e => e.Atendimento + '/' + e.Categoria)));
+    && r.evolucoes.some(e => e.Atendimento === '111' && e.Autor === 'Enf. A')
+    && !r.evolucoes.some(e => e.Atendimento === '111' && e.Autor === 'Enf. Z'), JSON.stringify(r.evolucoes.map(e => e.Atendimento + '/' + e.Categoria)));
+  verificar('fora de UTI continua última geral + última médica (666: só a de hoje)',
+    r.evolucoes.filter(e => e.Atendimento === '666').length === 1 && r.evolucoes.find(e => e.Atendimento === '666').DataEvolucao === '2026-09-15');
   verificar('texto longo é aparado', r.evolucoes.find(e => e.Atendimento === '222').Texto.length <= 1510
     && r.evolucoes.find(e => e.Atendimento === '222').Texto.endsWith('[…]'));
   verificar('evolução inativada fica de fora', !r.evolucoes.some(e => e.Atendimento === '333'));
@@ -3699,11 +3797,13 @@ console.log('\n== 74. Evoluções do Tasy: foto operacional com retenção por p
   };
   const retidas = imp.filtrarEvolucoesRetidas(r.evolucoes, bancos, '2026-09-15');
   verificar('cultura pendente segura as evoluções do paciente (111 fica, com prontuário resolvido)',
-    retidas.filter(e => e.Atendimento === '111').length === 2
+    retidas.filter(e => e.Atendimento === '111').length === 3
     && retidas.every(e => e.Atendimento !== '111' || e.Prontuario === 'P1'), JSON.stringify(retidas.map(e => e.Atendimento)));
   verificar('antibiótico em curso segura (222 fica)', retidas.some(e => e.Atendimento === '222'));
-  verificar('sem pendência, a evolução é descartada (444 sai — curso já encerrado)',
-    !retidas.some(e => e.Atendimento === '444'));
+  verificar('sem pendência, a evolução é descartada (444 sai — curso já encerrado; 666 sai)',
+    !retidas.some(e => e.Atendimento === '444') && !retidas.some(e => e.Atendimento === '666'));
+  verificar('paciente em UTI fica mesmo sem pendência (555, preparação da visita — 02/10/2026)',
+    retidas.some(e => e.Atendimento === '555'));
   /* Ampliação de 23/09/2026: isolamento ativo e suspeita de IRAS em investigação também seguram. */
   const comIsoEIras = imp.filtrarEvolucoesRetidas(r.evolucoes, { ...bancos,
     isolamentos: { precaucoes: [{ Prontuario: 'P4', DataInicio: '2026-09-10', DataFim: '' }] } }, '2026-09-15');

@@ -1205,11 +1205,70 @@ async function montarUti(conteudo) {
      situação atual do setor — os pontos críticos já vão mastigados para a conversa com a
      equipe. O texto usa iniciais + leito, nunca nome inteiro: viaja num app de mensagens. */
   try {
-    const [bCulturas, bIso, bIras, bSepse, bHigiene, bDisp, bSurtos, bPac] = await Promise.all(
-      ['culturas', 'isolamentos', 'iras', 'sepse', 'higiene_maos', 'dispositivos', 'surtos', 'pacientes']
+    const [bCulturas, bIso, bIras, bSepse, bHigiene, bDisp, bSurtos, bPac, bEvo, bAtb] = await Promise.all(
+      ['culturas', 'isolamentos', 'iras', 'sepse', 'higiene_maos', 'dispositivos', 'surtos', 'pacientes', 'evolucoes', 'antibioticos']
         .map(nome => lerBanco(nome).catch(() => ({}))));
     const bancosResumo = { culturas: bCulturas, isolamentos: bIso, iras: bIras, sepse: bSepse,
-      higiene_maos: bHigiene, dispositivos: bDisp, surtos: bSurtos, pacientes: bPac, uti: banco };
+      higiene_maos: bHigiene, dispositivos: bDisp, surtos: bSurtos, pacientes: bPac, uti: banco,
+      evolucoes: bEvo, antibioticos: bAtb };
+
+    /* ---- Leito a leito: quem está internado agora ----
+       Preparação da visita (pedido de 02/10/2026): a lista dos pacientes do setor hoje
+       (foto 2396), com nome, leito, prontuário, o que carregam, a última evolução médica e
+       os sinais vitais alterados das últimas 48 h lidos das evoluções. Elimina o número
+       digitado errado no miniapp — o passo seguinte é levar esta lista, cifrada, ao celular. */
+    const setoresInternados = prepararVisitaUTI(bancosResumo, '', hojeISO()).setores;
+    const selSetorLeitos = el('select', {},
+      setoresInternados.map(sNome => el('option', { value: sNome }, sNome)),
+      el('option', { value: '' }, 'todos os setores de UTI/CTI'));
+    const alvoLeitos = el('div', {});
+    const desenharLeitos = () => {
+      const prep = prepararVisitaUTI(bancosResumo, selSetorLeitos.value, hojeISO());
+      alvoLeitos.replaceChildren();
+      if (!prep.pacientes.length) {
+        alvoLeitos.append(el('p', { class: 'texto-suave' },
+          'Nenhum paciente com internação aberta neste setor. Importe a foto dos internados (relatório 2396) para a lista aparecer.'));
+        return;
+      }
+      alvoLeitos.append(el('p', { class: 'texto-suave' },
+        `${fmtInt(prep.pacientes.length)} paciente(s) internado(s) agora · ${fmtInt(prep.comVitaisAlterados)} com sinais vitais alterados nas últimas ${VISITA_UTI_VITAIS_HORAS} h`
+        + (prep.semEvolucao ? ` · ${fmtInt(prep.semEvolucao)} sem evolução na foto do Tasy (importe o export de evoluções do dia)` : '') + '.'));
+      const selo = (texto, classe) => el('span', { class: 'selo' + (classe ? ' ' + classe : ''), style: 'margin:0 4px 4px 0;display:inline-block;white-space:normal' }, texto);
+      alvoLeitos.append(el('table', { class: 'tabela' },
+        el('thead', {}, el('tr', {}, ['Leito', 'Paciente', 'Prontuário', 'Atend.', 'Dias', 'Situação', `Vitais alterados (${VISITA_UTI_VITAIS_HORAS} h)`, 'Última evolução médica'].map(c => el('th', {}, c)))),
+        el('tbody', {}, prep.pacientes.map(p => {
+          const situacao = el('td', {},
+            ...p.dispositivos.map(d => selo(d)),
+            ...p.antibioticos.map(a => selo('💊 ' + a)),
+            p.culturasPendentes ? selo(`🧫 ${p.culturasPendentes} cultura(s) pendente(s)`) : null,
+            p.isolamento ? selo('🚧 ' + p.isolamento, 'selo-alerta') : null,
+            p.irasAberta ? selo('🩺 IRAS em investigação: ' + p.irasAberta, 'selo-alerta') : null,
+            p.sinaisInfeccao ? selo('⚠ evolução sugere: ' + p.sinaisInfeccao, 'selo-alerta') : null);
+          const vitais = el('td', { class: p.vitais.length ? 'aviso-erro-texto' : 'texto-suave' },
+            p.vitais.length ? p.vitais.map(v => `${v.sinal} (${v.data.slice(5).split('-').reverse().join('/')})`).join(' · ') : '—');
+          const evo = p.ultimaEvolucaoMedica
+            ? el('td', {}, el('details', {},
+              el('summary', {}, `${p.ultimaEvolucaoMedica.data}${p.ultimaEvolucaoMedica.autor ? ' · ' + p.ultimaEvolucaoMedica.autor : ''}`),
+              el('p', { class: 'texto-suave', style: 'white-space:pre-wrap;max-width:60ch' }, p.ultimaEvolucaoMedica.texto)))
+            : el('td', { class: 'texto-suave' }, p.ultimaEvolucao ? `só ${p.ultimaEvolucao.categoria === 'E' ? 'médica' : 'enfermagem/outras'} em ${p.ultimaEvolucao.data}` : 'sem evolução na foto');
+          return el('tr', {},
+            el('td', {}, el('strong', {}, p.leito || '?'), setoresInternados.length > 1 && !selSetorLeitos.value ? el('div', { class: 'texto-suave' }, p.setor) : null),
+            p.nome ? el('td', { class: 'linha-clicavel', title: 'Abrir a ficha do paciente', onclick: () => abrirPaciente(p.prontuario) }, p.nome)
+              : el('td', { class: 'texto-suave' }, 'nome não encontrado'),
+            el('td', {}, p.prontuario), el('td', { class: 'texto-suave' }, p.atendimento),
+            el('td', {}, p.dias === null ? '—' : fmtInt(p.dias)),
+            situacao, vitais, evo);
+        }))));
+    };
+    selSetorLeitos.addEventListener('change', desenharLeitos);
+    desenharLeitos();
+    conteudo.append(el('div', { class: 'cartao' },
+      el('h2', {}, '🛏 Leito a leito — preparação da visita'),
+      el('div', { class: 'linha-campos' }, el('label', {}, 'Setor: ', selSetorLeitos)),
+      alvoLeitos,
+      el('p', { class: 'texto-suave' },
+        'Sinais vitais vêm do TEXTO das evoluções (PA, FC, FR, Tax, SatO2, droga vasoativa…), não do monitor — confirme à beira do leito. '
+        + 'Os dados ficam nesta tela; a lista cifrada para o miniapp é a próxima etapa.')));
     const setoresUTI = [...new Set((bCulturas.culturas || []).map(c => String(c.Setor || '').trim())
       .filter(ehSetorDeUTI))].sort();
     const selSetorResumo = el('select', {},

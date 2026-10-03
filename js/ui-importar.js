@@ -523,9 +523,9 @@ async function telaEvolucoes(arquivo, leitura) {
   imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
     el('h2', {}, 'Evoluções do Tasy (foto operacional)'),
     el('p', {}, `Reconheci ${arquivo.name} como o export de evoluções. `
-      + `${fmtInt(leitura.evolucoes.length)} evoluções (última geral + última médica) de `
+      + `${fmtInt(leitura.evolucoes.length)} evoluções (última geral + última médica; em UTI/CTI, todas das últimas ${EVOLUCAO_UTI_HORAS} h) de `
       + `${fmtInt(leitura.atendimentos)} atendimentos.`),
-    el('p', {}, `Ficam ${fmtInt(retidas.length)} — pacientes com cultura pendente, antibiótico em curso, isolamento ativo ou suspeita de IRAS em investigação, `
+    el('p', {}, `Ficam ${fmtInt(retidas.length)} — pacientes internados em UTI/CTI (preparação da visita), com cultura pendente, antibiótico em curso, isolamento ativo ou suspeita de IRAS em investigação, `
       + `ou cujo texto sugere infecção (${fmtInt(comSinais)} com sinais: febre, secreção purulenta, PAV, ITU, sepse…; a aba Infecções lista os que ainda não têm suspeita aberta). `
       + `${fmtInt(descartadas)} sem pendência são descartadas. `
       + (persistidasPrevia ? `${fmtInt(persistidasPrevia)} evolução(ões) da foto anterior são mantidas: pacientes que já tiveram alta ou óbito (fora deste export) mas ainda têm pendência.`

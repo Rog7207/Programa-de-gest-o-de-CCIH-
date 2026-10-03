@@ -105,6 +105,7 @@ label { font-size: 14px; }
 .linha-esmaecida { opacity: 0.45; }
 .linha-esmaecida:hover { opacity: 0.8; }
 .selo-sepse { color: #b03a2e; font-weight: 600; }
+.selo-alerta { color: #b03a2e; font-weight: 600; }
 
 .secao-termos { border-top: 1px solid #eef1f5; padding-top: 6px; margin-top: 10px; }
 .linha-termo { display: flex; gap: 18px; align-items: center; padding: 5px 0; flex-wrap: wrap; }

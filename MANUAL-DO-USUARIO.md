@@ -251,6 +251,18 @@ A aba UTI também gera o **📋 resumo para levar à visita** (último mês do s
 isolamentos, adesão à higiene, pendências) — enviado por WhatsApp para o celular de quem
 vai fazer a visita, com pacientes em iniciais.
 
+E o cartão **🛏 Leito a leito — preparação da visita**: todos os pacientes internados agora
+no setor (pela foto dos internados, relatório 2396), com nome, leito, prontuário e
+atendimento, dias de internação, o que carregam (dispositivos abertos, antibióticos em curso
+com o dia, cultura pendente, isolamento, IRAS em investigação), a **última evolução médica**
+da foto do Tasy e os **sinais vitais alterados nas últimas 48 h** lidos do texto das
+evoluções (PA, FC, FR, Tax, SatO2, PAM, droga vasoativa, febre, hipotensão…; "sem DVA" e
+"afebril" são descontados; na UTI Neonatal/Pediátrica só temperatura e saturação são
+julgadas, porque os limites de adulto não valem). Para isso, a importação das evoluções
+guarda, para quem está em UTI/CTI, **todas** as evoluções das últimas 48 h — não só a
+última. Os sinais vêm do que a equipe escreveu, não do monitor: são lembrete para a
+conversa à beira do leito, não substituem a checagem.
+
 ---
 
 ## 7. Isolamentos

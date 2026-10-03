@@ -660,7 +660,7 @@ function rotinaDaEquipe(profissionais, bancos, referencia, opcoes) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { detectarSurtos, ehSurtoAntigo, situacaoDaSuspeita, fenotipoResistencia, SURTO_ANTIGO_DIAS, SURTO_HISTORICO_DIAS, detectarMultirresistentes, inferirMecanismo, pendenciasIsolamento, agruparPendenciasIsolamento,
-    mesmaSuspeita, correlacionarSurto, resumoParaVisitaUTI, ehSetorDeUTI, iniciaisDe, isolamentosParaNotificar,
+    mesmaSuspeita, correlacionarSurto, resumoParaVisitaUTI, prepararVisitaUTI, ehSetorDeUTI, iniciaisDe, isolamentosParaNotificar,
     ehSetorPortaDeEntrada, perfilAntibiograma, antibiogramasSemelhantes,
     rotinaDaEquipe, diasCorridos, diasUteis, dataDaUltimaCarga,
     GENEROS_GRAM_NEGATIVOS };
@@ -817,4 +817,86 @@ function resumoParaVisitaUTI(bancos, setor, hoje, mecanismosMonitorados) {
     ? blocos.map(b => `\n\n*${b.titulo}*\n` + b.linhas.map(l => '• ' + l).join('\n')).join('')
     : '\n\nSem ocorrências registradas no período. 🎉';
   return { blocos, texto: cabecalho + corpo };
+}
+
+/* ---- Preparação da visita à UTI (pedido de 02/10/2026) ----
+   Um bloco por LEITO ocupado agora no setor: quem é (nome, prontuário, atendimento), há
+   quantos dias está internado, o que carrega (dispositivos abertos, antibióticos em curso,
+   cultura pendente, isolamento, IRAS em investigação), a última evolução médica da foto do
+   Tasy e os sinais vitais ALTERADOS mencionados nas evoluções das últimas 48 h. "Internado
+   agora" = internação sem alta cujo SetorAtual é UTI/CTI (vem da foto 2396). A lista é a
+   base da visita na tela e, depois, da página cifrada que vai para o miniapp — por isso é
+   função pura e devolve dados, não HTML. */
+const VISITA_UTI_VITAIS_HORAS = 48;
+function prepararVisitaUTI(bancos, setor, hoje) {
+  const dia = String(hoje || '').slice(0, 10);
+  const corteVitais = new Date(Date.parse(dia + 'T00:00:00Z') - (VISITA_UTI_VITAIS_HORAS / 24) * 864e5).toISOString().slice(0, 10);
+  const doSetor = s => setor ? String(s || '').trim() === setor : ehSetorDeUTI(s);
+  const np = normalizarProntuario;
+  const internacoes = ((bancos.pacientes || {}).internacoes || []);
+  const abertas = internacoes.filter(i => !String(i.DataAlta || '').trim() && doSetor(i.SetorAtual));
+  const setores = [...new Set(internacoes.filter(i => !String(i.DataAlta || '').trim() && ehSetorDeUTI(i.SetorAtual))
+    .map(i => String(i.SetorAtual).trim()))].sort();
+  const nomes = new Map(((bancos.pacientes || {}).pacientes || []).map(p => [np(p.Prontuario), p.Nome]));
+
+  /* Índices por prontuário/atendimento, uma passada por banco. */
+  const porChave = (lista, campo) => {
+    const m = new Map();
+    for (const x of lista || []) { const k = np(x[campo]); if (!k) continue; if (!m.has(k)) m.set(k, []); m.get(k).push(x); }
+    return m;
+  };
+  const evoPorAtd = porChave((bancos.evolucoes || {}).evolucoes, 'Atendimento');
+  const evoPorPron = porChave((bancos.evolucoes || {}).evolucoes, 'Prontuario');
+  const prescPorAtd = porChave((bancos.antibioticos || {}).prescricoes, 'Atendimento');
+  const prescPorPron = porChave((bancos.antibioticos || {}).prescricoes, 'Prontuario');
+  const dispPorPron = porChave((bancos.dispositivos || {}).dispositivos, 'Prontuario');
+  const cultPorPron = porChave((bancos.culturas || {}).culturas, 'Prontuario');
+  const isoPorPron = porChave((bancos.isolamentos || {}).precaucoes, 'Prontuario');
+  const irasPorPron = porChave((bancos.iras || {}).casos, 'Prontuario');
+  const juntar = (...listas) => { const s = new Set(); listas.forEach(l => (l || []).forEach(x => s.add(x))); return [...s]; };
+  const diasDesde = d => { const t = Date.parse(String(d || '').slice(0, 10) + 'T00:00:00Z'); return isFinite(t) ? Math.max(0, Math.round((Date.parse(dia + 'T00:00:00Z') - t) / 864e5)) : null; };
+  const ordemLeito = l => { const m = /(\d+)/.exec(String(l || '')); return m ? Number(m[1]) : 9999; };
+
+  const ehNeoPed = s => /neonat|pedi[aá]tr|\bneo\b|\brn\b/i.test(String(s || ''));
+  const pacientes = abertas.map(i => {
+    const pron = np(i.Prontuario), atd = np(i.Atendimento);
+    const evolucoes = juntar(evoPorAtd.get(atd), evoPorPron.get(pron))
+      .sort((a, b) => String(b.DataEvolucao).localeCompare(String(a.DataEvolucao)));
+    const medicas = evolucoes.filter(e => e.Categoria === 'E');
+    const vitais = [];
+    /* Limites de adulto não valem na UTI Neonatal/Pediátrica (FC 150 é normal num RN). */
+    const opcoesVitais = { neoPed: ehNeoPed(i.SetorAtual) };
+    for (const e of evolucoes) {
+      if (String(e.DataEvolucao).slice(0, 10) < corteVitais) continue;
+      const r = (typeof sinaisVitaisNaEvolucao === 'function') ? sinaisVitaisNaEvolucao(e.Texto, opcoesVitais) : { alterados: [], medidas: [] };
+      for (const a of r.alterados) vitais.push({ data: String(e.DataEvolucao).slice(0, 10), sinal: a, autor: e.Autor || '' });
+    }
+    const vitaisUnicos = [...new Map(vitais.map(v => [v.sinal + '|' + v.data, v])).values()];
+    const prescricoes = juntar(prescPorAtd.get(atd), prescPorPron.get(pron))
+      .filter(p => p.Antibiotico && String(p.DataInicio || '').slice(0, 10) <= dia && prescricaoAtiva(p, dia)
+        && !(String(p.DataSuspensao || '').trim() && String(p.DataSuspensao).slice(0, 10) < dia));
+    const antibioticos = [...new Map(prescricoes.map(p => [normalizarTexto(p.Antibiotico), p])).values()]
+      .map(p => { const d = diasDesde(p.DataInicio); return p.Antibiotico + (d === null ? '' : ` D${d + 1}`); });
+    const dispositivos = (dispPorPron.get(pron) || [])
+      .filter(d => !String(d.DataRetirada || '').trim() && String(d.DataInstalacao || '').slice(0, 10) <= dia)
+      .map(d => { const n = diasDesde(d.DataInstalacao); return (d.Categoria || d.Dispositivo || 'dispositivo') + (n === null ? '' : ` ${n} d`); });
+    const culturasPendentes = (cultPorPron.get(pron) || []).filter(c => c.StatusRevisao === 'pendente' && c.Microrganismo).length;
+    const isolamento = (isoPorPron.get(pron) || []).find(p => !String(p.DataFim || '').trim() && normalizarTexto(p.Status) !== 'encerrado');
+    const irasAberta = (irasPorPron.get(pron) || []).find(k => normalizarTexto(k.StatusInvestigacao) === normalizarTexto('em investigação'));
+    const sinaisInfeccao = [...new Set(evolucoes.slice(0, 3).map(e => e.SinaisInfeccao).filter(Boolean))].join('; ');
+    const nome = nomes.get(pron) || '';
+    return {
+      prontuario: pron, atendimento: atd, nome, iniciais: iniciaisDe(nome),
+      leito: String(i.Leito || '').trim(), setor: String(i.SetorAtual || '').trim(),
+      dataInternacao: String(i.DataInternacao || '').slice(0, 10), dias: diasDesde(i.DataInternacao),
+      dispositivos, antibioticos, culturasPendentes,
+      isolamento: isolamento ? [isolamento.TipoPrecaucao, isolamento.Motivo].filter(Boolean).join(' — ') : '',
+      irasAberta: irasAberta ? (irasAberta.Topografia || 'suspeita de IRAS') : '',
+      sinaisInfeccao,
+      ultimaEvolucaoMedica: medicas[0] ? { data: String(medicas[0].DataEvolucao).slice(0, 10), autor: medicas[0].Autor || '', texto: medicas[0].Texto || '' } : null,
+      ultimaEvolucao: evolucoes[0] ? { data: String(evolucoes[0].DataEvolucao).slice(0, 10), autor: evolucoes[0].Autor || '', categoria: evolucoes[0].Categoria || '', texto: evolucoes[0].Texto || '' } : null,
+      vitais: vitaisUnicos
+    };
+  }).sort((a, b) => a.setor.localeCompare(b.setor) || ordemLeito(a.leito) - ordemLeito(b.leito) || a.leito.localeCompare(b.leito));
+  return { setores, pacientes, semEvolucao: pacientes.filter(p => !p.ultimaEvolucao).length, comVitaisAlterados: pacientes.filter(p => p.vitais.length).length };
 }

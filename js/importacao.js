@@ -1270,17 +1270,105 @@ function lerEvolucoesTasy(matriz) {
     if (!porAtendimento.has(atendimento)) porAtendimento.set(atendimento, []);
     porAtendimento.get(atendimento).push(evo);
   }
+  /* Paciente de UTI (pedido de 02/10/2026, preparação da visita): além da última geral e da
+     última médica, ficam TODAS as evoluções das últimas 48 h — é nelas que a enfermagem
+     anota saturação, diurese, Glasgow e o médico anota PA/FC/Tax, a matéria-prima dos
+     "sinais vitais alterados" da visita. Janela contada a partir do dia mais recente do
+     export (o Tasy só dá a data, não a hora). */
+  let dataMaisRecente = '';
+  for (const lista of porAtendimento.values()) for (const e of lista) if (e.DataEvolucao > dataMaisRecente) dataMaisRecente = e.DataEvolucao;
+  const corte48h = dataMaisRecente ? new Date(Date.parse(dataMaisRecente + 'T00:00:00Z') - (EVOLUCAO_UTI_HORAS / 24) * 864e5).toISOString().slice(0, 10) : '';
   const evolucoes = [];
   for (const lista of porAtendimento.values()) {
     lista.sort((a, b) => a.DataEvolucao.localeCompare(b.DataEvolucao) || a._ordem - b._ordem);
     const ultima = lista[lista.length - 1];
     const medicas = lista.filter(e => e.Categoria === 'E');
     const ultimaMedica = medicas[medicas.length - 1];
-    evolucoes.push(ultima);
-    if (ultimaMedica && ultimaMedica !== ultima) evolucoes.push(ultimaMedica);
+    const escolhidas = new Set([ultima]);
+    if (ultimaMedica) escolhidas.add(ultimaMedica);
+    if (SETOR_UTI_RE.test(ultima.Setor)) {
+      for (const e of lista) if (e.DataEvolucao >= corte48h) escolhidas.add(e);
+    }
+    for (const e of lista) if (escolhidas.has(e)) evolucoes.push(e);
   }
   evolucoes.forEach(e => { delete e._ordem; });
   return { reconhecido: true, evolucoes, problemas, atendimentos: porAtendimento.size };
+}
+
+/* Mesma regra de ehSetorDeUTI (alertas.js) — repetida aqui porque a leitura e a retenção
+   das evoluções rodam antes de alertas.js carregar e também em Node, sozinhas. */
+const SETOR_UTI_RE = /\b(uti|cti)\b/i;
+const EVOLUCAO_UTI_HORAS = 48;
+
+/* ---- Sinais vitais no texto da evolução (pedido de 02/10/2026) ----
+   O Tasy não exporta sinais vitais estruturados para a CCIH; o que existe é o que a equipe
+   escreve na evolução ("PA: 130/80  FC 72  satO2 94%", "Tax 38,2", "FR 28"). Extração
+   DETERMINÍSTICA, com limites de alteração fixos; sinais qualitativos (taquicárdico,
+   hipotenso, dessaturando, em droga vasoativa) entram sem valor. Negações da evolução
+   ("afebril") são tratadas antes. Não substitui o monitor: é um lembrete para a visita. */
+const SINAIS_VITAIS = [
+  /* [sinal, regex (grupo 1 = valor), alterado(valor), unidade] */
+  ['Tax', /\b(?:tax|t\s?ax|temp(?:eratura)?|t)\b\s*[:=]?\s*(3\d(?:[,.]\d)?)\s*(?:o?c|º|°)?/, v => v >= 37.8 || v < 35, '°C'],
+  ['FC', /\bfc\b\s*[:=]?\s*(\d{2,3})\b/, v => v > 100 || v < 50, 'bpm'],
+  ['FR', /\bfr\b\s*[:=]?\s*(\d{1,2})\b/, v => v > 22 || v < 10, 'irpm'],
+  ['PA', /\bpa\b\s*[:=]?\s*(\d{2,3})\s*[x\/]\s*\d{2,3}\b/, v => v < 90 || v > 180, 'mmHg (sistólica)'],
+  ['PAM', /\bpam\b\s*[:=]?\s*(\d{2,3})\b/, v => v < 65, 'mmHg'],
+  ['SatO2', /\b(?:sat(?:o2|po2|uracao)?|spo2)\b\s*[:=]?\s*(\d{2,3})\s*%?/, v => v < 92, '%']
+];
+/* [rótulo, regex, sinal quantitativo que ele repete] — "pico febril" com "Tax 39" na mesma
+   evolução é UMA alteração, não duas. */
+const SINAIS_VITAIS_QUALITATIVOS = [
+  ['febre', /\bfebre\b|\bfebril\b|pico febril|hipertermia/, 'Tax'],
+  ['hipotermia', /hipotermi/, 'Tax'],
+  ['taquicardia', /taquicard/, 'FC'],
+  ['bradicardia', /bradicard/, 'FC'],
+  ['hipotensão', /hipotens|hipotenso/, 'PA'],
+  ['hipertensão', /pico hipertensivo|hipertens[aã]o (nao )?controlad|\bhas descompensad/, 'PA'],
+  ['taquipneia', /taquipn|taquidispn/, 'FR'],
+  ['dessaturação', /dessatur/, 'SatO2'],
+  ['droga vasoativa', /\bdva\b|noradrenalina|norepinefrina|vasopressina|vasopressor|\bnora\b/, ''],
+  ['oligúria', /oliguri|anuri/, '']
+];
+/* "Hemodinâmica: sem DVA" é o jeito mais comum de a DVA aparecer no CTI do HNSC (no export
+   real, mais da metade das menções é negada). Negações próprias dos sinais vitais, além das
+   gerais da evolução. "Desmame de nora" NÃO é negação: o paciente ainda está em DVA. */
+const NEGACOES_VITAIS = [
+  /\b(sem|s\/|nao|suspens[ao]( de)?|desligad[ao]( a)?|retirad[ao]( a)?|zerad[ao]( a)?)\s*(dva|drogas? vasoativas?|nora(drenalina)?|norepinefrina|vasopressina|vasopressor(es)?)/g,
+  /\b(dva|drogas? vasoativas?|nora(drenalina)?|norepinefrina|vasopressina|vasopressor(es)?)\s+(suspens[ao]s?|desligad[ao]s?|retirad[ao]s?|zerad[ao]s?)\b/g
+];
+/* "PIP 21 PEEP 7 FR 35 FiO2 30%" é a frequência PROGRAMADA no ventilador, não a do paciente. */
+const CONTEXTO_VENTILADOR = /peep|\bpip\b|fio2|\bti\b|\bvc\b|\bvt\b|\bpc\b|psv|modo|ventilad|parametros|ajuste/;
+/* Limites de adulto (FC, FR, PA, PAM) não valem para recém-nascido/criança: FC 150 é normal
+   num RN. Com `opcoes.neoPed`, só temperatura, saturação e os qualitativos são avaliados. */
+const SINAIS_SO_ADULTO = new Set(['FC', 'FR', 'PA', 'PAM']);
+/* Devolve { medidas: [{ sinal, valor, unidade, alterado, trecho }], alterados: [rótulos],
+   resumo }. Só o que está ALTERADO entra em `alterados`/`resumo`; `medidas` traz tudo. */
+function sinaisVitaisNaEvolucao(texto, opcoes) {
+  const neoPed = Boolean(opcoes && opcoes.neoPed);
+  let t = textoEvolucaoNormalizado(texto);
+  for (const re of NEGACOES_EVOLUCAO.concat(NEGACOES_VITAIS)) t = t.replace(re, NEGACAO_PLACEHOLDER);
+  const medidas = [];
+  for (const [sinal, re, ehAlterado, unidade] of SINAIS_VITAIS) {
+    if (neoPed && SINAIS_SO_ADULTO.has(sinal)) continue;
+    const g = new RegExp(re.source, 'g');
+    let m;
+    while ((m = g.exec(t))) {
+      const valor = Number(String(m[1]).replace(',', '.'));
+      if (!isFinite(valor)) continue;
+      const ini = Math.max(0, m.index - 20), fim = Math.min(t.length, m.index + m[0].length + 20);
+      if (sinal === 'FR' && CONTEXTO_VENTILADOR.test(t.slice(Math.max(0, m.index - 40), m.index + m[0].length + 25))) continue;
+      medidas.push({ sinal, valor, unidade, alterado: ehAlterado(valor), trecho: '…' + t.slice(ini, fim).trim() + '…' });
+    }
+  }
+  const alterados = medidas.filter(x => x.alterado).map(x => `${x.sinal} ${x.valor}`);
+  const jaMedido = new Set(medidas.filter(x => x.alterado).map(x => x.sinal));
+  for (const [rotulo, re, sinalRepetido] of SINAIS_VITAIS_QUALITATIVOS) {
+    if (!re.test(t)) continue;
+    if (neoPed && SINAIS_SO_ADULTO.has(sinalRepetido)) continue;
+    if (sinalRepetido && (jaMedido.has(sinalRepetido) || (sinalRepetido === 'PA' && jaMedido.has('PAM')))) continue;
+    alterados.push(rotulo);
+  }
+  return { medidas, alterados, resumo: alterados.join('; ') };
 }
 
 /* ---- Busca clínica de pacientes (aba Pacientes) ---------------------------------------
@@ -1553,9 +1641,12 @@ function filtrarEvolucoesRetidas(evolucoes, bancos, hoje) {
     const pron = pronDoAt.get(atd) || normalizarProntuario(e.Prontuario) || '';
     const pendente = atdComATB.has(atd) || (pron && (pronPendentes.has(pron) || pronComATB.has(pron)));
     /* Sem pendência, ainda fica se o TEXTO sugere infecção (pedido de 25/09/2026): o export
-       do Tasy traz todos os internados, e é aqui que a IRAS sem cultura pode ser vista. */
+       do Tasy traz todos os internados, e é aqui que a IRAS sem cultura pode ser vista.
+       E fica se o paciente está em UTI/CTI (pedido de 02/10/2026): a preparação da visita
+       mostra a última evolução médica e os sinais vitais de TODOS os leitos do setor. */
     const sinais = sinaisDeInfeccaoNaEvolucao(e.Texto);
-    if (!pendente && !sinais.sinais.length) continue;
+    const emUTI = SETOR_UTI_RE.test(String(e.Setor || ''));
+    if (!pendente && !sinais.sinais.length && !emUTI) continue;
     retidas.push({ ...e, Prontuario: pron, SinaisInfeccao: sinais.resumo });
   }
   return retidas;
@@ -4210,7 +4301,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome, resolverProntuarioPorNomeEData, NAO_ANTIMICROBIANO, pareceNomeTruncado,
     enriquecerCirurgia, classificarProcedimentoNHSN, NHSN_CATEGORIAS, categoriasDeProcedimento, categoriaDoProcedimento, CATEGORIA_SEM_CLASSIFICACAO, contaminacaoPresumida, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, mesclarEvolucoes, sinaisDeInfeccaoNaEvolucao, extrairTemplateEvolucao, topografiaSugeridaPorSinais, EVOLUCAO_SILENCIO_DIAS, lerFotoInternados, aplicarFotoInternados, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, mesclarEvolucoes, sinaisDeInfeccaoNaEvolucao, extrairTemplateEvolucao, topografiaSugeridaPorSinais, EVOLUCAO_SILENCIO_DIAS, sinaisVitaisNaEvolucao, EVOLUCAO_UTI_HORAS, lerFotoInternados, aplicarFotoInternados, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

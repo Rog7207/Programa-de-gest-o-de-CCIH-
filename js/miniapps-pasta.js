@@ -28,13 +28,25 @@ function injetarVocabularios(html, vocabulario) {
   return saida;
 }
 
-function montarMiniappParaPasta(arquivo, vocabulario) {
+/* Valores desta instalação no lugar dos placeholders (ENVIO_URL, ENVIO_SEGREDO,
+   EMAIL_DESTINO) — a mesma substituição que scripts/montar-miniapps.js faz a partir do
+   config-local.json. A pasta espelhada é interna à CCIH, como era o arquivo montado. */
+function injetarInstalacao(html, valores) {
+  let saida = String(html);
+  for (const [chave, valor] of Object.entries(valores || {})) {
+    if (!valor) continue;
+    saida = saida.replace(new RegExp(`const ${chave} = '[^']*';`), () => `const ${chave} = '${String(valor).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}';`);
+  }
+  return saida;
+}
+
+function montarMiniappParaPasta(arquivo, vocabulario, instalacao) {
   if (typeof MINIAPPS_MODELOS !== 'object' || !MINIAPPS_MODELOS[arquivo]) {
     throw new Error(`modelo de ${arquivo} não carregado — rode node scripts/montar-miniapps.js`);
   }
-  return injetarVocabularios(MINIAPPS_MODELOS[arquivo], vocabulario);
+  return injetarInstalacao(injetarVocabularios(MINIAPPS_MODELOS[arquivo], vocabulario), instalacao);
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { MINIAPPS_PARA_PASTA, injetarVocabularios, montarMiniappParaPasta };
+  module.exports = { MINIAPPS_PARA_PASTA, injetarVocabularios, injetarInstalacao, montarMiniappParaPasta };
 }

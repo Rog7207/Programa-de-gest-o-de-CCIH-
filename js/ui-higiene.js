@@ -49,6 +49,8 @@ function adesaoPor(observacoes, campo, ordem) {
 
 async function montarHigiene(conteudo) {
   conteudo.append(el('h1', {}, 'Higiene das mãos'));
+  /* Observações chegam do celular direto na planilha do Google; daqui se puxa. */
+  try { const c = await cartaoSincronizarMiniapp('higiene_maos', 'higiene'); if (c) conteudo.append(c); } catch (e) { /* conveniência */ }
   let banco;
   try { banco = await lerBanco('higiene_maos'); }
   catch (e) { conteudo.append(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message)); return; }

@@ -1280,7 +1280,8 @@ async function montarUti(conteudo) {
         const cifrado = await criptografarDados(JSON.stringify(montarDadosVisitaUTI(prep)), campoSenhaVisita.value);
         const html = gerarHTMLVisitaUTI(cifrado, {
           geradoEm, setor: selSetorLeitos.value || '', avisoHoras: VISITA_UTI_AVISO_HORAS, bloqueioDias: VISITA_UTI_BLOQUEIO_DIAS
-        }, { setores: config.vocabulario.setores, antibioticos: config.vocabulario.antibioticos });
+        }, { setores: config.vocabulario.setores, antibioticos: config.vocabulario.antibioticos },
+        instalacaoParaMiniapps(await sincronizacaoGoogle.config()));
         if (publicar && publicacaoWeb.configurada()) {
           /* Na web (GitHub Pages): é o que abre no iPhone. URL fixa — o QR não muda. */
           statusVisita.className = 'texto-suave';

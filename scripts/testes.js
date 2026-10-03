@@ -1570,6 +1570,47 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
     && req.corpo.sha === 'abc123' && req.corpo.branch === 'main' && req.cabecalhos.Authorization === 'Bearer tok'
     && Buffer.from(req.corpo.content, 'base64').toString('utf8') === '<p>Olá, visita à UTI 🛏</p>', JSON.stringify(req).slice(0, 300));
   verificar('primeira publicação vai sem sha', !('sha' in pw.montarRequisicaoPublicacao(cfg, 'x.html', 'x', '').corpo));
+
+  console.log('\n== 92. Planilha do Google: pacote dos miniapps no Apps Script e sincronização ==');
+  /* O .gs roda no Google, mas as funções de pacote são puras: carregadas aqui num contexto
+     isolado para garantir que o servidor lê e escreve o MESMO formato que os miniapps. */
+  const vmGs = require('vm');
+  const ctxGs = { PropertiesService: undefined, SpreadsheetApp: undefined, ContentService: undefined, DriveApp: undefined, Date, String, Object, JSON, Math, RegExp, Error };
+  vmGs.createContext(ctxGs);
+  vmGs.runInContext(fs.readFileSync(path.join(__dirname, '..', 'scripts', 'apps-script-recebimento.gs'), 'utf-8'), ctxGs);
+  const pacoteMiniapp = '﻿##ccih-miniapp;tipo=higiene_maos;versao=3\n##observacoes\nID_Observacao;Data;Setor;Momento;Acao;Observador\n'
+    + 'OBS-1;2026-10-03;"CTI; adulto";Antes do contato;Higienizou;"Enf. ""A"""\nOBS-2;2026-10-03;Unidade 05;Após o contato;Não higienizou;"Linha\ncom quebra"\n';
+  const lido = ctxGs.analisarPacoteTexto(pacoteMiniapp);
+  verificar('Apps Script lê o pacote do miniapp (BOM, ";" entre aspas, aspas duplicadas, quebra dentro do campo)',
+    lido.tipo === 'higiene_maos' && lido.versao === '3' && lido.abas.observacoes.length === 2
+    && lido.abas.observacoes[0].Setor === 'CTI; adulto' && lido.abas.observacoes[0].Observador === 'Enf. "A"' && lido.abas.observacoes[1].Observador === 'Linha\ncom quebra', JSON.stringify(lido));
+  const devolvido = ctxGs.montarPacoteTexto('higiene_maos', '3', lido.abas);
+  const relido = ctxGs.analisarPacoteTexto(devolvido);
+  verificar('ida e volta: o que o servidor devolve relê idêntico e começa pelo cabeçalho do miniapp',
+    devolvido.startsWith('##ccih-miniapp;tipo=higiene_maos;versao=3\n##observacoes\n') && JSON.stringify(relido.abas) === JSON.stringify(lido.abas));
+  verificar('o aplicativo lê o pacote devolvido com o seu próprio leitor', (() => {
+    /* analisarPacoteCSV vive em ui-importar.js (UI); aqui só se confere o formato de linha. */
+    const linhas = devolvido.split('\n');
+    return linhas[2] === 'ID_Observacao;Data;Setor;Momento;Acao;Observador' && linhas[3].startsWith('OBS-1;2026-10-03;"CTI; adulto"');
+  })(), devolvido.split('\n').slice(0, 4));
+  verificar('chave de deduplicação ignora as colunas do servidor e a ordem das colunas',
+    ctxGs.chaveDaLinha({ B: '2', A: '1', RecebidoEm: 'x', Chave: 'y' }) === ctxGs.chaveDaLinha({ A: '1', B: '2', Arquivo: 'z' })
+    && ctxGs.chaveDaLinha({ A: '1' }) !== ctxGs.chaveDaLinha({ A: '2' }));
+
+  const sg = require(path.join(__dirname, '..', 'js', 'sincronizacao-google.js'));
+  const cfgS = sg.configSincronizacao([{ Chave: 'envio_url', Valor: ' https://script.google.com/macros/s/ABC/exec ' }, { Chave: 'envio_segredo', Valor: 'frase longa' }, { Chave: 'email_ccih', Valor: 'ccih@x.br' }]);
+  verificar('config vem da aba meta (envio_url, envio_segredo, email_ccih) e só vale com URL …/exec + segredo',
+    sg.sincronizacaoConfigurada(cfgS) && !sg.sincronizacaoConfigurada({ url: 'https://exemplo.com', segredo: 'x' }) && !sg.sincronizacaoConfigurada({ url: cfgS.url, segredo: '' }));
+  verificar('URL de consulta leva segredo, tipo e desde (codificados)',
+    sg.urlDeConsulta(cfgS, 'higiene_maos', '2026-10-01') === 'https://script.google.com/macros/s/ABC/exec?segredo=frase%20longa&tipo=higiene_maos&desde=2026-10-01'
+    && !sg.urlDeConsulta(cfgS, 'ping', '').includes('desde'));
+  verificar('desde = última sincronização menos 1 dia de margem; sem última, tudo', sg.desdeComMargem('2026-10-03 08:15') === '2026-10-02' && sg.desdeComMargem('') === '');
+  verificar('os dois tipos sincronizáveis são higiene e decisão de ATB', sg.TIPOS_SINCRONIZAVEIS.map(t => t.tipo).join(',') === 'higiene_maos,decisao_atb');
+  const inst = sg.instalacaoParaMiniapps(cfgS);
+  const higieneInst = mp.injetarInstalacao(mp.montarMiniappParaPasta('higiene-maos.html', {}), inst);
+  verificar('miniapp gravado na pasta leva ENVIO_URL, ENVIO_SEGREDO e EMAIL_DESTINO da instalação',
+    higieneInst.includes("const ENVIO_URL = 'https://script.google.com/macros/s/ABC/exec';") && higieneInst.includes("const ENVIO_SEGREDO = 'frase longa';") && higieneInst.includes("const EMAIL_DESTINO = 'ccih@x.br';"));
+  verificar('sem configuração, placeholders ficam', mp.montarMiniappParaPasta('higiene-maos.html', {}, sg.instalacaoParaMiniapps({})).includes("const ENVIO_URL = '';"));
 }
 
 console.log('\n== 32. Culturas do protocolo de sepse ==');

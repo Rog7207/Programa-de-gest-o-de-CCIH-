@@ -6,6 +6,8 @@
 
 async function montarDecisaoATB(conteudo) {
   conteudo.append(el('h1', {}, 'Decisão de antibioticoterapia empírica'));
+  /* Decisões dos plantões chegam do celular direto na planilha do Google; daqui se puxa. */
+  try { const c = await cartaoSincronizarMiniapp('decisao_atb', 'decisao'); if (c) conteudo.append(c); } catch (e) { /* conveniência */ }
   /* QR do miniapp de celular (pedido da revisão tela a tela, 16/09/2026): mesma fonte e
      mesmo gerador do cartão de Distribuição — o QR daqui nunca diverge do de lá. */
   const miniapp = (typeof CATALOGO_MINIAPPS !== 'undefined' ? CATALOGO_MINIAPPS : [])

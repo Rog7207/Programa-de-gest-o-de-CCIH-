@@ -32,9 +32,10 @@ function montarDadosVisitaUTI(preparacao) {
 
 /* Monta a página: modelo + vocabulários desta instalação + bloco cifrado. `vocabulario` =
    { setores: [...], antibioticos: [...] } (config.vocabulario); vazio mantém o genérico. */
-function gerarHTMLVisitaUTI(cifrado, meta, vocabulario) {
+function gerarHTMLVisitaUTI(cifrado, meta, vocabulario, instalacao) {
   if (typeof VISITA_UTI_MODELO !== 'string') throw new Error('js/miniapps-modelos.js não carregado — rode node scripts/montar-miniapps.js');
   let html = injetarVocabularios(VISITA_UTI_MODELO, vocabulario);
+  if (instalacao && typeof injetarInstalacao === 'function') html = injetarInstalacao(html, instalacao);
   /* "</" dentro de JSON fecharia o <script> da página — escapa. */
   const json = o => JSON.stringify(o).replace(/<\//g, '<\\/');
   if (!html.includes('<!--LISTA-CIFRADA-->')) throw new Error('modelo do miniapp sem o marcador <!--LISTA-CIFRADA-->');

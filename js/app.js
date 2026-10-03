@@ -976,8 +976,77 @@ async function montarConfiguracoes(conteudo) {
     : el('p', { class: 'texto-suave' }, 'Nenhum sinônimo registrado ainda.');
   conteudo.append(vocabDiv, el('div', { class: 'cartao' }, el('h2', {}, 'Sinônimos (aliases)'), aliasesDiv));
   conteudo.append(montarDistribuicao());
+  conteudo.append(await montarPlanilhaGoogle());
   conteudo.append(montarMiniappsNaPasta());
   conteudo.append(montarPublicacaoWeb());
+}
+
+/* Planilha do Google dos miniapps (decisão de 03/10/2026): higiene das mãos e decisão de
+   ATB vão do celular direto para uma planilha no Drive da CCIH (Apps Script), e o
+   aplicativo puxa de lá — sem importar arquivo. URL e segredo ficam na aba meta do
+   config.xlsx, como o e-mail da CCIH. */
+async function montarPlanilhaGoogle() {
+  const cfg = await sincronizacaoGoogle.config();
+  const meta = (await lerBanco('config').catch(() => ({}))).meta || [];
+  const campo = (rotulo, valor, attrs) => {
+    const input = el('input', Object.assign({ type: 'text', value: valor || '' }, attrs || {}));
+    return [el('label', {}, rotulo, input), input];
+  };
+  const [lUrl, iUrl] = campo('URL do app da Web (termina em /exec)', cfg.url, { placeholder: 'https://script.google.com/macros/s/…/exec' });
+  const [lSeg, iSeg] = campo('Segredo (o mesmo da propriedade SEGREDO do script)', cfg.segredo, { type: 'password', autocomplete: 'new-password' });
+  const [lEmail, iEmail] = campo('E-mail da CCIH (destino quando o envio direto falha)', cfg.email, { placeholder: 'ccih@…' });
+  const status = el('p', { class: 'texto-suave' }, sincronizacaoConfigurada(cfg) ? 'Configurado.' : 'Ainda não configurado — os miniapps saem por CSV + e-mail e a entrada é pela aba Importar.');
+  const ultimas = el('ul', { class: 'texto-suave' }, TIPOS_SINCRONIZAVEIS.map(t => {
+    const em = (meta.find(l => l.Chave === 'sync_' + t.tipo + '_em') || {}).Valor || '';
+    return el('li', {}, `${t.rotulo}: ${em ? 'última sincronização ' + em : 'nunca sincronizado'}`);
+  }));
+  const salvar = async () => {
+    await sincronizacaoGoogle.gravarMeta({ envio_url: iUrl.value.trim(), envio_segredo: iSeg.value.trim(), email_ccih: iEmail.value.trim() });
+    status.className = 'texto-suave';
+    status.textContent = sincronizacaoConfigurada(await sincronizacaoGoogle.config())
+      ? 'Salvo no config.xlsx. Grave de novo os miniapps na pasta espelhada para levarem a URL e o segredo.'
+      : 'Salvo, mas incompleto: a URL precisa terminar em /exec e o segredo não pode ficar vazio.';
+  };
+  const resultado = el('div', {});
+  return el('div', { class: 'cartao' },
+    el('h2', {}, '☁ Planilha do Google (miniapps)'),
+    el('p', { class: 'texto-suave' },
+      'Higiene das mãos e decisão de ATB não carregam dado sensível: os miniapps enviam direto para um Apps Script que grava numa planilha do Google '
+      + 'no Drive da CCIH (espelhada, legível pela equipe), e o aplicativo puxa de lá o que chegou — mesma deduplicação da importação, sem arquivo. '
+      + 'O script está em scripts/apps-script-recebimento.gs, com o passo a passo de implantação no cabeçalho.'),
+    el('div', { class: 'linha-campos', style: 'flex-direction:column;align-items:stretch;gap:6px' }, lUrl, lSeg, lEmail),
+    el('div', { class: 'linha-botoes' },
+      el('button', { class: 'botao-primario', onclick: salvar }, 'Salvar'),
+      el('button', { class: 'botao-secundario', onclick: async () => {
+        await salvar(); status.textContent = 'Testando…';
+        try { const r = await sincronizacaoGoogle.testar(); status.className = r.ok ? 'texto-suave' : 'aviso-erro-texto'; status.textContent = r.mensagem; }
+        catch (e) { status.className = 'aviso-erro-texto'; status.textContent = 'Sem resposta do Apps Script: ' + e.message; }
+      } }, 'Testar conexão'),
+      el('button', { class: 'botao-secundario', onclick: async () => {
+        resultado.replaceChildren(el('p', { class: 'texto-suave' }, 'Sincronizando…'));
+        const r = await sincronizacaoGoogle.sincronizar();
+        resultado.replaceChildren(el('ul', {}, r.map(x => el('li', { class: x.ok ? '' : 'aviso-erro-texto' }, x.texto))));
+      } }, '☁ Sincronizar agora')),
+    status, ultimas, resultado);
+}
+
+/* Botão de sincronização para a aba de cada miniapp (Higiene, Decisão ATB): puxa da
+   planilha do Google e recarrega a aba. Só aparece com a planilha configurada. */
+async function cartaoSincronizarMiniapp(tipo, abaId) {
+  if (!(await sincronizacaoGoogle.configurada())) return null;
+  const info = TIPOS_SINCRONIZAVEIS.find(t => t.tipo === tipo) || { rotulo: tipo };
+  const status = el('span', { class: 'texto-suave' });
+  const meta = (await lerBanco('config').catch(() => ({}))).meta || [];
+  const em = (meta.find(l => l.Chave === 'sync_' + tipo + '_em') || {}).Valor || '';
+  status.textContent = em ? 'última sincronização ' + em : 'nunca sincronizado';
+  return el('div', { class: 'cartao', style: 'display:flex;gap:12px;align-items:center;flex-wrap:wrap' },
+    el('button', { class: 'botao-primario', onclick: async e => {
+      e.target.disabled = true; status.textContent = 'Sincronizando…';
+      const [r] = await sincronizacaoGoogle.sincronizar([tipo]);
+      if (r.ok) navegar(abaId);
+      else { status.className = 'aviso-erro-texto'; status.textContent = r.texto; e.target.disabled = false; }
+    } }, `☁ Sincronizar ${info.rotulo.toLowerCase()} com a planilha do Google`),
+    status);
 }
 
 /* Pasta espelhada + tablet Android da CCIH (decisão de 03/10/2026): os miniapps são
@@ -994,12 +1063,17 @@ function montarMiniappsNaPasta() {
       if (!publicacao.handle) await publicacao.escolher();
       infoPasta.textContent = 'pasta: ' + publicacao.handle.name;
       const vocab = { setores: config.vocabulario.setores, antibioticos: config.vocabulario.antibioticos };
+      /* URL do Apps Script e segredo (Planilha do Google) vão dentro dos miniapps: é o que
+         faz o envio cair direto na planilha em vez de pedir e-mail. */
+      const cfgSync = await sincronizacaoGoogle.config();
+      const instalacao = instalacaoParaMiniapps(cfgSync);
       const gravados = [];
       for (const m of MINIAPPS_PARA_PASTA) {
-        await publicacao.gravar(m.arquivo, montarMiniappParaPasta(m.arquivo, vocab));
+        await publicacao.gravar(m.arquivo, montarMiniappParaPasta(m.arquivo, vocab, instalacao));
         gravados.push(m.arquivo);
       }
-      status.textContent = `Gravados em "${publicacao.handle.name}": ${gravados.join(', ')} — com ${config.vocabulario.setores.length} setores e ${config.vocabulario.antibioticos.length} antibióticos do hospital. `
+      status.textContent = `Gravados em "${publicacao.handle.name}": ${gravados.join(', ')} — com ${config.vocabulario.setores.length} setores e ${config.vocabulario.antibioticos.length} antibióticos do hospital`
+        + (sincronizacaoConfigurada(cfgSync) ? ', enviando direto para a planilha do Google. ' : '. Sem planilha do Google configurada: o envio sai por CSV + e-mail. ')
         + 'No tablet, abra pelo app do Drive → ⋮ → Abrir com → Chrome.';
     } catch (e) {
       if (e && e.name !== 'AbortError') { status.className = 'aviso-erro-texto'; status.textContent = 'Erro ao gravar: ' + e.message; }

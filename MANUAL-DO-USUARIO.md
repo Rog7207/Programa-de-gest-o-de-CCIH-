@@ -285,6 +285,18 @@ hospital; a visita com a lista cifrada e a avaliação de antimicrobianos vão p
 pasta pelas suas telas. Nada fica em site público. (iPad não serve: o Safari não executa
 arquivo baixado — para iPhone/iPad existe a publicação na web, abaixo.)
 
+**Planilha do Google para higiene das mãos e decisão de ATB** (decisão de 03/10/2026):
+esses dois miniapps não carregam dado sensível, então enviam direto para um **Apps Script**
+que grava numa **planilha do Google no Drive da CCIH** (uma aba por tipo, sem duplicar
+reenvios; a equipe pode abrir a planilha a qualquer hora). O aplicativo **puxa de lá** o
+que chegou desde a última vez — botão **☁ Sincronizar** no topo das abas Higiene de mãos e
+Decisão ATB, ou "Sincronizar agora" em Configurações → **☁ Planilha do Google** — pela
+mesma ingestão e deduplicação da importação, sem arquivo. Configuração: URL do app da Web e
+segredo (gravados no config.xlsx); o script e o passo a passo de implantação estão em
+`scripts/apps-script-recebimento.gs`. Depois de configurar, grave de novo os miniapps na
+pasta espelhada: eles levam a URL e o segredo dentro. Sem a planilha, tudo segue como antes
+(CSV + e-mail + aba Importar).
+
 ---
 
 ## 7. Isolamentos

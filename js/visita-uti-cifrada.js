@@ -2,8 +2,9 @@
    CIFRADA com senha (mesmo esquema de avaliacao.js: AES-GCM, chave por PBKDF2). Pedido de
    03/10/2026: a visita acontece no celular, e o número digitado errado no miniapp fazia o
    paciente não casar na importação — com a lista, a enfermeira escolhe o leito e o
-   prontuário vem certo. O modelo da página é js/visita-uti-modelo.js, gerado por
-   scripts/montar-miniapps.js a partir de miniapps/fonte/visita-uti.html (fonte única).
+   prontuário vem certo. O modelo da página vem de js/miniapps-modelos.js, gerado por
+   scripts/montar-miniapps.js a partir de miniapps/fonte/visita-uti.html (fonte única);
+   os vocabulários entram por injetarVocabularios (js/miniapps-pasta.js).
    Usável no navegador e em Node. */
 
 const VISITA_UTI_ARQUIVO = 'visita-uti-cifrada.html';
@@ -32,16 +33,8 @@ function montarDadosVisitaUTI(preparacao) {
 /* Monta a página: modelo + vocabulários desta instalação + bloco cifrado. `vocabulario` =
    { setores: [...], antibioticos: [...] } (config.vocabulario); vazio mantém o genérico. */
 function gerarHTMLVisitaUTI(cifrado, meta, vocabulario) {
-  if (typeof VISITA_UTI_MODELO !== 'string') throw new Error('js/visita-uti-modelo.js não carregado — rode node scripts/montar-miniapps.js');
-  let html = VISITA_UTI_MODELO;
-  const paraArray = itens => itens.map(i => JSON.stringify(i)).join(', ');
-  const v = vocabulario || {};
-  if (v.setores && v.setores.length) {
-    html = html.replace(/const SETORES = \[[^\]]*\];/, () => `const SETORES = [${paraArray(v.setores)}];`);
-  }
-  if (v.antibioticos && v.antibioticos.length) {
-    html = html.replace(/const ATBS = \[[\s\S]*?\];/, () => `const ATBS = [${paraArray(v.antibioticos)}];`);
-  }
+  if (typeof VISITA_UTI_MODELO !== 'string') throw new Error('js/miniapps-modelos.js não carregado — rode node scripts/montar-miniapps.js');
+  let html = injetarVocabularios(VISITA_UTI_MODELO, vocabulario);
   /* "</" dentro de JSON fecharia o <script> da página — escapa. */
   const json = o => JSON.stringify(o).replace(/<\//g, '<\\/');
   if (!html.includes('<!--LISTA-CIFRADA-->')) throw new Error('modelo do miniapp sem o marcador <!--LISTA-CIFRADA-->');

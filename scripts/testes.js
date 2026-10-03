@@ -1509,11 +1509,26 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
 
   console.log('\n== 90. Miniapp da visita com a lista cifrada (fonte única) ==');
   /* O modelo é gerado por scripts/montar-miniapps.js a partir do fonte do miniapp. */
-  const modelo = require(path.join(__dirname, '..', 'js', 'visita-uti-modelo.js'));
+  const modelo = require(path.join(__dirname, '..', 'js', 'miniapps-modelos.js'));
+  global.MINIAPPS_MODELOS = modelo.MINIAPPS_MODELOS;
   global.VISITA_UTI_MODELO = modelo.VISITA_UTI_MODELO;
   const fonteMiniapp = fs.readFileSync(path.join(__dirname, '..', 'miniapps', 'fonte', 'visita-uti.html'), 'utf-8');
-  verificar('js/visita-uti-modelo.js é cópia fiel de miniapps/fonte/visita-uti.html (rode node scripts/montar-miniapps.js se falhar)',
+  verificar('js/miniapps-modelos.js: visita é cópia fiel de miniapps/fonte/visita-uti.html (rode node scripts/montar-miniapps.js se falhar)',
     modelo.VISITA_UTI_MODELO === fonteMiniapp);
+  const mp = require(path.join(__dirname, '..', 'js', 'miniapps-pasta.js'));
+  global.injetarVocabularios = mp.injetarVocabularios;
+  const protocoloFonte = fs.readFileSync(path.join(__dirname, '..', 'js', 'protocolo-atb.js'), 'utf-8');
+  verificar('modelos existem para visita, higiene e decisão de ATB (apps.html fica de fora)',
+    Object.keys(modelo.MINIAPPS_MODELOS).sort().join(',') === 'decisao-atb.html,higiene-maos.html,visita-uti.html');
+  verificar('decisão de ATB leva o protocolo embutido e sem antibiograma; higiene é cópia do fonte',
+    modelo.MINIAPPS_MODELOS['decisao-atb.html'].includes(protocoloFonte.slice(0, 400)) && !modelo.MINIAPPS_MODELOS['decisao-atb.html'].includes('ANTIBIOGRAMA_CONSOLIDADO =')
+    && modelo.MINIAPPS_MODELOS['higiene-maos.html'] === fs.readFileSync(path.join(__dirname, '..', 'miniapps', 'fonte', 'higiene-maos.html'), 'utf-8'));
+  verificar('modelos não carregam valores de instalação (placeholders de e-mail/segredo intactos)',
+    Object.values(modelo.MINIAPPS_MODELOS).every(h => !/const ENVIO_SEGREDO = '(?!troque-este-segredo')/.test(h) && !/const EMAIL_DESTINO = '(?!defina-o-email)/.test(h)));
+  const higieneHosp = mp.montarMiniappParaPasta('higiene-maos.html', { setores: ['CTI - Dr. Joaquim', 'Unidade 05 - Dr Otto'], antibioticos: ['Meropenem'] });
+  verificar('miniapp para a pasta recebe os setores do hospital (e ATBS só onde existe)',
+    higieneHosp.includes('const SETORES = ["CTI - Dr. Joaquim", "Unidade 05 - Dr Otto"];') && !higieneHosp.includes('const ATBS'), higieneHosp.match(/const SETORES = \[[^\]]*\]/)[0]);
+  verificar('lista dos miniapps para a pasta: visita, higiene, decisão', mp.MINIAPPS_PARA_PASTA.map(m => m.arquivo).join(',') === 'visita-uti.html,higiene-maos.html,decisao-atb.html');
   const vc = require(path.join(__dirname, '..', 'js', 'visita-uti-cifrada.js'));
   const dados = vc.montarDadosVisitaUTI(prep);
   verificar('payload leva só o necessário (sem evoluções inteiras, sem campos extras)',

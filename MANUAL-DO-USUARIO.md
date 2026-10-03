@@ -276,6 +276,15 @@ número digitado errado que impedia o paciente de casar na importação. A lista
 decifrada, fica só na memória da página; a planilha exportada continua levando só o
 prontuário. Sem senha/lista (versão pública do miniapp), tudo funciona como antes.
 
+**Tablet da CCIH + pasta espelhada** (decisão de 03/10/2026): em vez de site, a pasta de
+publicação é uma pasta espelhada com o Drive da CCIH, e um **tablet Android** dedicado abre
+os arquivos pelo Chrome (app do Drive → ⋮ → Abrir com → Chrome), offline, só com a senha.
+Em Configurações → **📁 Miniapps na pasta espelhada**, "Gravar miniapps na pasta" grava
+higiene das mãos, decisão de ATB e a visita sem lista, já com os setores e antibióticos do
+hospital; a visita com a lista cifrada e a avaliação de antimicrobianos vão para a mesma
+pasta pelas suas telas. Nada fica em site público. (iPad não serve: o Safari não executa
+arquivo baixado — para iPhone/iPad existe a publicação na web, abaixo.)
+
 ---
 
 ## 7. Isolamentos

@@ -976,7 +976,51 @@ async function montarConfiguracoes(conteudo) {
     : el('p', { class: 'texto-suave' }, 'Nenhum sinônimo registrado ainda.');
   conteudo.append(vocabDiv, el('div', { class: 'cartao' }, el('h2', {}, 'Sinônimos (aliases)'), aliasesDiv));
   conteudo.append(montarDistribuicao());
+  conteudo.append(montarMiniappsNaPasta());
   conteudo.append(montarPublicacaoWeb());
+}
+
+/* Pasta espelhada + tablet Android da CCIH (decisão de 03/10/2026): os miniapps são
+   gravados pelo próprio aplicativo na pasta de publicação, com os vocabulários do hospital,
+   e abertos no tablet pelo Chrome — sem hospedagem. */
+function montarMiniappsNaPasta() {
+  const status = el('p', { class: 'texto-suave' });
+  const infoPasta = el('span', { class: 'texto-suave' });
+  publicacao.restaurar().then(h => { infoPasta.textContent = h ? `pasta: ${h.name}` : 'pasta ainda não definida'; }).catch(() => {});
+  const gravarTodos = async () => {
+    status.className = 'texto-suave';
+    try {
+      if (!publicacao.handle) await publicacao.restaurar();
+      if (!publicacao.handle) await publicacao.escolher();
+      infoPasta.textContent = 'pasta: ' + publicacao.handle.name;
+      const vocab = { setores: config.vocabulario.setores, antibioticos: config.vocabulario.antibioticos };
+      const gravados = [];
+      for (const m of MINIAPPS_PARA_PASTA) {
+        await publicacao.gravar(m.arquivo, montarMiniappParaPasta(m.arquivo, vocab));
+        gravados.push(m.arquivo);
+      }
+      status.textContent = `Gravados em "${publicacao.handle.name}": ${gravados.join(', ')} — com ${config.vocabulario.setores.length} setores e ${config.vocabulario.antibioticos.length} antibióticos do hospital. `
+        + 'No tablet, abra pelo app do Drive → ⋮ → Abrir com → Chrome.';
+    } catch (e) {
+      if (e && e.name !== 'AbortError') { status.className = 'aviso-erro-texto'; status.textContent = 'Erro ao gravar: ' + e.message; }
+    }
+  };
+  return el('div', { class: 'cartao' },
+    el('h2', {}, '📁 Miniapps na pasta espelhada (tablet da CCIH)'),
+    el('p', { class: 'texto-suave' },
+      'Grava os miniapps na pasta de publicação — a mesma pasta espelhada com o Drive onde já vão a visita à UTI com a lista cifrada e a '
+      + 'avaliação de antimicrobianos. Um tablet Android dedicado abre os arquivos pelo Chrome e funciona offline; nenhum arquivo fica em site público. '
+      + 'Repita quando o vocabulário de setores/antibióticos mudar ou o aplicativo for atualizado.'),
+    el('ul', { class: 'texto-suave' }, MINIAPPS_PARA_PASTA.map(m => el('li', {}, `${m.titulo} — ${m.arquivo}`)),
+      el('li', {}, 'Visita à UTI com a lista cifrada — visita-uti-cifrada.html (aba UTI, "Gerar e publicar")'),
+      el('li', {}, 'Avaliação de antimicrobianos — avaliacao-antimicrobianos.html (aba Antibióticos, "Gerar e publicar")')),
+    el('div', { class: 'linha-botoes' },
+      el('button', { class: 'botao-primario', onclick: gravarTodos }, 'Gravar miniapps na pasta'),
+      el('button', { class: 'botao-secundario', onclick: async () => {
+        try { const h = await publicacao.escolher(); infoPasta.textContent = 'pasta: ' + h.name; } catch (e) { /* cancelado */ }
+      } }, 'Escolher pasta de publicação'),
+      infoPasta),
+    status);
 }
 
 /* Destino na web das páginas cifradas (miniapp da visita com a lista, avaliação remota):

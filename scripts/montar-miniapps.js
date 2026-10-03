@@ -61,35 +61,10 @@ if (process.argv.includes('--com-antibiograma')) {
   catch (e) { console.log('(sem antibiograma-consolidado.json — rode node scripts/consolidar-antibiograma.js antes)'); }
 } else console.log('decisao-atb: protocolo puro (use --com-antibiograma para embutir o antibiograma local)');
 
-/* O miniapp da visita à UTI também é gerado PELO APLICATIVO (aba UTI → "miniapp da visita
-   de hoje"), com a lista dos leitos cifrada dentro. Para o aplicativo não carregar uma cópia
-   divergente do miniapp, o fonte vira uma constante em js/visita-uti-modelo.js — gerado
-   aqui, a cada montagem, a partir do MESMO arquivo. Vai sem os valores da instalação: o
-   aplicativo injeta setores e antibióticos do próprio config.xlsx na hora de gerar. */
-{
-  const fonteVisita = fs.readFileSync(path.join(pastaFonte, 'visita-uti.html'), 'utf-8');
-  const modelo = '/* GERADO por scripts/montar-miniapps.js a partir de miniapps/fonte/visita-uti.html — não editar à mão.\n'
-    + '   Modelo do miniapp de visita à UTI que o aplicativo preenche com a lista cifrada dos leitos (js/visita-uti-cifrada.js). */\n'
-    + 'const VISITA_UTI_MODELO = ' + JSON.stringify(fonteVisita) + ';\n'
-    + "if (typeof module !== 'undefined' && module.exports) module.exports = { VISITA_UTI_MODELO };\n";
-  fs.writeFileSync(path.join(raiz, 'js', 'visita-uti-modelo.js'), modelo);
-  console.log('gerado: js/visita-uti-modelo.js', `(${Math.round(modelo.length / 1024)} KB)`);
-}
-
-for (const nome of fs.readdirSync(pastaFonte).filter(n => n.endsWith('.html'))) {
-  let fonte = fs.readFileSync(path.join(pastaFonte, nome), 'utf-8');
-  for (const [chave, valor] of Object.entries(configLocal)) {
-    if (chave === 'PASTA_DADOS') continue;
-    fonte = fonte.replace(new RegExp(`const ${chave} = '[^']*';`), `const ${chave} = '${valor}';`);
-  }
-  if (setoresHospital.length) {
-    fonte = fonte.replace(/const SETORES = \[[^\]]*\];/, `const SETORES = [${paraArray(setoresHospital)}];`);
-  }
-  if (atbsHospital.length && /const ATBS = \[/.test(fonte)) {
-    /* A lista do hospital substitui a genérica; o "Outro (digitar)" continua existindo
-       para o antibiótico não padronizado. */
-    fonte = fonte.replace(/const ATBS = \[[\s\S]*?\];/, `const ATBS = [${paraArray(atbsHospital)}];`);
-  }
+/* Página pronta SEM nada desta instalação: bibliotecas e o motor do protocolo embutidos,
+   mas placeholders de e-mail/segredo e vocabulários genéricos. É o que vira "modelo" para
+   o aplicativo (abaixo) e a base sobre a qual os valores locais são aplicados. */
+function montarBase(fonte) {
   let montado = fonte.includes('<!--SHEETJS-->')
     ? fonte.replace('<!--SHEETJS-->', () => '<script>' + lib + '</script>')
     : fonte;
@@ -112,8 +87,55 @@ for (const nome of fs.readdirSync(pastaFonte).filter(n => n.endsWith('.html'))) 
   if (montado.includes('<!--DATA-->')) {
     montado = montado.replace('<!--DATA-->', new Date().toISOString().slice(0, 10).split('-').reverse().join('/'));
   }
-  const destino = publico ? path.join(raiz, 'miniapps', 'publico') : path.join(raiz, 'miniapps');
-  fs.mkdirSync(destino, { recursive: true });
+  return montado;
+}
+
+/* Valores desta instalação por cima da base: e-mail/segredo do config-local e os
+   vocabulários do hospital. */
+function aplicarInstalacao(base) {
+  let fonte = base;
+  for (const [chave, valor] of Object.entries(configLocal)) {
+    if (chave === 'PASTA_DADOS') continue;
+    fonte = fonte.replace(new RegExp(`const ${chave} = '[^']*';`), `const ${chave} = '${valor}';`);
+  }
+  if (setoresHospital.length) {
+    fonte = fonte.replace(/const SETORES = \[[^\]]*\];/, `const SETORES = [${paraArray(setoresHospital)}];`);
+  }
+  if (atbsHospital.length && /const ATBS = \[/.test(fonte)) {
+    /* A lista do hospital substitui a genérica; o "Outro (digitar)" continua existindo
+       para o antibiótico não padronizado. */
+    fonte = fonte.replace(/const ATBS = \[[\s\S]*?\];/, `const ATBS = [${paraArray(atbsHospital)}];`);
+  }
+  return fonte;
+}
+
+/* Os miniapps também são GRAVADOS PELO APLICATIVO na pasta de publicação (espelhada com o
+   Drive, de onde o tablet da CCIH os abre) — e o da visita à UTI ganha a lista cifrada dos
+   leitos. Para o aplicativo não carregar cópia divergente, as páginas-base viram constantes
+   em js/miniapps-modelos.js, geradas aqui a cada montagem a partir dos MESMOS fontes. Vão
+   sem valores da instalação: o aplicativo injeta setores e antibióticos do próprio
+   config.xlsx na hora de gravar (apps.html, a página de QR, fica de fora: não é miniapp). */
+const modelos = {};
+const saidas = [];
+for (const nome of fs.readdirSync(pastaFonte).filter(n => n.endsWith('.html'))) {
+  const base = montarBase(fs.readFileSync(path.join(pastaFonte, nome), 'utf-8'));
+  if (nome !== 'apps.html') modelos[nome] = base;
+  saidas.push([nome, aplicarInstalacao(base)]);
+}
+{
+  const texto = '/* GERADO por scripts/montar-miniapps.js a partir de miniapps/fonte/*.html — não editar à mão.\n'
+    + '   Páginas-base dos miniapps (bibliotecas e protocolo embutidos, sem valores da instalação) que o\n'
+    + '   aplicativo grava na pasta de publicação (js/miniapps-pasta.js) e, no caso da visita à UTI,\n'
+    + '   preenche com a lista cifrada dos leitos (js/visita-uti-cifrada.js). */\n'
+    + 'const MINIAPPS_MODELOS = ' + JSON.stringify(modelos, null, 0) + ';\n'
+    + "const VISITA_UTI_MODELO = MINIAPPS_MODELOS['visita-uti.html'];\n"
+    + "if (typeof module !== 'undefined' && module.exports) module.exports = { MINIAPPS_MODELOS, VISITA_UTI_MODELO };\n";
+  fs.writeFileSync(path.join(raiz, 'js', 'miniapps-modelos.js'), texto);
+  console.log('gerado: js/miniapps-modelos.js', `(${Math.round(texto.length / 1024)} KB: ${Object.keys(modelos).join(', ')})`);
+}
+const destino = publico ? path.join(raiz, 'miniapps', 'publico') : path.join(raiz, 'miniapps');
+fs.mkdirSync(destino, { recursive: true });
+for (const [nome, montado] of saidas) {
   fs.writeFileSync(path.join(destino, nome), montado);
   console.log('montado: ' + path.relative(raiz, path.join(destino, nome)), `(${Math.round(montado.length / 1024)} KB)`);
 }

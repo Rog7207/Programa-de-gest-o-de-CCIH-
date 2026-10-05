@@ -1306,15 +1306,103 @@ const EVOLUCAO_UTI_HORAS = 48;
    DETERMINÍSTICA, com limites de alteração fixos; sinais qualitativos (taquicárdico,
    hipotenso, dessaturando, em droga vasoativa) entram sem valor. Negações da evolução
    ("afebril") são tratadas antes. Não substitui o monitor: é um lembrete para a visita. */
+/* Limites de "alterado" (adulto), usados tanto no texto da evolução quanto nas medidas
+   estruturadas do relatório de sinais vitais do Tasy. */
+const LIMITES_VITAIS = {
+  Tax: v => v >= 37.8 || v < 35,
+  FC: v => v > 100 || v < 50,
+  FR: v => v > 22 || v < 10,
+  PA: v => v < 90 || v > 180,
+  PAM: v => v < 65,
+  SatO2: v => v < 92
+};
 const SINAIS_VITAIS = [
   /* [sinal, regex (grupo 1 = valor), alterado(valor), unidade] */
-  ['Tax', /\b(?:tax|t\s?ax|temp(?:eratura)?|t)\b\s*[:=]?\s*(3\d(?:[,.]\d)?)\s*(?:o?c|º|°)?/, v => v >= 37.8 || v < 35, '°C'],
-  ['FC', /\bfc\b\s*[:=]?\s*(\d{2,3})\b/, v => v > 100 || v < 50, 'bpm'],
-  ['FR', /\bfr\b\s*[:=]?\s*(\d{1,2})\b/, v => v > 22 || v < 10, 'irpm'],
-  ['PA', /\bpa\b\s*[:=]?\s*(\d{2,3})\s*[x\/]\s*\d{2,3}\b/, v => v < 90 || v > 180, 'mmHg (sistólica)'],
-  ['PAM', /\bpam\b\s*[:=]?\s*(\d{2,3})\b/, v => v < 65, 'mmHg'],
-  ['SatO2', /\b(?:sat(?:o2|po2|uracao)?|spo2)\b\s*[:=]?\s*(\d{2,3})\s*%?/, v => v < 92, '%']
+  ['Tax', /\b(?:tax|t\s?ax|temp(?:eratura)?|t)\b\s*[:=]?\s*(3\d(?:[,.]\d)?)\s*(?:o?c|º|°)?/, LIMITES_VITAIS.Tax, '°C'],
+  ['FC', /\bfc\b\s*[:=]?\s*(\d{2,3})\b/, LIMITES_VITAIS.FC, 'bpm'],
+  ['FR', /\bfr\b\s*[:=]?\s*(\d{1,2})\b/, LIMITES_VITAIS.FR, 'irpm'],
+  ['PA', /\bpa\b\s*[:=]?\s*(\d{2,3})\s*[x\/]\s*\d{2,3}\b/, LIMITES_VITAIS.PA, 'mmHg (sistólica)'],
+  ['PAM', /\bpam\b\s*[:=]?\s*(\d{2,3})\b/, LIMITES_VITAIS.PAM, 'mmHg'],
+  ['SatO2', /\b(?:sat(?:o2|po2|uracao)?|spo2)\b\s*[:=]?\s*(\d{2,3})\s*%?/, LIMITES_VITAIS.SatO2, '%']
 ];
+
+/* ---- Sinais vitais estruturados (relatório 2411 do Tasy, 04/10/2026) ----
+   Uma linha por medida: atendimento, setor, data (sem hora), PA sistólica/diastólica, PAM,
+   FC, FR, temperatura, SatO2, peso, situação (A/I) e data de inativação. É o dado do
+   monitor/aferição — tem precedência sobre o que foi lido do texto da evolução. */
+const SINAIS_VITAIS_RETENCAO_DIAS = 7;
+function lerSinaisVitaisTasy(matriz) {
+  const linhas = matriz || [];
+  let cab = -1, col = {};
+  for (let i = 0; i < Math.min(linhas.length, 10); i++) {
+    const nomes = (linhas[i] || []).map(c => normalizarTexto(c));
+    if (nomes.includes('nratendimento') && (nomes.includes('qtpasistolica') || nomes.includes('dtsinalvital'))) {
+      cab = i;
+      nomes.forEach((n, j) => { col[n] = j; });
+      break;
+    }
+  }
+  if (cab < 0) return { reconhecido: false, medidas: [], problemas: [] };
+  const bruto = (l, nome) => col[nome] === undefined ? '' : l[col[nome]];
+  const texto = (l, nome) => String(bruto(l, nome) == null ? '' : bruto(l, nome)).trim();
+  const numero = (l, nome) => { const v = String(bruto(l, nome) == null ? '' : bruto(l, nome)).replace(',', '.').trim(); const n = Number(v); return v !== '' && isFinite(n) ? n : ''; };
+  const problemas = [], medidas = [];
+  for (const l of linhas.slice(cab + 1)) {
+    const atendimento = texto(l, 'nratendimento').replace(/\D/g, '');
+    if (!atendimento) continue;
+    if (texto(l, 'sit') === 'I' || texto(l, 'dtinativacao')) continue;   /* medida inativada não vale */
+    const b = bruto(l, 'dtsinalvital');
+    const data = normalizarData(typeof b === 'number' ? b : texto(l, 'dtsinalvital'));
+    if (!data) { problemas.push('medida sem data no atendimento ' + atendimento); continue; }
+    medidas.push({
+      ID_SinalVital: texto(l, 'cdpk') || (atendimento + '|' + data + '|' + medidas.length),
+      Atendimento: atendimento, Prontuario: '', Setor: texto(l, 'dssetoratendimento'), DataMedida: data,
+      PAS: numero(l, 'qtpasistolica'), PAD: numero(l, 'qtpadiastolica'), PAM: numero(l, 'qtpam'),
+      FC: numero(l, 'qtfreqcardiaca'), FR: numero(l, 'qtfreqresp'), Temp: numero(l, 'qttemp'),
+      SatO2: numero(l, 'qtsaturacaoo2'), Peso: numero(l, 'qtpeso')
+    });
+  }
+  const datas = medidas.map(m => m.DataMedida).sort();
+  return { reconhecido: true, medidas, problemas, atendimentos: new Set(medidas.map(m => m.Atendimento)).size,
+    periodo: datas.length ? { de: datas[0], ate: datas[datas.length - 1] } : null };
+}
+
+/* Alterações de uma medida estruturada: ["PA 85", "FC 118", …] pelos mesmos limites do
+   texto. Com `opcoes.neoPed` só temperatura e saturação são julgadas (limites de adulto). */
+function alteracoesDaMedida(m, opcoes) {
+  const neoPed = Boolean(opcoes && opcoes.neoPed);
+  const alterados = [];
+  const avaliar = (sinal, valor) => {
+    if (valor === '' || valor == null || !isFinite(Number(valor))) return;
+    if (neoPed && SINAIS_SO_ADULTO.has(sinal)) return;
+    if (LIMITES_VITAIS[sinal](Number(valor))) alterados.push(`${sinal} ${Number(valor)}`);
+  };
+  avaliar('Tax', m.Temp); avaliar('FC', m.FC); avaliar('FR', m.FR); avaliar('PA', m.PAS); avaliar('PAM', m.PAM); avaliar('SatO2', m.SatO2);
+  return alterados;
+}
+
+/* Medidas novas + guardadas: a mesma medida (ID do Tasy) não entra duas vezes (a nova
+   vence), e só ficam as dos últimos SINAIS_VITAIS_RETENCAO_DIAS dias — o banco é uma foto
+   operacional, não histórico. Resolve o prontuário pelo atendimento, para a ficha achar. */
+function mesclarSinaisVitais(novas, antigas, bancos, hoje) {
+  const dia = String(hoje || '').slice(0, 10);
+  const corte = new Date(Date.parse(dia + 'T00:00:00Z') - SINAIS_VITAIS_RETENCAO_DIAS * 864e5).toISOString().slice(0, 10);
+  const pronDoAt = new Map();
+  for (const i of (((bancos || {}).pacientes || {}).internacoes || [])) {
+    const a = normalizarProntuario(i.Atendimento), p = normalizarProntuario(i.Prontuario);
+    if (a && p) pronDoAt.set(a, p);
+  }
+  const porId = new Map();
+  for (const m of (antigas || [])) porId.set(String(m.ID_SinalVital), m);
+  for (const m of (novas || [])) porId.set(String(m.ID_SinalVital), m);
+  const medidas = [];
+  for (const m of porId.values()) {
+    if (String(m.DataMedida || '').slice(0, 10) < corte) continue;
+    medidas.push({ ...m, Prontuario: normalizarProntuario(m.Prontuario) || pronDoAt.get(normalizarProntuario(m.Atendimento)) || '' });
+  }
+  medidas.sort((a, b) => String(a.Atendimento).localeCompare(String(b.Atendimento)) || String(a.DataMedida).localeCompare(String(b.DataMedida)));
+  return medidas;
+}
 /* [rótulo, regex, sinal quantitativo que ele repete] — "pico febril" com "Tax 39" na mesma
    evolução é UMA alteração, não duas. */
 const SINAIS_VITAIS_QUALITATIVOS = [
@@ -4301,7 +4389,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome, resolverProntuarioPorNomeEData, NAO_ANTIMICROBIANO, pareceNomeTruncado,
     enriquecerCirurgia, classificarProcedimentoNHSN, NHSN_CATEGORIAS, categoriasDeProcedimento, categoriaDoProcedimento, CATEGORIA_SEM_CLASSIFICACAO, contaminacaoPresumida, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, mesclarEvolucoes, sinaisDeInfeccaoNaEvolucao, extrairTemplateEvolucao, topografiaSugeridaPorSinais, EVOLUCAO_SILENCIO_DIAS, sinaisVitaisNaEvolucao, EVOLUCAO_UTI_HORAS, lerFotoInternados, aplicarFotoInternados, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, mesclarEvolucoes, sinaisDeInfeccaoNaEvolucao, extrairTemplateEvolucao, topografiaSugeridaPorSinais, EVOLUCAO_SILENCIO_DIAS, sinaisVitaisNaEvolucao, EVOLUCAO_UTI_HORAS, LIMITES_VITAIS, lerSinaisVitaisTasy, alteracoesDaMedida, mesclarSinaisVitais, SINAIS_VITAIS_RETENCAO_DIAS, lerFotoInternados, aplicarFotoInternados, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

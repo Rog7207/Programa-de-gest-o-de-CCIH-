@@ -1254,8 +1254,10 @@ async function montarUti(conteudo) {
             p.isolamento ? selo('🚧 ' + p.isolamento, 'selo-alerta') : null,
             p.irasAberta ? selo('🩺 IRAS em investigação: ' + p.irasAberta, 'selo-alerta') : null,
             p.sinaisInfeccao ? selo('⚠ evolução sugere: ' + p.sinaisInfeccao, 'selo-alerta') : null);
-          const vitais = el('td', { class: p.vitais.length ? 'aviso-erro-texto' : 'texto-suave' },
-            p.vitais.length ? p.vitais.map(v => `${v.sinal} (${v.data.slice(5).split('-').reverse().join('/')})`).join(' · ') : '—');
+          const vitais = el('td', { class: p.vitais.length ? 'aviso-erro-texto' : 'texto-suave',
+            title: p.vitaisFonte === 'medidas' ? `${p.medidas48h} medida(s) do relatório de sinais vitais` : p.vitaisFonte === 'texto' ? 'lido do texto das evoluções (sem medidas importadas)' : 'sem medidas nem evolução na janela' },
+            (p.vitaisFonte === 'medidas' ? '📈 ' : p.vitaisFonte === 'texto' ? '✎ ' : ''),
+            p.vitais.length ? p.vitais.map(v => `${v.sinal} (${v.data.slice(5).split('-').reverse().join('/')})`).join(' · ') : (p.vitaisFonte === 'medidas' ? 'normais' : '—'));
           const evo = p.ultimaEvolucaoMedica
             ? el('td', {}, el('details', {},
               el('summary', {}, `${p.ultimaEvolucaoMedica.data}${p.ultimaEvolucaoMedica.autor ? ' · ' + p.ultimaEvolucaoMedica.autor : ''}`),
@@ -1333,7 +1335,7 @@ async function montarUti(conteudo) {
       el('div', { class: 'linha-campos' }, el('label', {}, 'Setor: ', selSetorLeitos)),
       alvoLeitos,
       el('p', { class: 'texto-suave' },
-        'Sinais vitais vêm do TEXTO das evoluções (PA, FC, FR, Tax, SatO2, droga vasoativa…), não do monitor — confirme à beira do leito.'),
+        '📈 = medidas do relatório de sinais vitais do Tasy (2411); ✎ = lido do texto das evoluções quando não há medida importada. Confirme à beira do leito.'),
       el('h3', {}, '📱 Miniapp da visita de hoje (com esta lista, cifrada)'),
       el('div', { class: 'linha-campos' },
         campoSenhaVisita,

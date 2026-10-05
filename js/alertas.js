@@ -847,6 +847,10 @@ function prepararVisitaUTI(bancos, setor, hoje) {
   };
   const evoPorAtd = porChave((bancos.evolucoes || {}).evolucoes, 'Atendimento');
   const evoPorPron = porChave((bancos.evolucoes || {}).evolucoes, 'Prontuario');
+  /* Medidas estruturadas (relatório 2411): quando existem na janela, mandam; o texto da
+     evolução só entra onde não há medida. */
+  const svPorAtd = porChave((bancos.evolucoes || {}).sinais_vitais, 'Atendimento');
+  const svPorPron = porChave((bancos.evolucoes || {}).sinais_vitais, 'Prontuario');
   const prescPorAtd = porChave((bancos.antibioticos || {}).prescricoes, 'Atendimento');
   const prescPorPron = porChave((bancos.antibioticos || {}).prescricoes, 'Prontuario');
   const dispPorPron = porChave((bancos.dispositivos || {}).dispositivos, 'Prontuario');
@@ -866,10 +870,19 @@ function prepararVisitaUTI(bancos, setor, hoje) {
     const vitais = [];
     /* Limites de adulto não valem na UTI Neonatal/Pediátrica (FC 150 é normal num RN). */
     const opcoesVitais = { neoPed: ehNeoPed(i.SetorAtual) };
-    for (const e of evolucoes) {
-      if (String(e.DataEvolucao).slice(0, 10) < corteVitais) continue;
-      const r = (typeof sinaisVitaisNaEvolucao === 'function') ? sinaisVitaisNaEvolucao(e.Texto, opcoesVitais) : { alterados: [], medidas: [] };
-      for (const a of r.alterados) vitais.push({ data: String(e.DataEvolucao).slice(0, 10), sinal: a, autor: e.Autor || '' });
+    const medidas = juntar(svPorAtd.get(atd), svPorPron.get(pron)).filter(m => String(m.DataMedida).slice(0, 10) >= corteVitais)
+      .sort((a, b) => String(b.DataMedida).localeCompare(String(a.DataMedida)));
+    let vitaisFonte = 'nenhuma';
+    if (medidas.length && typeof alteracoesDaMedida === 'function') {
+      vitaisFonte = 'medidas';
+      for (const m of medidas) for (const a of alteracoesDaMedida(m, opcoesVitais)) vitais.push({ data: String(m.DataMedida).slice(0, 10), sinal: a, autor: 'medido' });
+    } else {
+      for (const e of evolucoes) {
+        if (String(e.DataEvolucao).slice(0, 10) < corteVitais) continue;
+        const r = (typeof sinaisVitaisNaEvolucao === 'function') ? sinaisVitaisNaEvolucao(e.Texto, opcoesVitais) : { alterados: [], medidas: [] };
+        if (r.medidas.length || r.alterados.length) vitaisFonte = 'texto';
+        for (const a of r.alterados) vitais.push({ data: String(e.DataEvolucao).slice(0, 10), sinal: a, autor: e.Autor || '' });
+      }
     }
     const vitaisUnicos = [...new Map(vitais.map(v => [v.sinal + '|' + v.data, v])).values()];
     const prescricoes = juntar(prescPorAtd.get(atd), prescPorPron.get(pron))
@@ -895,8 +908,9 @@ function prepararVisitaUTI(bancos, setor, hoje) {
       sinaisInfeccao,
       ultimaEvolucaoMedica: medicas[0] ? { data: String(medicas[0].DataEvolucao).slice(0, 10), autor: medicas[0].Autor || '', texto: medicas[0].Texto || '' } : null,
       ultimaEvolucao: evolucoes[0] ? { data: String(evolucoes[0].DataEvolucao).slice(0, 10), autor: evolucoes[0].Autor || '', categoria: evolucoes[0].Categoria || '', texto: evolucoes[0].Texto || '' } : null,
-      vitais: vitaisUnicos
+      vitais: vitaisUnicos, vitaisFonte, medidas48h: medidas.length
     };
   }).sort((a, b) => a.setor.localeCompare(b.setor) || ordemLeito(a.leito) - ordemLeito(b.leito) || a.leito.localeCompare(b.leito));
-  return { setores, pacientes, semEvolucao: pacientes.filter(p => !p.ultimaEvolucao).length, comVitaisAlterados: pacientes.filter(p => p.vitais.length).length };
+  return { setores, pacientes, semEvolucao: pacientes.filter(p => !p.ultimaEvolucao).length, comVitaisAlterados: pacientes.filter(p => p.vitais.length).length,
+    comMedidas: pacientes.filter(p => p.vitaisFonte === 'medidas').length };
 }

@@ -77,7 +77,10 @@ const ESQUEMAS = {
   evolucoes: {
     arquivo: 'evolucoes.xlsx',
     abas: {
-      evolucoes: ['ID_Evolucao', 'Atendimento', 'Prontuario', 'Setor', 'Categoria', 'DataEvolucao', 'Autor', 'Texto', 'SinaisInfeccao', 'CriadoPor', 'CriadoEm']
+      evolucoes: ['ID_Evolucao', 'Atendimento', 'Prontuario', 'Setor', 'Categoria', 'DataEvolucao', 'Autor', 'Texto', 'SinaisInfeccao', 'CriadoPor', 'CriadoEm'],
+      /* Sinais vitais estruturados (relatório 2411 do Tasy): uma linha por medida, foto dos
+         últimos 7 dias. */
+      sinais_vitais: ['ID_SinalVital', 'Atendimento', 'Prontuario', 'Setor', 'DataMedida', 'PAS', 'PAD', 'PAM', 'FC', 'FR', 'Temp', 'SatO2', 'Peso', 'CriadoPor', 'CriadoEm']
     }
   },
   higiene_maos: {
@@ -200,6 +203,7 @@ const VOCAB_APLICACAO = {
     ['pacientes', 'internacoes', 'SetorAtual'], ['pacientes', 'obitos', 'Setor'], ['iras', 'casos', 'Setor'],
     ['isolamentos', 'precaucoes', 'Setor'], ['uti', 'visitas', 'Setor'], ['uti', 'avaliacoes_atb', 'Setor'],
     ['evolucoes', 'evolucoes', 'Setor'],
+    ['evolucoes', 'sinais_vitais', 'Setor'],
     ['higiene_maos', 'observacoes', 'Setor'], ['higiene_maos', 'consumo_alcool', 'Setor'],
     ['surtos', 'investigacoes', 'Setor'],
     ['denominadores', 'censo_setor', 'Setor'], ['denominadores', 'dispositivos_dia', 'Setor'],

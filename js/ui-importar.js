@@ -311,6 +311,8 @@ async function processarArquivo(arquivo, codificacao, opcoesAba) {
           if (evolucoes.reconhecido && evolucoes.evolucoes.length) { await telaEvolucoes(arquivo, evolucoes); return; }
           const foto = lerFotoInternados(matrizCrua);
           if (foto.reconhecido && foto.linhas.length) { await telaFotoInternados(arquivo, foto); return; }
+          const vitais = lerSinaisVitaisTasy(matrizCrua);
+          if (vitais.reconhecido && vitais.medidas.length) { await telaSinaisVitais(arquivo, vitais); return; }
         }
       }
     }
@@ -496,6 +498,57 @@ async function gravarDispositivosDia(abas, arquivo, setor) {
   } catch (e) {
     imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao gravar: ' + e.message));
   }
+}
+
+/* Sinais vitais do Tasy (relatório 2411, 04/10/2026): foto operacional dos últimos 7 dias,
+   uma linha por medida. A mesma medida reimportada não duplica; o que passou de 7 dias cai.
+   É o que a preparação da visita à UTI usa como "vitais alterados" (o texto da evolução
+   fica como complemento). */
+async function telaSinaisVitais(arquivo, leitura) {
+  let bPac, bEvo;
+  try {
+    [bPac, bEvo] = await Promise.all([lerBanco('pacientes'), lerBanco('evolucoes').catch(() => ({ evolucoes: [], sinais_vitais: [] }))]);
+  } catch (e) {
+    imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message));
+    return;
+  }
+  const previa = mesclarSinaisVitais(leitura.medidas, bEvo.sinais_vitais || [], { pacientes: bPac }, hojeISO());
+  const idsNovos = new Set(leitura.medidas.map(m => String(m.ID_SinalVital)));
+  const jaExistiam = (bEvo.sinais_vitais || []).filter(m => idsNovos.has(String(m.ID_SinalVital))).length;
+  const emUTI = leitura.medidas.filter(m => ehSetorDeUTI(m.Setor));
+  const alteradas = leitura.medidas.filter(m => alteracoesDaMedida(m, { neoPed: /neonat|pedi[aá]tr/i.test(m.Setor) }).length).length;
+  imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
+    el('h2', {}, 'Sinais vitais do Tasy (relatório 2411)'),
+    el('p', {}, `Reconheci ${arquivo.name} como o relatório de sinais vitais: ${fmtInt(leitura.medidas.length)} medidas ativas de ${fmtInt(leitura.atendimentos)} atendimentos`
+      + (leitura.periodo ? `, de ${leitura.periodo.de.split('-').reverse().join('/')} a ${leitura.periodo.ate.split('-').reverse().join('/')}` : '') + '.'),
+    el('p', {}, `Em UTI/CTI: ${fmtInt(emUTI.length)} medidas de ${fmtInt(new Set(emUTI.map(m => m.Atendimento)).size)} atendimentos. `
+      + `${fmtInt(alteradas)} medidas com algum sinal alterado (limites de adulto; na UTI Neo/Ped só temperatura e saturação).`),
+    el('p', { class: 'texto-suave' }, `Depois de gravar, o banco fica com ${fmtInt(previa.length)} medidas dos últimos ${SINAIS_VITAIS_RETENCAO_DIAS} dias`
+      + (jaExistiam ? ` (${fmtInt(jaExistiam)} desta leitura já estavam gravadas e são substituídas)` : '') + '. O relatório não traz a hora da medida — só o dia.'),
+    leitura.problemas.length ? el('details', {}, el('summary', {}, `${fmtInt(leitura.problemas.length)} linha(s) com problema`),
+      el('ul', {}, leitura.problemas.slice(0, 20).map(p => el('li', {}, p)))) : null,
+    el('div', { class: 'linha-botoes' },
+      el('button', { class: 'botao-primario', onclick: async () => {
+        imp.detalhes.replaceChildren(el('div', { class: 'cartao' }, el('p', {}, 'Gravando…')));
+        try {
+          const agora = new Date().toISOString().slice(0, 16).replace('T', ' ');
+          const total = await comTrava(['evolucoes'], async () => {
+            const banco = await lerBanco('evolucoes');
+            banco.sinais_vitais = mesclarSinaisVitais(leitura.medidas, banco.sinais_vitais || [], { pacientes: bPac }, hojeISO())
+              .map(m => ({ ...m, CriadoPor: m.CriadoPor || app.usuario || '', CriadoEm: m.CriadoEm || agora }));
+            await gravarBanco('evolucoes', banco);
+            return banco.sinais_vitais.length;
+          });
+          await arquivarOriginal(arquivo);
+          imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
+            el('h2', {}, 'Importado'),
+            el('p', {}, `${fmtInt(total)} medidas dos últimos ${SINAIS_VITAIS_RETENCAO_DIAS} dias no banco. A aba UTI (leito a leito) e o miniapp da visita passam a usar o dado medido.`)));
+        } catch (e) {
+          imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao gravar: ' + e.message));
+        }
+      } }, 'Gravar sinais vitais'),
+      ' ',
+      el('button', { onclick: () => { imp.forcarPlanilhaComum = true; processarArquivo(arquivo, 'auto'); } }, 'Não é isso — ler como planilha comum'))));
 }
 
 /* Evoluções do Tasy: foto operacional. A tela mostra o que fica e o que cai pela regra de

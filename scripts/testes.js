@@ -1507,6 +1507,46 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
   verificar('P3: sem evolução na foto conta em semEvolucao', p3.ultimaEvolucao === null && prep.semEvolucao === 1 && prep.comVitaisAlterados === 1);
   verificar('filtro por setor', alertas.prepararVisitaUTI(bancos, 'UTI Neonatal / Pediátrica', hoje).pacientes.length === 1);
 
+  console.log('\n== 95. Sinais vitais estruturados (relatório 2411 do Tasy) ==');
+  const cabSV = ['Cd cnpj', 'Cd pk', 'Cd estabelecimento', 'Cd setor atendimento', 'Ds setor atendimento', 'Nr atendimento', 'Dt atualizacao', 'Dt sinal vital', 'Dt referencia', 'Dt liberacao',
+    'Qt pa sistolica', 'Qt pa diastolica', 'Qt pam', 'Qt freq cardiaca', 'Qt freq resp', 'Qt temp', 'Qt saturacao o2', 'Qt peso', 'Ie unid med peso', 'Dt inativacao', 'Sit'];
+  const matrizSV = [cabSV,
+    ['x', 1, 13, 60, 'CTI - Dr. Joaquim', '111', 46296, 46296, 46296, 46296, 85, 50, 60, 118, 30, 38.4, 89, '', 'Kg', '', 'A'],
+    ['x', 2, 13, 60, 'CTI - Dr. Joaquim', '111', 46297, 46297, 46297, 46297, 120, 80, 95, 84, 16, 36.5, 97, '', 'Kg', '', 'A'],
+    ['x', 3, 13, 60, 'CTI - Dr. Joaquim', '111', 46297, 46297, 46297, '', 70, 40, 50, 130, '', '', '', '', 'Kg', 46297, 'I'],
+    ['x', 4, 13, 70, 'UTI Neonatal / Pediátrica', '333', 46297, 46297, 46297, 46297, 60, 35, 45, 160, 55, 36.8, 96, 3.2, 'Kg', '', 'A'],
+    ['x', 5, 13, 61, 'Emergência', '555', 46290, 46290, 46290, 46290, 150, 90, 110, 90, 18, '37,9', 95, '', 'Kg', '', 'A'],
+    ['x', 6, 13, 61, 'Emergência', '', 46297, 46297, 46297, 46297, 150, 90, 110, 90, 18, 36, 95, '', 'Kg', '', 'A']
+  ];
+  const lsv = imp.lerSinaisVitaisTasy(matrizSV);
+  verificar('reconhece o 2411, ignora a medida inativada e a linha sem atendimento; data serial vira ISO; decimal com vírgula',
+    lsv.reconhecido && lsv.medidas.length === 4 && !lsv.medidas.some(m => m.ID_SinalVital === '3') && lsv.medidas[0].DataMedida === '2026-10-01'
+    && lsv.medidas[0].PAS === 85 && lsv.medidas[0].Temp === 38.4 && lsv.medidas.find(m => m.ID_SinalVital === '5').Temp === 37.9 && lsv.atendimentos === 3 && lsv.periodo.de === '2026-09-25', JSON.stringify(lsv.medidas[0]));
+  verificar('alterações de uma medida pelos mesmos limites do texto; neoPed só Tax/Sat',
+    JSON.stringify(imp.alteracoesDaMedida(lsv.medidas[0])) === '["Tax 38.4","FC 118","FR 30","PA 85","PAM 60","SatO2 89"]'
+    && imp.alteracoesDaMedida(lsv.medidas[1]).length === 0
+    && imp.alteracoesDaMedida(lsv.medidas.find(m => m.Atendimento === '333'), { neoPed: true }).length === 0
+    && imp.alteracoesDaMedida(lsv.medidas.find(m => m.Atendimento === '333')).length === 4, JSON.stringify(imp.alteracoesDaMedida(lsv.medidas.find(m => m.Atendimento === '333'))));
+  const antigasSV = [{ ID_SinalVital: '2', Atendimento: '111', Prontuario: '', Setor: 'CTI', DataMedida: '2026-10-02', PAS: 999 }, { ID_SinalVital: '9', Atendimento: '111', DataMedida: '2026-09-20', PAS: 100 }];
+  const mescla = imp.mesclarSinaisVitais(lsv.medidas, antigasSV, { pacientes: { internacoes: [{ Prontuario: 'P1', Atendimento: '111' }] } }, '2026-10-04');
+  verificar('mescla: mesma medida não duplica (a nova vence), > 7 dias cai (inclusive a de 25/09), prontuário resolvido pelo atendimento',
+    mescla.filter(m => m.ID_SinalVital === '2').length === 1 && mescla.find(m => m.ID_SinalVital === '2').PAS === 120
+    && !mescla.some(m => m.ID_SinalVital === '9') && !mescla.some(m => m.ID_SinalVital === '5')
+    && mescla.filter(m => m.Atendimento === '111').every(m => m.Prontuario === 'P1') && mescla.length === 3, JSON.stringify(mescla.map(m => m.ID_SinalVital)));
+  verificar('esquema evolucoes ganhou a aba sinais_vitais', (esquemas.ESQUEMAS.evolucoes.abas.sinais_vitais || []).includes('SatO2'));
+  /* Preparação da visita: medidas estruturadas têm precedência sobre o texto. */
+  global.alteracoesDaMedida = imp.alteracoesDaMedida;
+  const bancosSV = JSON.parse(JSON.stringify(bancos));
+  bancosSV.evolucoes.sinais_vitais = [
+    { ID_SinalVital: 'a', Atendimento: '111', Prontuario: 'P1', Setor: 'CTI', DataMedida: '2026-10-02', PAS: 82, FC: 70, Temp: 36.2, SatO2: 97 },
+    { ID_SinalVital: 'b', Atendimento: '111', Prontuario: 'P1', Setor: 'CTI', DataMedida: '2026-09-25', PAS: 60, FC: 140 }
+  ];
+  const prepSV = alertas.prepararVisitaUTI(bancosSV, '', hoje);
+  const p1sv = prepSV.pacientes.find(p => p.prontuario === 'P1'), p2sv = prepSV.pacientes.find(p => p.prontuario === 'P2');
+  verificar('com medidas na janela, os vitais vêm delas (PA 82) e não do texto (sat 88/Tax 38,5 somem); medida antiga fora; sem medidas, cai no texto',
+    p1sv.vitaisFonte === 'medidas' && p1sv.medidas48h === 1 && p1sv.vitais.map(v => v.sinal).join(',') === 'PA 82' && p1sv.vitais[0].autor === 'medido'
+    && p2sv.vitaisFonte === 'texto' && prepSV.comMedidas === 1, JSON.stringify([p1sv.vitais, p2sv.vitaisFonte]));
+
   console.log('\n== 90. Miniapp da visita com a lista cifrada (fonte única) ==');
   /* O modelo é gerado por scripts/montar-miniapps.js a partir do fonte do miniapp. */
   const modelo = require(path.join(__dirname, '..', 'js', 'miniapps-modelos.js'));

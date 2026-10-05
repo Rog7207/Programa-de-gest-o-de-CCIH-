@@ -263,6 +263,13 @@ guarda, para quem está em UTI/CTI, **todas** as evoluções das últimas 48 h �
 última. Os sinais vêm do que a equipe escreveu, não do monitor: são lembrete para a
 conversa à beira do leito, não substituem a checagem.
 
+**Relatório de sinais vitais do Tasy (2411)** (04/10/2026): importado na aba Importar como
+qualquer outro, traz **uma linha por medida** (PA, PAM, FC, FR, temperatura, SatO2, peso)
+por atendimento e dia — sem hora. O banco guarda a foto dos **últimos 7 dias** (a mesma
+medida reimportada não duplica; o que passou cai). Onde há medida na janela de 48 h, o
+"leito a leito" e o miniapp mostram **📈 o dado medido** (ou "normais"); onde não há, caem
+no **✎ texto** das evoluções. Na UTI Neo/Ped só temperatura e saturação são julgadas.
+
 No mesmo cartão, **📱 Miniapp da visita de hoje**: com uma senha, o aplicativo gera o
 miniapp de visita à UTI **com essa lista dentro, cifrada** (AES-GCM, como a página de
 avaliação de antimicrobianos) — "Gerar e publicar" **envia o arquivo para a web**

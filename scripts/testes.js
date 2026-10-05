@@ -1534,6 +1534,12 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
     && !mescla.some(m => m.ID_SinalVital === '9') && !mescla.some(m => m.ID_SinalVital === '5')
     && mescla.filter(m => m.Atendimento === '111').every(m => m.Prontuario === 'P1') && mescla.length === 3, JSON.stringify(mescla.map(m => m.ID_SinalVital)));
   verificar('esquema evolucoes ganhou a aba sinais_vitais', (esquemas.ESQUEMAS.evolucoes.abas.sinais_vitais || []).includes('SatO2'));
+  /* Visto no hospital em 04/10/2026: o 2411 era lido como foto dos internados (2396), que só
+     exigia atendimento + setor. */
+  verificar('o relatório de sinais vitais NÃO é reconhecido como foto dos internados (nem o de evoluções)',
+    imp.lerFotoInternados(matrizSV).reconhecido === false
+    && imp.lerFotoInternados([['Nr atendimento', 'Ds setor atendimento', 'Ds evolucao'], ['1', 'CTI', 'texto']]).reconhecido === false
+    && imp.lerFotoInternados([['Nr atendimento', 'Ds setor atendimento', 'Cd unidade basica', 'Dt entrada'], ['1', 'CTI', '12', 46297]]).reconhecido === true);
   /* Preparação da visita: medidas estruturadas têm precedência sobre o texto. */
   global.alteracoesDaMedida = imp.alteracoesDaMedida;
   const bancosSV = JSON.parse(JSON.stringify(bancos));

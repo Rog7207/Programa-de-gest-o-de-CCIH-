@@ -1763,7 +1763,10 @@ function lerFotoInternados(matriz) {
     const n = (matriz[i] || []).map(c => normalizarTexto(c));
     const iAtd = n.findIndex(x => x === 'nratendimento' || x === 'atendimento' || x === 'nrdoatendimento');
     const iSetor = n.findIndex(x => x === 'dssetoratendimento' || x === 'setoratendimento' || x === 'dssetor');
-    if (iAtd >= 0 && iSetor >= 0) {
+    /* Outros exports do Tasy (sinais vitais 2411, evoluções) também trazem atendimento +
+       setor: só é a foto se NÃO houver coluna de sinal vital nem de evolução. */
+    const outroRelatorio = n.some(x => x === 'qtpasistolica' || x === 'dtsinalvital' || x === 'dsevolucao');
+    if (iAtd >= 0 && iSetor >= 0 && !outroRelatorio) {
       cab = i;
       col = { atd: iAtd, setor: iSetor,
         entrada: n.findIndex(x => x === 'dtentrada' || x === 'dataentrada' || x === 'dtentradaunidade'),

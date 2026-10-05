@@ -309,10 +309,11 @@ async function processarArquivo(arquivo, codificacao, opcoesAba) {
           if (niss.reconhecido && niss.linhas.length) { telaCensoNISS(arquivo, niss); return; }
           const evolucoes = lerEvolucoesTasy(matrizCrua);
           if (evolucoes.reconhecido && evolucoes.evolucoes.length) { await telaEvolucoes(arquivo, evolucoes); return; }
-          const foto = lerFotoInternados(matrizCrua);
-          if (foto.reconhecido && foto.linhas.length) { await telaFotoInternados(arquivo, foto); return; }
+          /* Sinais vitais (2411) antes da foto (2396): os dois têm atendimento + setor. */
           const vitais = lerSinaisVitaisTasy(matrizCrua);
           if (vitais.reconhecido && vitais.medidas.length) { await telaSinaisVitais(arquivo, vitais); return; }
+          const foto = lerFotoInternados(matrizCrua);
+          if (foto.reconhecido && foto.linhas.length) { await telaFotoInternados(arquivo, foto); return; }
         }
       }
     }

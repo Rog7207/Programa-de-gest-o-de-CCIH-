@@ -1570,7 +1570,8 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
   const prepFoto = alertas.prepararVisitaUTI(bancosFoto, '', hoje);
   verificar('visita à UTI segue a última foto: P2 (agora na enfermaria) e P7 (passagem encerrada) saem; ficam P1 e P3',
     prepFoto.pacientes.map(p => p.prontuario).sort().join(',') === 'P1,P3', prepFoto.pacientes.map(p => p.prontuario));
-  verificar('lista de internados para a busca dos médicos segue a mesma regra', sg.montarListaInternados(bancosFoto).map(p => p.prontuario).sort().join(',') === 'P1,P2,P3');
+  verificar('lista de internados para a busca dos médicos segue a mesma regra',
+    require(path.join(__dirname, '..', 'js', 'sincronizacao-google.js')).montarListaInternados(bancosFoto).map(p => p.prontuario).sort().join(',') === 'P1,P2,P3');
   const prepVelha = alertas.prepararVisitaUTI(bancosSV, '', '2026-10-06');
   verificar('medida fora da janela: cai no texto, mas informa a data da última medida',
     prepVelha.pacientes.find(p => p.prontuario === 'P1').vitaisFonte !== 'medidas' && prepVelha.pacientes.find(p => p.prontuario === 'P1').ultimaMedidaEm === '2026-10-02');

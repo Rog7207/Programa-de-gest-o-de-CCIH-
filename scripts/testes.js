@@ -1551,7 +1551,29 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
   const p1sv = prepSV.pacientes.find(p => p.prontuario === 'P1'), p2sv = prepSV.pacientes.find(p => p.prontuario === 'P2');
   verificar('com medidas na janela, os vitais vêm delas (PA 82) e não do texto (sat 88/Tax 38,5 somem); medida antiga fora; sem medidas, cai no texto',
     p1sv.vitaisFonte === 'medidas' && p1sv.medidas48h === 1 && p1sv.vitais.map(v => v.sinal).join(',') === 'PA 82' && p1sv.vitais[0].autor === 'medido'
-    && p2sv.vitaisFonte === 'texto' && prepSV.comMedidas === 1, JSON.stringify([p1sv.vitais, p2sv.vitaisFonte]));
+    && p2sv.vitaisFonte === 'texto' && prepSV.comMedidas === 1 && p1sv.ultimaMedidaEm === '2026-10-02', JSON.stringify([p1sv.vitais, p2sv.vitaisFonte]));
+  /* "Internado agora" pela última foto (04/10/2026): o censo deixa internações abertas que
+     já tiveram alta; a passagem aberta é o que vale. */
+  global.internadosAgora = imp.internadosAgora;
+  const bancosFoto = JSON.parse(JSON.stringify(bancos));
+  bancosFoto.pacientes.internacoes.push({ Prontuario: 'P7', Atendimento: '777', DataInternacao: '2026-09-10', DataAlta: '', SetorAtual: 'CTI - Dr. Joaquim', Leito: '7' });
+  bancosFoto.denominadores = { passagem_setor: [
+    { ID_Passagem: 'PAS-1', Atendimento: '111', Setor: 'CTI - Dr. Joaquim', EntradaSetor: '2026-09-20', SaidaSetor: '' },
+    { ID_Passagem: 'PAS-2', Atendimento: '222', Setor: 'Unidade 05', EntradaSetor: '2026-10-01', SaidaSetor: '' },
+    { ID_Passagem: 'PAS-3', Atendimento: '333', Setor: 'UTI Neonatal / Pediátrica', EntradaSetor: '2026-09-25', SaidaSetor: '' },
+    { ID_Passagem: 'PAS-4', Atendimento: '777', Setor: 'CTI - Dr. Joaquim', EntradaSetor: '2026-09-10', SaidaSetor: '2026-09-30' }
+  ] };
+  const agoraLista = imp.internadosAgora(bancosFoto);
+  verificar('internadosAgora: só quem tem passagem aberta (777 saiu, P2 foi transferido para a Unidade 05 pela foto), setor da passagem; sem passagens cai nas internações sem alta',
+    agoraLista.map(i => i.Prontuario).sort().join(',') === 'P1,P2,P3' && agoraLista.find(i => i.Prontuario === 'P2').SetorAtual === 'Unidade 05'
+    && imp.internadosAgora({ pacientes: bancosFoto.pacientes }).length === 5, JSON.stringify(agoraLista.map(i => i.Prontuario + '@' + i.SetorAtual)));
+  const prepFoto = alertas.prepararVisitaUTI(bancosFoto, '', hoje);
+  verificar('visita à UTI segue a última foto: P2 (agora na enfermaria) e P7 (passagem encerrada) saem; ficam P1 e P3',
+    prepFoto.pacientes.map(p => p.prontuario).sort().join(',') === 'P1,P3', prepFoto.pacientes.map(p => p.prontuario));
+  verificar('lista de internados para a busca dos médicos segue a mesma regra', sg.montarListaInternados(bancosFoto).map(p => p.prontuario).sort().join(',') === 'P1,P2,P3');
+  const prepVelha = alertas.prepararVisitaUTI(bancosSV, '', '2026-10-06');
+  verificar('medida fora da janela: cai no texto, mas informa a data da última medida',
+    prepVelha.pacientes.find(p => p.prontuario === 'P1').vitaisFonte !== 'medidas' && prepVelha.pacientes.find(p => p.prontuario === 'P1').ultimaMedidaEm === '2026-10-02');
 
   console.log('\n== 90. Miniapp da visita com a lista cifrada (fonte única) ==');
   /* O modelo é gerado por scripts/montar-miniapps.js a partir do fonte do miniapp. */

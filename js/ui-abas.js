@@ -1215,12 +1215,12 @@ async function montarUti(conteudo) {
      situação atual do setor — os pontos críticos já vão mastigados para a conversa com a
      equipe. O texto usa iniciais + leito, nunca nome inteiro: viaja num app de mensagens. */
   try {
-    const [bCulturas, bIso, bIras, bSepse, bHigiene, bDisp, bSurtos, bPac, bEvo, bAtb] = await Promise.all(
-      ['culturas', 'isolamentos', 'iras', 'sepse', 'higiene_maos', 'dispositivos', 'surtos', 'pacientes', 'evolucoes', 'antibioticos']
+    const [bCulturas, bIso, bIras, bSepse, bHigiene, bDisp, bSurtos, bPac, bEvo, bAtb, bDen] = await Promise.all(
+      ['culturas', 'isolamentos', 'iras', 'sepse', 'higiene_maos', 'dispositivos', 'surtos', 'pacientes', 'evolucoes', 'antibioticos', 'denominadores']
         .map(nome => lerBanco(nome).catch(() => ({}))));
     const bancosResumo = { culturas: bCulturas, isolamentos: bIso, iras: bIras, sepse: bSepse,
       higiene_maos: bHigiene, dispositivos: bDisp, surtos: bSurtos, pacientes: bPac, uti: banco,
-      evolucoes: bEvo, antibioticos: bAtb };
+      evolucoes: bEvo, antibioticos: bAtb, denominadores: bDen };
 
     /* ---- Leito a leito: quem está internado agora ----
        Preparação da visita (pedido de 02/10/2026): a lista dos pacientes do setor hoje
@@ -1257,7 +1257,8 @@ async function montarUti(conteudo) {
           const vitais = el('td', { class: p.vitais.length ? 'aviso-erro-texto' : 'texto-suave',
             title: p.vitaisFonte === 'medidas' ? `${p.medidas48h} medida(s) do relatório de sinais vitais` : p.vitaisFonte === 'texto' ? 'lido do texto das evoluções (sem medidas importadas)' : 'sem medidas nem evolução na janela' },
             (p.vitaisFonte === 'medidas' ? '📈 ' : p.vitaisFonte === 'texto' ? '✎ ' : ''),
-            p.vitais.length ? p.vitais.map(v => `${v.sinal} (${v.data.slice(5).split('-').reverse().join('/')})`).join(' · ') : (p.vitaisFonte === 'medidas' ? 'normais' : '—'));
+            p.vitais.length ? p.vitais.map(v => `${v.sinal} (${v.data.slice(5).split('-').reverse().join('/')})`).join(' · ') : (p.vitaisFonte === 'medidas' ? 'normais' : '—'),
+            p.vitaisFonte !== 'medidas' && p.ultimaMedidaEm ? el('div', { class: 'texto-suave' }, `última medida ${p.ultimaMedidaEm.split('-').reverse().join('/')} — importe o 2411 de hoje`) : null);
           const evo = p.ultimaEvolucaoMedica
             ? el('td', {}, el('details', {},
               el('summary', {}, `${p.ultimaEvolucaoMedica.data}${p.ultimaEvolucaoMedica.autor ? ' · ' + p.ultimaEvolucaoMedica.autor : ''}`),

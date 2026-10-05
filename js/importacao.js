@@ -1846,6 +1846,39 @@ function aplicarFotoInternados(foto, dataFoto, bancos, usuario, agora) {
   return r;
 }
 
+/* ---- Quem está internado AGORA (04/10/2026) ----
+   "Internação sem alta" não é confiável: o censo (50023) abre internações e nem sempre as
+   fecha — no banco real havia 747 abertas para ~200 leitos. A fonte confiável é a última
+   foto dos internados (2396): a passagem de setor ABERTA em denominadores.passagem_setor.
+   Devolve uma internação por atendimento presente na última foto, com o setor da passagem
+   (o mais atual) e o leito da internação. Sem passagens (foto nunca importada), cai nas
+   internações sem alta. */
+function internadosAgora(bancos) {
+  const internacoes = (((bancos || {}).pacientes || {}).internacoes || []);
+  const passagens = (((bancos || {}).denominadores || {}).passagem_setor || []);
+  const abertas = passagens.filter(p => !String(p.SaidaSetor || '').trim());
+  if (!abertas.length) return internacoes.filter(i => !String(i.DataAlta || '').trim());
+  const porAtd = new Map();
+  for (const i of internacoes) {
+    const a = normalizarProntuario(i.Atendimento);
+    if (!a) continue;
+    const atual = porAtd.get(a);
+    /* Internação aberta vence; senão a mais recente. */
+    if (!atual || (!String(i.DataAlta || '').trim() && String(atual.DataAlta || '').trim())
+      || (String(i.DataInternacao || '') > String(atual.DataInternacao || '') && !!String(atual.DataAlta || '').trim() === !!String(i.DataAlta || '').trim())) porAtd.set(a, i);
+  }
+  const saida = [];
+  const vistos = new Set();
+  for (const p of abertas) {
+    const a = normalizarProntuario(p.Atendimento);
+    const i = porAtd.get(a);
+    if (!i || vistos.has(a)) continue;
+    vistos.add(a);
+    saida.push({ ...i, SetorAtual: String(p.Setor || i.SetorAtual || '').trim() });
+  }
+  return saida;
+}
+
 /* Competência (AAAA-MM) a partir do NOME do arquivo. Relatório mensal agregado costuma
    não trazer data nenhuma na tabela — o mês está só no nome ("Censo 012026.csv",
    "antibioticos 07-2026.xls", "Infecções 2026-03.xls"). Sem isso, dois meses diferentes
@@ -4392,7 +4425,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome, resolverProntuarioPorNomeEData, NAO_ANTIMICROBIANO, pareceNomeTruncado,
     enriquecerCirurgia, classificarProcedimentoNHSN, NHSN_CATEGORIAS, categoriasDeProcedimento, categoriaDoProcedimento, CATEGORIA_SEM_CLASSIFICACAO, contaminacaoPresumida, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, mesclarEvolucoes, sinaisDeInfeccaoNaEvolucao, extrairTemplateEvolucao, topografiaSugeridaPorSinais, EVOLUCAO_SILENCIO_DIAS, sinaisVitaisNaEvolucao, EVOLUCAO_UTI_HORAS, LIMITES_VITAIS, lerSinaisVitaisTasy, alteracoesDaMedida, mesclarSinaisVitais, SINAIS_VITAIS_RETENCAO_DIAS, lerFotoInternados, aplicarFotoInternados, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, mesclarEvolucoes, sinaisDeInfeccaoNaEvolucao, extrairTemplateEvolucao, topografiaSugeridaPorSinais, EVOLUCAO_SILENCIO_DIAS, sinaisVitaisNaEvolucao, EVOLUCAO_UTI_HORAS, LIMITES_VITAIS, lerSinaisVitaisTasy, alteracoesDaMedida, mesclarSinaisVitais, SINAIS_VITAIS_RETENCAO_DIAS, internadosAgora, lerFotoInternados, aplicarFotoInternados, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

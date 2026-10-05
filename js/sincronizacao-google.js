@@ -29,8 +29,10 @@ function configSincronizacao(meta) {
 function montarListaInternados(bancos) {
   const nomes = new Map((((bancos || {}).pacientes || {}).pacientes || []).map(p => [normalizarProntuario(p.Prontuario), String(p.Nome || '').trim()]));
   const lista = [], vistos = new Set();
-  for (const i of (((bancos || {}).pacientes || {}).internacoes || [])) {
-    if (String(i.DataAlta || '').trim()) continue;
+  /* Mesma regra da visita: quem está na última foto dos internados (internadosAgora). */
+  const agora = typeof internadosAgora === 'function' ? internadosAgora(bancos)
+    : (((bancos || {}).pacientes || {}).internacoes || []).filter(i => !String(i.DataAlta || '').trim());
+  for (const i of agora) {
     const pront = normalizarProntuario(i.Prontuario);
     if (!pront || vistos.has(pront)) continue;
     vistos.add(pront);
@@ -141,7 +143,7 @@ const sincronizacaoGoogle = {
   async publicarInternados(bancos) {
     const cfg = await this.config();
     if (!sincronizacaoConfigurada(cfg)) throw new Error('Planilha do Google não configurada (Configurações).');
-    const b = bancos || { pacientes: await lerBanco('pacientes') };
+    const b = bancos || { pacientes: await lerBanco('pacientes'), denominadores: await lerBanco('denominadores').catch(() => ({})) };
     const lista = montarListaInternados(b);
     const r = await fetch(cfg.url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(corpoPublicacaoInternados(cfg, lista)) });

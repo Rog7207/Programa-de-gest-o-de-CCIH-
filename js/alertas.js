@@ -833,10 +833,12 @@ function prepararVisitaUTI(bancos, setor, hoje) {
   const corteVitais = new Date(Date.parse(dia + 'T00:00:00Z') - (VISITA_UTI_VITAIS_HORAS / 24) * 864e5).toISOString().slice(0, 10);
   const doSetor = s => setor ? String(s || '').trim() === setor : ehSetorDeUTI(s);
   const np = normalizarProntuario;
-  const internacoes = ((bancos.pacientes || {}).internacoes || []);
-  const abertas = internacoes.filter(i => !String(i.DataAlta || '').trim() && doSetor(i.SetorAtual));
-  const setores = [...new Set(internacoes.filter(i => !String(i.DataAlta || '').trim() && ehSetorDeUTI(i.SetorAtual))
-    .map(i => String(i.SetorAtual).trim()))].sort();
+  /* "Internado agora" = presente na última foto dos internados (passagem aberta); sem
+     foto, internações sem alta (internadosAgora, importacao.js). */
+  const agora = typeof internadosAgora === 'function' ? internadosAgora(bancos)
+    : ((bancos.pacientes || {}).internacoes || []).filter(i => !String(i.DataAlta || '').trim());
+  const abertas = agora.filter(i => doSetor(i.SetorAtual));
+  const setores = [...new Set(agora.filter(i => ehSetorDeUTI(i.SetorAtual)).map(i => String(i.SetorAtual).trim()))].sort();
   const nomes = new Map(((bancos.pacientes || {}).pacientes || []).map(p => [np(p.Prontuario), p.Nome]));
 
   /* Índices por prontuário/atendimento, uma passada por banco. */
@@ -870,8 +872,11 @@ function prepararVisitaUTI(bancos, setor, hoje) {
     const vitais = [];
     /* Limites de adulto não valem na UTI Neonatal/Pediátrica (FC 150 é normal num RN). */
     const opcoesVitais = { neoPed: ehNeoPed(i.SetorAtual) };
-    const medidas = juntar(svPorAtd.get(atd), svPorPron.get(pron)).filter(m => String(m.DataMedida).slice(0, 10) >= corteVitais)
-      .sort((a, b) => String(b.DataMedida).localeCompare(String(a.DataMedida)));
+    const todasMedidas = juntar(svPorAtd.get(atd), svPorPron.get(pron)).sort((a, b) => String(b.DataMedida).localeCompare(String(a.DataMedida)));
+    const medidas = todasMedidas.filter(m => String(m.DataMedida).slice(0, 10) >= corteVitais);
+    /* Medida existe, mas é mais velha que a janela (relatório não importado hoje): a tela
+       diz a data da última, em vez de parecer que não há dado. */
+    const ultimaMedidaEm = todasMedidas.length ? String(todasMedidas[0].DataMedida).slice(0, 10) : '';
     let vitaisFonte = 'nenhuma';
     if (medidas.length && typeof alteracoesDaMedida === 'function') {
       vitaisFonte = 'medidas';
@@ -908,7 +913,7 @@ function prepararVisitaUTI(bancos, setor, hoje) {
       sinaisInfeccao,
       ultimaEvolucaoMedica: medicas[0] ? { data: String(medicas[0].DataEvolucao).slice(0, 10), autor: medicas[0].Autor || '', texto: medicas[0].Texto || '' } : null,
       ultimaEvolucao: evolucoes[0] ? { data: String(evolucoes[0].DataEvolucao).slice(0, 10), autor: evolucoes[0].Autor || '', categoria: evolucoes[0].Categoria || '', texto: evolucoes[0].Texto || '' } : null,
-      vitais: vitaisUnicos, vitaisFonte, medidas48h: medidas.length
+      vitais: vitaisUnicos, vitaisFonte, medidas48h: medidas.length, ultimaMedidaEm
     };
   }).sort((a, b) => a.setor.localeCompare(b.setor) || ordemLeito(a.leito) - ordemLeito(b.leito) || a.leito.localeCompare(b.leito));
   return { setores, pacientes, semEvolucao: pacientes.filter(p => !p.ultimaEvolucao).length, comVitaisAlterados: pacientes.filter(p => p.vitais.length).length,

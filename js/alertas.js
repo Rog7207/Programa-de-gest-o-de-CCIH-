@@ -660,7 +660,7 @@ function rotinaDaEquipe(profissionais, bancos, referencia, opcoes) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { detectarSurtos, ehSurtoAntigo, situacaoDaSuspeita, fenotipoResistencia, SURTO_ANTIGO_DIAS, SURTO_HISTORICO_DIAS, detectarMultirresistentes, inferirMecanismo, pendenciasIsolamento, agruparPendenciasIsolamento,
-    mesmaSuspeita, correlacionarSurto, resumoParaVisitaUTI, prepararVisitaUTI, ehSetorDeUTI, iniciaisDe, isolamentosParaNotificar,
+    mesmaSuspeita, correlacionarSurto, resumoParaVisitaUTI, prepararVisitaUTI, leitoDaUTI, ehSetorDeUTI, iniciaisDe, isolamentosParaNotificar,
     ehSetorPortaDeEntrada, perfilAntibiograma, antibiogramasSemelhantes,
     rotinaDaEquipe, diasCorridos, diasUteis, dataDaUltimaCarga,
     GENEROS_GRAM_NEGATIVOS };
@@ -828,6 +828,17 @@ function resumoParaVisitaUTI(bancos, setor, hoje, mecanismosMonitorados) {
    base da visita na tela e, depois, da página cifrada que vai para o miniapp — por isso é
    função pura e devolve dados, não HTML. */
 const VISITA_UTI_VITAIS_HORAS = 48;
+/* Leitos reais da UTI (pedido de 06/10/2026): 1 a 30. O censo às vezes coloca no CTI
+   pacientes que estão fisicamente em outro leito (319-1, 408-5, 294-B…); a visita mostra
+   só os leitos da própria unidade. */
+const VISITA_UTI_LEITO_MIN = 1;
+const VISITA_UTI_LEITO_MAX = 30;
+function leitoDaUTI(leito) {
+  const m = /(\d+)/.exec(String(leito == null ? '' : leito));
+  if (!m) return false;
+  const n = Number(m[1]);
+  return n >= VISITA_UTI_LEITO_MIN && n <= VISITA_UTI_LEITO_MAX;
+}
 function prepararVisitaUTI(bancos, setor, hoje) {
   const dia = String(hoje || '').slice(0, 10);
   const corteVitais = new Date(Date.parse(dia + 'T00:00:00Z') - (VISITA_UTI_VITAIS_HORAS / 24) * 864e5).toISOString().slice(0, 10);
@@ -837,7 +848,7 @@ function prepararVisitaUTI(bancos, setor, hoje) {
      foto, internações sem alta (internadosAgora, importacao.js). */
   const agora = typeof internadosAgora === 'function' ? internadosAgora(bancos)
     : ((bancos.pacientes || {}).internacoes || []).filter(i => !String(i.DataAlta || '').trim());
-  const abertas = agora.filter(i => doSetor(i.SetorAtual));
+  const abertas = agora.filter(i => doSetor(i.SetorAtual) && leitoDaUTI(i.Leito));
   const setores = [...new Set(agora.filter(i => ehSetorDeUTI(i.SetorAtual)).map(i => String(i.SetorAtual).trim()))].sort();
   const nomes = new Map(((bancos.pacientes || {}).pacientes || []).map(p => [np(p.Prontuario), p.Nome]));
 

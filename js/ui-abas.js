@@ -1282,74 +1282,87 @@ async function montarUti(conteudo) {
        (link do Drive não muda) ou baixa o arquivo. A enfermeira escolhe o leito na lista em
        vez de digitar o prontuário. */
     const campoSenhaVisita = el('input', { type: 'password', placeholder: 'senha da lista (mín. 6)', autocomplete: 'new-password' });
+    const campoTelefoneVisita = el('input', { type: 'tel', placeholder: 'WhatsApp do médico (DDD + número)' });
     const statusVisita = el('span', { class: 'texto-suave' });
-    const gerarMiniappVisita = async (publicar) => {
+    /* Gera e, se "publicar", envia para a web/Drive. Devolve a URL pública que o médico abre
+       no celular (ou '' quando só há pasta local, ou null em erro/vazio). */
+    const gerarMiniappVisita = async (modo) => {
       statusVisita.className = 'aviso-erro-texto';
-      if ((campoSenhaVisita.value || '').length < 6) { statusVisita.textContent = 'Defina uma senha com pelo menos 6 caracteres.'; return; }
+      if ((campoSenhaVisita.value || '').length < 6) { statusVisita.textContent = 'Defina uma senha com pelo menos 6 caracteres.'; return null; }
       const prep = prepararVisitaUTI(bancosResumo, selSetorLeitos.value, hojeISO());
-      if (!prep.pacientes.length) { statusVisita.textContent = 'Nenhum paciente internado no setor — nada a gerar.'; return; }
+      if (!prep.pacientes.length) { statusVisita.textContent = 'Nenhum paciente internado no setor — nada a gerar.'; return null; }
       try {
         const geradoEm = new Date().toISOString();
+        const cfgSync = await sincronizacaoGoogle.config();
         const cifrado = await criptografarDados(JSON.stringify(montarDadosVisitaUTI(prep)), campoSenhaVisita.value);
         const html = gerarHTMLVisitaUTI(cifrado, {
           geradoEm, setor: selSetorLeitos.value || '', avisoHoras: VISITA_UTI_AVISO_HORAS, bloqueioDias: VISITA_UTI_BLOQUEIO_DIAS
-        }, { setores: config.vocabulario.setores, antibioticos: config.vocabulario.antibioticos },
-        instalacaoParaMiniapps(await sincronizacaoGoogle.config()));
-        if (publicar && publicacaoWeb.configurada()) {
-          /* Na web (GitHub Pages): é o que abre no iPhone. URL fixa — o QR não muda. */
-          statusVisita.className = 'texto-suave';
-          statusVisita.textContent = 'Enviando para a web…';
-          const r = await publicacaoWeb.publicar(VISITA_UTI_ARQUIVO, html, `CCIH: visita à UTI ${hojeISO()} (${prep.pacientes.length} leitos, cifrado)`);
-          statusVisita.replaceChildren(
-            `Publicado: ${prep.pacientes.length} leito(s), cifrado. Em até ~1 minuto fica disponível em `,
-            el('a', { href: r.url, target: '_blank' }, r.url),
-            ' — abra no celular (Safari ou Chrome) e digite a senha. Informe a senha por outro canal.',
-            el('div', { style: 'margin-top:8px' }, typeof qrDe === 'function' ? qrDe(r.url, 'visita à UTI') : null));
-        } else if (publicar && await sincronizacaoGoogle.configurada()) {
-          /* Drive da CCIH pelo Apps Script: os terminais da CCIH não têm cliente do Drive. O
-             tablet abre o mesmo arquivo (mesmo id) pelo app do Drive. */
-          statusVisita.className = 'texto-suave';
-          statusVisita.textContent = 'Enviando para o Drive da CCIH…';
-          const r = await sincronizacaoGoogle.publicarNoDrive(VISITA_UTI_ARQUIVO, html);
-          statusVisita.textContent = `Publicado: ${prep.pacientes.length} leito(s), cifrado, no Drive da CCIH ("${r.pasta}/${VISITA_UTI_ARQUIVO}"). `
-            + 'No tablet: app do Drive → o arquivo → ⋮ → Abrir com → Chrome → senha. Informe a senha por outro canal.';
-        } else if (publicar) {
-          if (!publicacao.handle) await publicacao.restaurar();
-          if (!publicacao.handle) await publicacao.escolher();
-          await publicacao.gravar(VISITA_UTI_ARQUIVO, html);
-          statusVisita.className = 'texto-suave';
-          statusVisita.textContent = `Publicado: ${prep.pacientes.length} leito(s) em "${publicacao.handle.name}/${VISITA_UTI_ARQUIVO}". `
-            + 'Para o tablet receber direto, configure a planilha do Google em Configurações. Informe a senha por outro canal.';
-        } else {
+        }, { setores: config.vocabulario.setores, antibioticos: config.vocabulario.antibioticos }, instalacaoParaMiniapps(cfgSync));
+        if (modo === 'baixar') {
           const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
           const a = el('a', { href: URL.createObjectURL(blob), download: VISITA_UTI_ARQUIVO.replace('.html', `-${hojeISO()}.html`) });
           document.body.appendChild(a); a.click(); a.remove();
           statusVisita.className = 'texto-suave';
           statusVisita.textContent = `Arquivo gerado com ${prep.pacientes.length} leito(s). Envie ao celular e informe a senha por outro canal.`;
+          return '';
         }
+        /* Publicar: a URL que o médico abre no celular. */
+        if (publicacaoWeb.configurada()) {
+          statusVisita.className = 'texto-suave'; statusVisita.textContent = 'Enviando para a web…';
+          const r = await publicacaoWeb.publicar(VISITA_UTI_ARQUIVO, html, `CCIH: visita à UTI ${hojeISO()} (${prep.pacientes.length} leitos, cifrado)`);
+          statusVisita.replaceChildren(`Publicado: ${prep.pacientes.length} leito(s), cifrado. Abre em `,
+            el('a', { href: r.url, target: '_blank' }, r.url), ' — senha por outro canal.',
+            el('div', { style: 'margin-top:8px' }, typeof qrDe === 'function' ? qrDe(r.url, 'visita à UTI') : null));
+          return r.url;
+        }
+        if (sincronizacaoConfigurada(cfgSync)) {
+          statusVisita.className = 'texto-suave'; statusVisita.textContent = 'Enviando para o Drive da CCIH…';
+          const r = await sincronizacaoGoogle.publicarNoDrive(VISITA_UTI_ARQUIVO, html);
+          const urlMed = urlAppMedicos(cfgSync, VISITA_UTI_ARQUIVO.replace(/\.html$/, ''));
+          statusVisita.replaceChildren(`Publicado: ${prep.pacientes.length} leito(s), cifrado, no Drive da CCIH ("${r.pasta}"). Abre em `,
+            el('a', { href: urlMed, target: '_blank' }, urlMed), ' — senha por outro canal.');
+          return urlMed;
+        }
+        if (!publicacao.handle) await publicacao.restaurar();
+        if (!publicacao.handle) await publicacao.escolher();
+        await publicacao.gravar(VISITA_UTI_ARQUIVO, html);
+        statusVisita.className = 'texto-suave';
+        statusVisita.textContent = `Publicado: ${prep.pacientes.length} leito(s) em "${publicacao.handle.name}/${VISITA_UTI_ARQUIVO}". `
+          + 'Para enviar um link por WhatsApp, configure a planilha do Google ou a publicação na web em Configurações.';
+        return '';
       } catch (e) {
         if (e && e.name !== 'AbortError') statusVisita.textContent = 'Erro ao gerar: ' + e.message;
+        return null;
       }
+    };
+    const enviarVisitaWhatsApp = async () => {
+      const url = await gerarMiniappVisita('publicar');
+      if (url === null) return;                       /* erro/vazio já avisado */
+      if (!url) { statusVisita.className = 'aviso-erro-texto'; statusVisita.textContent = 'Sem link público: configure a planilha do Google ou a publicação na web em Configurações para enviar por WhatsApp.'; return; }
+      const fone = String(campoTelefoneVisita.value || '').replace(/\D/g, '');
+      const destino = fone ? (fone.length <= 11 ? '55' + fone : fone) : '';   /* DDD+número → +55; vazio = escolher contato */
+      const msg = 'CCIH — Visita à UTI de hoje. Abra no navegador do celular:\n' + url
+        + '\n\nA senha para ver os nomes dos pacientes é fornecida pela CCIH por outro canal (não vai por aqui).';
+      window.open('https://wa.me/' + destino + '?text=' + encodeURIComponent(msg), '_blank');
     };
     conteudo.append(el('div', { class: 'cartao' },
       el('h2', {}, '🛏 Leito a leito — preparação da visita'),
       el('div', { class: 'linha-campos' }, el('label', {}, 'Setor: ', selSetorLeitos)),
       alvoLeitos,
       el('p', { class: 'texto-suave' },
-        '📈 = medidas do relatório de sinais vitais do Tasy (2411); ✎ = lido do texto das evoluções quando não há medida importada. Confirme à beira do leito.'),
+        'Mostra apenas os leitos 1 a 30 da UTI. 📈 = medidas do relatório de sinais vitais do Tasy (2411); ✎ = lido do texto das evoluções quando não há medida importada. Confirme à beira do leito.'),
       el('h3', {}, '📱 Miniapp da visita de hoje (com esta lista, cifrada)'),
-      el('div', { class: 'linha-campos' },
-        campoSenhaVisita,
-        el('button', { class: 'botao-primario', onclick: () => gerarMiniappVisita(true) },
-          publicacaoWeb.configurada() ? '🌐 Gerar e publicar na web' : 'Gerar e publicar'),
-        el('button', { class: 'botao-secundario', onclick: () => gerarMiniappVisita(false) }, 'Baixar arquivo'),
+      el('div', { class: 'linha-campos' }, campoSenhaVisita, campoTelefoneVisita),
+      el('div', { class: 'linha-botoes' },
+        el('button', { class: 'botao-primario', onclick: enviarVisitaWhatsApp }, '💬 Gerar e enviar por WhatsApp'),
+        el('button', { class: 'botao-secundario', onclick: () => gerarMiniappVisita('publicar') },
+          publicacaoWeb.configurada() ? '🌐 Só publicar na web' : 'Só publicar'),
+        el('button', { class: 'botao-secundario', onclick: () => gerarMiniappVisita('baixar') }, 'Baixar arquivo'),
         statusVisita),
       el('p', { class: 'texto-suave' },
-        'É o miniapp de visita de sempre, com a lista dos leitos dentro: no celular, a senha abre a lista e "avaliar" preenche leito e prontuário. '
-        + 'Vale por ' + VISITA_UTI_BLOQUEIO_DIAS + ' dias; a lista decifrada fica só na memória da página. '
-        + (publicacaoWeb.configurada()
-          ? `Endereço fixo: ${publicacaoWeb.urlDe(VISITA_UTI_ARQUIVO)} (abre no iPhone).`
-          : 'Para abrir no iPhone, configure a publicação na web em Configurações.'))));
+        'No celular, a senha abre a lista e "avaliar" preenche leito e prontuário. O WhatsApp leva só o link (sem dado de paciente); '
+        + 'a senha, que revela os nomes, vai por outro canal. Vale por ' + VISITA_UTI_BLOQUEIO_DIAS + ' dias; a lista decifrada fica só na memória da página.'
+        + (publicacaoWeb.configurada() ? ` Endereço fixo: ${publicacaoWeb.urlDe(VISITA_UTI_ARQUIVO)}.` : ''))));
     const setoresUTI = [...new Set((bCulturas.culturas || []).map(c => String(c.Setor || '').trim())
       .filter(ehSetorDeUTI))].sort();
     const selSetorResumo = el('select', {},

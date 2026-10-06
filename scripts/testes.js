@@ -1506,6 +1506,17 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
   const p3 = prep.pacientes.find(p => p.prontuario === 'P3');
   verificar('P3: sem evolução na foto conta em semEvolucao', p3.ultimaEvolucao === null && prep.semEvolucao === 1 && prep.comVitaisAlterados === 1);
   verificar('filtro por setor', alertas.prepararVisitaUTI(bancos, 'UTI Neonatal / Pediátrica', hoje).pacientes.length === 1);
+  /* Só leitos 1 a 30 da UTI (pedido de 06/10/2026): o censo coloca no CTI leitos de fora (319-1, 408-5). */
+  verificar('leitoDaUTI: 1–30 sim; 0, 31, 319-1, 408-5, vazio não',
+    alertas.leitoDaUTI('01') && alertas.leitoDaUTI('30') && alertas.leitoDaUTI('02 - Ped')
+    && !alertas.leitoDaUTI('0') && !alertas.leitoDaUTI('31') && !alertas.leitoDaUTI('319-1') && !alertas.leitoDaUTI('408-5') && !alertas.leitoDaUTI(''));
+  const bancosLeito = JSON.parse(JSON.stringify(bancos));
+  bancosLeito.pacientes.internacoes.push(
+    { Prontuario: 'P5', Atendimento: '555', DataInternacao: '2026-09-28', DataAlta: '', SetorAtual: 'CTI - Dr. Joaquim', Leito: '319-1' },
+    { Prontuario: 'P6', Atendimento: '666', DataInternacao: '2026-09-28', DataAlta: '', SetorAtual: 'CTI - Dr. Joaquim', Leito: '408-5' });
+  const prepLeito = alertas.prepararVisitaUTI(bancosLeito, '', hoje);
+  verificar('a visita exclui os leitos fora de 1–30 (319-1, 408-5 ficam de fora)',
+    !prepLeito.pacientes.some(p => p.prontuario === 'P5' || p.prontuario === 'P6') && prepLeito.pacientes.some(p => p.prontuario === 'P1'), prepLeito.pacientes.map(p => p.leito));
 
   console.log('\n== 95. Sinais vitais estruturados (relatório 2411 do Tasy) ==');
   const cabSV = ['Cd cnpj', 'Cd pk', 'Cd estabelecimento', 'Cd setor atendimento', 'Ds setor atendimento', 'Nr atendimento', 'Dt atualizacao', 'Dt sinal vital', 'Dt referencia', 'Dt liberacao',

@@ -270,8 +270,11 @@ medida reimportada não duplica; o que passou cai). Onde há medida na janela de
 "leito a leito" e o miniapp mostram **📈 o dado medido** (ou "normais"); onde não há, caem
 no **✎ texto** das evoluções. Na UTI Neo/Ped só temperatura e saturação são julgadas.
 
-No mesmo cartão, **📱 Miniapp da visita de hoje**: com uma senha, o aplicativo gera o
-miniapp de visita à UTI **com essa lista dentro, cifrada** (AES-GCM, como a página de
+O cartão mostra **apenas os leitos 1 a 30** da UTI — o censo às vezes coloca no CTI
+pacientes que estão fisicamente em outro leito (319-1, 408-5…), que ficam de fora.
+
+No mesmo cartão, **📱 Miniapp da visita de hoje**: com uma senha (e, opcional, o WhatsApp
+do médico), o aplicativo gera o miniapp de visita à UTI **com essa lista dentro, cifrada** (AES-GCM, como a página de
 avaliação de antimicrobianos) — "Gerar e publicar" **envia o arquivo para a web**
 (repositório do GitHub com Pages, configurado em Configurações → 🌐 Publicação na web),
 num endereço fixo como `https://dono.github.io/ccih-miniapps/visita-uti-cifrada.html`:
@@ -282,6 +285,9 @@ preenche leito e prontuário (e marca CVC/VM/SVD que o aplicativo já conhece) �
 número digitado errado que impedia o paciente de casar na importação. A lista vale 7 dias e,
 decifrada, fica só na memória da página; a planilha exportada continua levando só o
 prontuário. Sem senha/lista (versão pública do miniapp), tudo funciona como antes.
+**"💬 Gerar e enviar por WhatsApp"**: publica a lista cifrada e abre o WhatsApp com o **link**
+para o médico (preencha o telefone, ou deixe em branco para escolher o contato). O WhatsApp
+leva só o link — **a senha, que revela os nomes, vai por outro canal**.
 
 **Tablet da CCIH + pasta espelhada** (decisão de 03/10/2026): em vez de site, a pasta de
 publicação é uma pasta espelhada com o Drive da CCIH, e um **tablet Android** dedicado abre

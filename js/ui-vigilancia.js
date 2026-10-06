@@ -99,7 +99,10 @@ async function montarVigilancia(conteudo) {
 
   const pacientePor = new Map(bancoPacientes.pacientes.map(p => [normalizarProntuario(p.Prontuario), p]));
   const nomeDe = c => (pacientePor.get(normalizarProntuario(c.Prontuario)) || {}).Nome || '';
-  const telefoneDe = c => (pacientePor.get(normalizarProntuario(c.Prontuario)) || {}).Telefone || '';
+  /* O telefone da própria cirurgia (vindo do relatório) vence; o cadastro do paciente é
+     reserva, para cirurgias antigas importadas antes de guardarmos o telefone na linha. */
+  const telefoneDe = c => String(c.Telefone || '').trim()
+    || (pacientePor.get(normalizarProntuario(c.Prontuario)) || {}).Telefone || '';
   const idadePosOp = c => diasDesde(c.DataCirurgia, hoje);
 
   const naJanela = c => {
@@ -285,12 +288,15 @@ async function montarVigilancia(conteudo) {
       el('button', { class: 'botao-secundario', onclick: async () => {
         try {
           if (!telefoneWhatsApp(campoTel.value)) { alert('Número inválido — use DDD + número.'); return; }
-          await comTrava(['pacientes'], async () => {
+          await comTrava(['pacientes', 'cirurgias'], async () => {
+            /* Grava na cirurgia (fonte primária da vigilância) e também no cadastro do
+               paciente, que outras telas usam. */
+            const atualCir = await lerBanco('cirurgias');
+            const alvoCir = atualCir.cirurgias.find(x => x.ID_Cirurgia === c.ID_Cirurgia);
+            if (alvoCir) { alvoCir.Telefone = campoTel.value; await gravarBanco('cirurgias', atualCir); }
             const atual = await lerBanco('pacientes');
             const alvo = atual.pacientes.find(p => normalizarProntuario(p.Prontuario) === normalizarProntuario(c.Prontuario));
-            if (!alvo) throw new Error('Paciente não está no cadastro.');
-            alvo.Telefone = campoTel.value;
-            await gravarBanco('pacientes', atual);
+            if (alvo) { alvo.Telefone = campoTel.value; await gravarBanco('pacientes', atual); }
           });
           recarregar();
         } catch (e) { alert(e.message); }

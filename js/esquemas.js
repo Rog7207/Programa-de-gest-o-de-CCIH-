@@ -59,7 +59,7 @@ const ESQUEMAS = {
   cirurgias: {
     arquivo: 'cirurgias.xlsx',
     abas: {
-      cirurgias: ['ID_Cirurgia', 'Prontuario', 'DataCirurgia', 'Procedimento', 'ProcedimentoNHSN', 'Cirurgiao', 'PotencialContaminacao', 'ASA', 'DuracaoMin', 'IndiceNNIS', 'Atendimento', 'Carater', 'ProfilaxiaAntibiotico', 'ProfilaxiaInicio', 'IntervaloProfilaxia', 'Obito', 'StatusVigilancia', 'VigilanciaPor', 'MensagemEnviadaEm', 'UltimoContato', 'ObservacoesVigilancia', 'ISC', 'TipoISC', 'ID_IRAS', 'InvestigadoPor', 'ValidadoPor', 'ValidadoEm', 'CriadoPor', 'CriadoEm']
+      cirurgias: ['ID_Cirurgia', 'Prontuario', 'Telefone', 'DataCirurgia', 'Procedimento', 'ProcedimentoNHSN', 'Cirurgiao', 'PotencialContaminacao', 'ASA', 'DuracaoMin', 'IndiceNNIS', 'Atendimento', 'Carater', 'ProfilaxiaAntibiotico', 'ProfilaxiaInicio', 'IntervaloProfilaxia', 'Obito', 'StatusVigilancia', 'VigilanciaPor', 'MensagemEnviadaEm', 'UltimoContato', 'ObservacoesVigilancia', 'ISC', 'TipoISC', 'ID_IRAS', 'InvestigadoPor', 'ValidadoPor', 'ValidadoEm', 'CriadoPor', 'CriadoEm']
     }
   },
   uti: {

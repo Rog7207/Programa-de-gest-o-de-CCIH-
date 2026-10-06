@@ -3446,6 +3446,10 @@ function montarLinhaImportada(registro, tipo, id, usuario, agora, tempoCorte) {
        pessoa escolheu na importação só vale quando o classificador não decide. */
     linha.Procedimento = (registro._originais && registro._originais.Procedimento) || registro.Procedimento;
     linha.ProcedimentoNHSN = categoriaDoProcedimento(linha.Procedimento, registro.Procedimento);
+    /* Telefone é paraPacientes (vai ao cadastro), mas guardamos TAMBÉM na própria cirurgia:
+       o telefone do relatório pertence àquela cirurgia e a vigilância pós-alta o usa mesmo
+       quando o prontuário não cruzou (registro provisório AT-) ou o cadastro ficou sem número. */
+    linha.Telefone = registro.Telefone || '';
     enriquecerCirurgia(linha, tempoCorte);
   } else if (tipo === 'antibioticos') {
     /* Os campos de parecer pertencem à aba de AVALIAÇÕES, não à de prescrições: aqui

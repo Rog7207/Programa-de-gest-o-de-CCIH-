@@ -1148,6 +1148,19 @@ console.log('\n== 84b. Classificador ligado à importação, à dedup e ao vocab
   verificar('sem decisão humana e sem classificador, fica "Sem classificação"',
     semNada.ProcedimentoNHSN === imp.CATEGORIA_SEM_CLASSIFICACAO, semNada.ProcedimentoNHSN);
 
+  /* Telefone do relatório de cirurgias (paraPacientes) fica TAMBÉM na linha da cirurgia,
+     para a vigilância pós-alta usar mesmo quando o cadastro do paciente está sem número. */
+  const comTel = imp.montarLinhaImportada(
+    { Prontuario: '1', DataCirurgia: '2026-08-01', Procedimento: 'Colecistectomia', Telefone: '51999990000', NomePaciente: 'Fulano' },
+    'cirurgias', 'CIR-5', 't', '2026-08-01 10:00');
+  verificar('telefone do relatório de cirurgias é gravado na linha da cirurgia', comTel.Telefone === '51999990000', comTel);
+  verificar('nome do paciente (paraPacientes) segue fora da linha da cirurgia', comTel.NomePaciente === undefined, comTel);
+  const semTel = imp.montarLinhaImportada(
+    { Prontuario: '1', DataCirurgia: '2026-08-01', Procedimento: 'Colecistectomia' },
+    'cirurgias', 'CIR-6', 't', '2026-08-01 10:00');
+  verificar('sem telefone no relatório, a cirurgia fica com telefone vazio (não undefined)', semTel.Telefone === '', semTel);
+  verificar('coluna Telefone existe no esquema da aba cirurgias', esquemas.ESQUEMAS.cirurgias.abas.cirurgias.includes('Telefone'));
+
   /* Validação: só o que o classificador não resolve vai à tela de termos novos. */
   const vocab = { procedimentos_nhsn: categorias.map(c => c.Nome) };
   const v = imp.validar([

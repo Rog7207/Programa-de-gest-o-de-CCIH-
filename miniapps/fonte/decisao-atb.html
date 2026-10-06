@@ -15,6 +15,8 @@ input[type=text], input[type=password], select { width: 100%; font-size: 16px; p
 .achado b { color: #0d3f7a; }
 .linha { display: flex; gap: 8px; } .linha > div { flex: 1; }
 button { font-size: 15px; font-weight: 600; border-radius: 8px; padding: 11px; border: none; cursor: pointer; width: 100%; margin-top: 8px; }
+button.mini { width: auto; padding: 5px 10px; font-size: 13px; background: none; color: #61707f; }
+optgroup { font-size: 13px; color: #61707f; }
 .principal { background: #0d3f7a; color: #fff; } .secundario { background: #fff; color: #0d3f7a; border: 1px solid #0d3f7a; }
 .excluir { background: none; border: none; color: #b03a2e; font-size: 13px; width: auto; padding: 2px 6px; margin: 0; }
 .suave { color: #61707f; font-size: 13px; }
@@ -81,10 +83,25 @@ td.alta { color: #b03a2e; font-weight: 700; }
       <p class="suave" id="pacienteEscolhido" style="margin:4px 0 0"></p>
     </div>
     <label>Prontuário</label><input type="text" id="prontuario" inputmode="numeric">
-    <label>Síndrome</label><select id="sindrome"><option value="">escolha a síndrome…</option></select>
-    <p class="suave" id="germes" style="margin:6px 0 0"></p>
-    <div id="perguntas"></div>
-    <button class="principal oculto" id="analisar">Analisar caso</button>
+    <!-- Tela inicial: 3 botões (05/10/2026). -->
+    <div id="telaInicial">
+      <button class="principal" id="btSitio" type="button">🩺 Escolher esquema antibiótico por sítio</button>
+      <button class="secundario" id="btIVVO" type="button">💊 Troca de IV para VO</button>
+      <button class="secundario oculto" id="btEspecificas" type="button">📋 Situações específicas</button>
+    </div>
+    <!-- Escolha da síndrome (por sítio ou situações específicas). -->
+    <div id="telaSindrome" class="oculto">
+      <button class="secundario mini" id="btVoltarS" type="button">← voltar</button>
+      <label id="rotuloSindrome">Síndrome</label><select id="sindrome"><option value="">escolha…</option></select>
+      <p class="suave" id="germes" style="margin:6px 0 0"></p>
+      <div id="perguntas"></div>
+      <button class="principal oculto" id="analisar">Analisar caso</button>
+    </div>
+    <!-- Troca IV → VO. -->
+    <div id="telaIVVO" class="oculto">
+      <button class="secundario mini" id="btVoltarIV" type="button">← voltar</button>
+      <div id="conteudoIVVO"></div>
+    </div>
   </div>
 
   <div class="cartao oculto" id="resultado"></div>
@@ -215,7 +232,49 @@ $('entrar').onclick = async () => {
   }
 };
 desenharMedico();
-for (const s of PROTOCOLO.sindromes) $('sindrome').append(el('option', { value: s.id }, s.rotulo + (s.homologacao === 'pendente' ? ' (PCDT MS — a homologar)' : '')));
+/* ---- Tela de 3 botões (05/10/2026): por sítio · troca IV→VO · situações específicas ----
+   Por sítio não fala de IRAS: o esquema considera o risco de resistência do paciente. */
+const grupos = typeof agruparSindromes === 'function' ? agruparSindromes(PROTOCOLO) : { sitios: [], especificas: [] };
+function mostrarTela(qual) {
+  $('telaInicial').classList.toggle('oculto', qual !== 'inicial');
+  $('telaSindrome').classList.toggle('oculto', qual !== 'sindrome');
+  $('telaIVVO').classList.toggle('oculto', qual !== 'ivvo');
+  if (qual !== 'sindrome') { $('resultado').classList.add('oculto'); ultimaAnalise = null; }
+}
+function popularSindromes(listaGrupos, rotulo) {
+  $('rotuloSindrome').textContent = rotulo;
+  const sel = $('sindrome');
+  sel.replaceChildren(el('option', { value: '' }, 'escolha…'));
+  for (const g of listaGrupos) {
+    const og = document.createElement('optgroup');
+    og.label = g.grupo;
+    for (const s of g.sindromes) og.append(el('option', { value: s.id }, s.rotulo + (s.homologacao === 'pendente' ? ' (a homologar)' : '')));
+    sel.append(og);
+  }
+  sel.value = '';
+  desenharPerguntas();
+}
+$('btSitio').onclick = () => { popularSindromes(grupos.sitios, 'Sítio / síndrome (o esquema considera o risco de resistência do paciente)'); mostrarTela('sindrome'); };
+$('btEspecificas').onclick = () => { popularSindromes(grupos.especificas, 'Situação específica'); mostrarTela('sindrome'); };
+$('btIVVO').onclick = () => { desenharIVVO(); mostrarTela('ivvo'); };
+$('btVoltarS').onclick = () => mostrarTela('inicial');
+$('btVoltarIV').onclick = () => mostrarTela('inicial');
+if (grupos.especificas.length) $('btEspecificas').classList.remove('oculto');
+
+/* Troca IV → VO: critérios IVOS, exceções e tabela de equivalência (dados do protocolo). */
+function desenharIVVO() {
+  const t = typeof TROCA_IV_VO !== 'undefined' ? TROCA_IV_VO : null;
+  if (!t) { $('conteudoIVVO').replaceChildren(el('p', { class: 'suave' }, 'Dados de troca IV→VO não embutidos.')); return; }
+  const tabela = el('table', {}, el('thead', {}, el('tr', {}, el('th', {}, 'IV'), el('th', {}, 'Equivalente oral'), el('th', {}, 'Biodisp.'))),
+    el('tbody', {}, t.equivalencias.map(e => el('tr', {}, el('td', {}, e.iv), el('td', {}, e.vo), el('td', {}, e.biodisp)))));
+  $('conteudoIVVO').replaceChildren(
+    el('h2', {}, 'Troca de IV para VO'),
+    el('p', { class: 'suave' }, 'Pode trocar quando TODOS estiverem presentes:'),
+    el('ul', {}, t.criterios.map(c => el('li', {}, c))),
+    el('p', { class: 'suave' }, 'Decisão individual com o infectologista nestes casos: ' + t.excecoes.join(', ') + '.'),
+    el('h3', {}, 'Equivalências IV → oral'), tabela,
+    el('ul', { class: 'ajuda' }, t.notas.map(n => el('li', {}, n))));
+}
 
 const controles = new Map();
 let ultimaAnalise = null;

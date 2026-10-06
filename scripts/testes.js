@@ -1842,14 +1842,11 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
   /* Intra-abdominal mantém metronidazol mesmo com esquema de polimixina. */
   const abd = sUTI('intra_abdominal_uti').decidir;
   verificar('intra-abdominal com NDM mantém metronidazol (polimixina não cobre anaeróbio)', /Metronidazol/.test(abd({ colonizacao: 'ndm', choque: true }).esquemas[0].posologia));
-  /* Complemento da Emergência. */
+  /* Complemento da Emergência: só o que FALTAVA (SNC/abdominal/biliar/osteo/sepse já existiam). */
   const E = id => prot.PROTOCOLO_ATB.sindromes.find(s => s.id === id);
-  verificar('emergência ganhou meningite, encefalite, sepse sem foco, neutropenia, bacteremia S. aureus, endocardite, endêmicas e intra-abdominal',
-    ['meningite', 'encefalite', 'sepse_sem_foco_emerg', 'neutropenia_febril_emerg', 'bacteremia_saureus', 'endocardite', 'febre_exposicao', 'intra_abdominal_emerg'].every(id => E(id)));
-  const men = E('meningite').decidir;
-  verificar('meningite: ceftriaxona+vanco+dexametasona; +ampicilina se risco de Listeria; alergia grave → vanco+moxifloxacino',
-    /Ceftriaxona 2 g IV 12\/12h/.test(men({}).esquemas[0].posologia) && men({}).esquemas.some(e => /Dexametasona/.test(e.posologia))
-    && /Ampicilina/.test(men({ listeria: true }).esquemas[0].posologia) && /Moxifloxacino/.test(men({ alergiaGrave: true }).esquemas[0].posologia));
+  verificar('emergência ganhou só o que faltava: encefalite, neutropenia, bacteremia S. aureus, endocardite, endêmicas e situações específicas; sem duplicar meningite/intra-abdominal/sepse',
+    ['encefalite', 'neutropenia_febril_emerg', 'bacteremia_saureus', 'endocardite', 'febre_exposicao', 'mordedura', 'tetano', 'raiva', 'material_biologico'].every(id => E(id))
+    && !E('meningite') && !E('intra_abdominal_emerg') && !E('sepse_sem_foco_emerg') && E('snc') && E('abdominal') && E('sepse_fi'));
   verificar('bacteremia por S. aureus: MSSA → cefazolina/oxacilina; MRSA com pneumonia não oferece daptomicina',
     /Cefazolina|Oxacilina/.test(E('bacteremia_saureus').decidir({ fase: 'mssa' }).esquemas[0].posologia)
     && !/Daptomicina/.test(E('bacteremia_saureus').decidir({ fase: 'mrsa', pneumonia: true }).esquemas[0].posologia)
@@ -1859,6 +1856,32 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
     /Penicilina|Ceftriaxona/.test(fe({ exposicao: 'lepto', grave: true }).esquemas[0].posologia) && /Doxiciclina/.test(fe({ exposicao: 'maculosa' }).esquemas[0].posologia)
     && fe({ exposicao: 'dengue' }).esquemas[0].drogas.length === 0 && fe({ exposicao: 'hanta' }).esquemas[0].drogas.length === 0
     && /Doxiciclina/.test(fe({ exposicao: 'indefinida' }).esquemas[0].posologia));
+  /* Situações específicas (mordedura, tétano, raiva, material biológico). */
+  const mord = E('mordedura').decidir;
+  verificar('mordedura: gato/humano/fator → amox-clav profilaxia; cão sem fator → sem antibiótico; infectada 7–14 d; alergia → doxiciclina',
+    /Amoxicilina-clavulanato/.test(mord({ tipo: 'gato' }).esquemas[0].posologia) && mord({ tipo: 'cao' }).esquemas[0].drogas.length === 0
+    && /7–14 dias/.test(mord({ tipo: 'cao', infectada: true }).esquemas[0].posologia) && /Doxiciclina/.test(mord({ tipo: 'gato', alergiaGrave: true }).esquemas[0].posologia));
+  const tet = E('tetano').decidir;
+  verificar('tétano: incerta+alto risco → dT + imunoglobulina; ≥3 doses recente → nada; ≥3 >10 anos limpo → reforço dT',
+    /Imunoglobulina/.test(tet({ historia: 'incerta', ferimento: 'altorisco' }).esquemas[0].posologia) && /Nada/.test(tet({ historia: 'recente', ferimento: 'limpo' }).esquemas[0].posologia)
+    && /Reforço/.test(tet({ historia: 'antiga', ferimento: 'limpo' }).esquemas[0].posologia));
+  const rab = E('raiva').decidir;
+  verificar('raiva: cão observável leve → observar; cão suspeito grave → vacina+soro; morcego → sempre vacina+soro',
+    /Observar/.test(rab({ animal: 'cao_gato_obs', gravidade: 'leve' }).esquemas[0].posologia) && /soro/.test(rab({ animal: 'cao_gato_susp', gravidade: 'grave' }).esquemas[0].posologia)
+    && /Vacina \+ soro/.test(rab({ animal: 'morcego_silvestre', gravidade: 'leve' }).esquemas[0].posologia));
+  const mb = E('material_biologico').decidir;
+  verificar('material biológico: fonte HIV+ ≤72h → PEP TDF/3TC/DTG; fonte negativa → sem PEP; >72h → sem PEP com testagem',
+    /Dolutegravir/.test(mb({ ate72h: true, fonte: 'positiva' }).esquemas[0].posologia) && /NÃO indicada/.test(mb({ fonte: 'negativa' }).esquemas[0].posologia)
+    && /não indicada após 72 h/.test(mb({ ate72h: false, fonte: 'desconhecida' }).esquemas[0].posologia));
+  /* Agrupamento para a tela de 3 botões e dados da troca IV→VO. */
+  const grup = prot.agruparSindromes(prot.PROTOCOLO_ATB);
+  verificar('agrupamento por sítio sem "Outros"; específicas separadas (profilaxias, PEP, IST, TB)',
+    prot.PROTOCOLO_ATB.sindromes.every(s => s.sitio && s.sitio !== 'Outros' && (s.secao === 'sitio' || s.secao === 'especificas'))
+    && grup.sitios.length >= 9 && grup.especificas.map(g => g.grupo).join(',') === 'Profilaxias de urgência,Pós-exposição (PEP),IST,Tuberculose'
+    && grup.especificas.find(g => g.grupo === 'Profilaxias de urgência').sindromes.map(s => s.id).sort().join(',') === 'mordedura,raiva,tetano');
+  verificar('UTI agrupada por sítio, sem situações específicas', prot.agruparSindromes(prot.PROTOCOLOS_ATB['uti-nosocomial']).especificas.length === 0 && prot.agruparSindromes(prot.PROTOCOLOS_ATB['uti-nosocomial']).sitios.length >= 7);
+  verificar('troca IV→VO: 4 critérios IVOS, exceções com infecto, equivalências (metronidazol ≈ 100%)',
+    prot.TROCA_IV_VO.criterios.length === 4 && prot.TROCA_IV_VO.excecoes.includes('Endocardite') && prot.TROCA_IV_VO.equivalencias.some(e => /Metronidazol/.test(e.iv) && /100/.test(e.biodisp)));
   verificar('endereço dos médicos = URL do script + ?app=decisao-atb', sg.urlAppMedicos(cfgS, 'decisao-atb') === 'https://script.google.com/macros/s/ABC/exec?app=decisao-atb' && sg.urlAppMedicos({}, 'x') === '');
   const fonteDecisao = fs.readFileSync(path.join(__dirname, '..', 'miniapps', 'fonte', 'decisao-atb.html'), 'utf-8');
   const registroFonte = fonteDecisao.slice(fonteDecisao.indexOf('function registrar'), fonteDecisao.indexOf('function desenharLista'));
@@ -2945,7 +2968,8 @@ console.log('\n== 51. Decisão ATB: protocolo empírico + dados locais ==');
   verificar('todas as síndromes decidem sem resposta nenhuma (defaults seguros)',
     prot.PROTOCOLO_ATB.sindromes.every(s => {
       const d = s.decidir({});
-      return d.esquemas.length >= 1 && d.exames.length >= 1;
+      /* Profilaxias (tétano, raiva, mordedura) legitimamente não pedem exames; o essencial é ≥1 esquema. */
+      return d.esquemas.length >= 1 && Array.isArray(d.exames) && Array.isArray(d.avisos);
     }));
 
   verificar('sinônimos de grafia: ceftriaxone→ceftriaxona, cefepime→cefepima',

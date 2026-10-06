@@ -933,20 +933,12 @@ const SINDROMES_UTI = [
 ];
 SINDROMES_UTI.forEach(s => { s.fonte = 'Protocolo de Tratamento de Infecções em UTI Adulto — CCIH HNSC'; });
 
-/* ---- Complemento da Emergência: síndromes agudas de alto risco (05/10/2026) ---- */
+/* ---- Complemento da Emergência: síndromes que FALTAVAM no protocolo original (05/10/2026).
+   O original já cobria SNC (meningoencefalite bacteriana), intra-abdominal, trato biliar,
+   osteoarticular e sepse de foco indeterminado — esses ficam como estão. Aqui entram só os
+   que não existiam: encefalite herpética, neutropenia febril, bacteremia por S. aureus,
+   endocardite empírica e endêmicas do Sul. ---- */
 const SINDROMES_EMERGENCIA_EXTRA = [
-  {
-    id: 'meningite', rotulo: 'Meningite bacteriana comunitária', germes: ['Streptococcus pneumoniae', 'Neisseria meningitidis', 'Listeria monocytogenes', 'Haemophilus influenzae'],
-    perguntas: [{ id: 'listeria', rotulo: 'Idade ≥ 50 anos, etilismo ou imunossupressão (risco de Listeria)', tipo: 'sim_nao' }, { id: 'alergiaGrave', rotulo: 'Alergia grave a beta-lactâmicos (anafilaxia/Stevens-Johnson)', tipo: 'sim_nao' }],
-    decidir(r) {
-      const esquemas = r.alergiaGrave
-        ? [{ rotulo: 'Meningite — alergia grave a beta-lactâmicos', posologia: 'Vancomicina 15–20 mg/kg IV 8–12/12h + Moxifloxacino 400 mg IV/dia' + (r.listeria ? ' + Sulfametoxazol-trimetoprima (cobertura de Listeria)' : ''), drogas: ['vancomicina', 'moxifloxacino'].concat(r.listeria ? ['sulfametoxazoltrimetoprima'] : []) }]
-        : [{ rotulo: 'Meningite bacteriana', posologia: 'Ceftriaxona 2 g IV 12/12h + Vancomicina 15–20 mg/kg IV 8–12/12h' + (r.listeria ? ' + Ampicilina 2 g IV 4/4h (Listeria)' : ''), drogas: ['ceftriaxona', 'vancomicina'].concat(r.listeria ? ['ampicilina'] : []) }];
-      esquemas.push({ rotulo: 'Corticoide (antes ou junto da 1ª dose)', posologia: 'Dexametasona 10 mg IV 6/6h por 4 dias', drogas: [] });
-      return { esquemas, exames: ['Líquor (citologia, bioquímica, Gram, cultura, látex/PCR) + 2 pares de hemocultura — NÃO atrasar o antibiótico pela TC ou pela punção.', 'TC antes da punção só se déficit focal, convulsão, papiledema, imunossupressão ou rebaixamento; nesse caso, antibiótico antes da TC.'],
-        avisos: ['Dexametasona antes ou junto da 1ª dose. Notificação compulsória e quimioprofilaxia dos contatos. Duração: meningococo 7 dias, pneumococo 10–14, Listeria 21.'] };
-    }
-  },
   {
     id: 'encefalite', rotulo: 'Encefalite (suspeita de herpes)', germes: ['Herpes simplex vírus'],
     perguntas: [],
@@ -954,28 +946,6 @@ const SINDROMES_EMERGENCIA_EXTRA = [
       return { esquemas: [{ rotulo: 'Encefalite herpética — imediato', posologia: 'Aciclovir 10 mg/kg (peso ideal) IV 8/8h', drogas: ['aciclovir'] }],
         exames: ['PCR para HSV no líquor; repetir se o 1º for negativo e a suspeita alta. Considerar arboviroses e raiva.'],
         avisos: ['Iniciar imediatamente, sem esperar PCR. Hidratar; ajuste renal (nefro/neurotoxicidade). Duração 14–21 dias se confirmada.'] };
-    }
-  },
-  {
-    id: 'sepse_sem_foco_emerg', rotulo: 'Sepse sem foco definido (emergência/enfermaria)', germes: ['Escherichia coli', 'Klebsiella pneumoniae', 'Staphylococcus aureus'],
-    perguntas: [{ id: 'origem', rotulo: 'Origem', tipo: 'escolha', opcoes: [['comunitaria', 'Comunitária'], ['iras', 'Relacionada à assistência (internação ≥ 48 h, ATB IV/quinolona em 90 dias, ILPI, cultura prévia MDR)']] },
-      { id: 'abdome', rotulo: 'Foco abdominal possível', tipo: 'sim_nao' }, { id: 'vanco', rotulo: 'Cateter, pele/partes moles ou MRSA provável', tipo: 'sim_nao' },
-      { id: 'alergiaGrave', rotulo: 'Alergia grave a beta-lactâmicos', tipo: 'sim_nao' }],
-    decidir(r) {
-      const esquemas = [];
-      if (r.origem === 'iras') {
-        esquemas.push(r.alergiaGrave
-          ? { rotulo: 'Sepse sem foco IRAS — alergia grave', posologia: 'Aztreonam 2 g IV 8/8h + Vancomicina por AUC' + (r.abdome ? ' + Metronidazol 500 mg 8/8h' : ''), drogas: ['aztreonam', 'vancomicina'].concat(r.abdome ? ['metronidazol'] : []) }
-          : { rotulo: 'Sepse sem foco, relacionada à assistência', posologia: 'Piperacilina-tazobactam 4,5 g IV 6/6h ou Cefepima 2 g 8/8h' + (r.abdome ? ' + Metronidazol 500 mg 8/8h' : '') + ' (Meropenem se ESBL conhecida)', drogas: ['piperacilinatazobactam', 'cefepima', 'meropenem'].concat(r.abdome ? ['metronidazol'] : []) });
-        esquemas.push({ rotulo: 'Associar vancomicina se', posologia: 'Cateter, pele ou MRSA → Vancomicina por AUC', drogas: ['vancomicina'] });
-      } else {
-        esquemas.push(r.alergiaGrave
-          ? { rotulo: 'Sepse sem foco comunitária — alergia grave', posologia: 'Levofloxacino 750 mg IV/dia + Metronidazol 500 mg 8/8h (ou Amicacina 15 mg/kg/dia + Clindamicina)', drogas: ['levofloxacino', 'metronidazol'] }
-          : { rotulo: 'Sepse sem foco, comunitária', posologia: 'Ceftriaxona 2 g IV/dia' + (r.abdome ? ' + Metronidazol 500 mg 8/8h' : ''), drogas: ['ceftriaxona'].concat(r.abdome ? ['metronidazol'] : []) });
-      }
-      if (r.vanco && r.origem === 'comunitaria') esquemas.push({ rotulo: 'Associar vancomicina', posologia: 'Vancomicina por AUC', drogas: ['vancomicina'] });
-      return { esquemas, exames: ['2 pares de hemocultura, urina, lactato e imagem dirigida antes da 1ª dose.'],
-        avisos: ['Choque séptico → protocolo de UTI. Buscar foco ativamente (urina, imagem, pele, líquor) e descalonar em 48 h pelo foco e cultura.'] };
     }
   },
   {
@@ -1051,41 +1021,137 @@ const SINDROMES_EMERGENCIA_EXTRA = [
         exames: ['qPCR de leptospirose, sorologias; hemograma e função renal.'],
         avisos: ['Doxiciclina empírica cobre leptospirose e riquetsiose ao mesmo tempo. ' + notif] };
     }
-  },
-  {
-    id: 'intra_abdominal_emerg', rotulo: 'Intra-abdominal (emergência/enfermaria)', germes: ['Escherichia coli', 'Klebsiella pneumoniae', 'Bacteroides spp', 'Enterococcus spp'],
-    perguntas: [{ id: 'quadro', rotulo: 'Quadro', tipo: 'escolha', opcoes: [
-      ['apendicite_simples', 'Apendicite não complicada'],
-      ['peritonite', 'Apendicite complicada / peritonite comunitária'],
-      ['colecistite', 'Colecistite aguda (Tokyo I–II)'],
-      ['colangite', 'Colangite'],
-      ['diverticulite', 'Diverticulite com risco ou complicada'],
-      ['pbe', 'PBE (PMN ≥ 250/mm³ no líquido ascítico)'],
-      ['hospitalar', 'Infecção abdominal hospitalar ou pós-operatória']] },
-      { id: 'grave', rotulo: 'Grave / choque / Tokyo III / ESBL conhecida', tipo: 'sim_nao' },
-      { id: 'alergiaGrave', rotulo: 'Alergia grave a beta-lactâmicos', tipo: 'sim_nao' }],
-    decidir(r) {
-      const alt = { rotulo: 'Alternativa (alergia grave)', posologia: 'Ciprofloxacino 400 mg IV 12/12h + Metronidazol 500 mg 8/8h (ou Amicacina + Metronidazol)', drogas: ['ciprofloxacino', 'metronidazol', 'amicacina'] };
-      const foco = 'Controle de foco (cirurgia, drenagem, CPRE) é o tratamento principal; com foco controlado, 4 dias bastam (STOP-IT).';
-      let esquemas, exames = ['Hemoculturas se febril/grave; imagem e cultura do foco.'], avisos = [foco];
-      switch (r.quadro) {
-        case 'apendicite_simples': esquemas = [{ rotulo: 'Apendicite não complicada — profilaxia cirúrgica', posologia: 'Cefazolina 2 g + Metronidazol 500 mg (dose única; sem antibiótico pós-operatório)', drogas: ['cefazolina', 'metronidazol'] }]; break;
-        case 'peritonite': esquemas = r.alergiaGrave ? [alt] : [{ rotulo: 'Peritonite comunitária', posologia: 'Ceftriaxona 2 g/dia + Metronidazol 500 mg 8/8h (ou Ampicilina-sulbactam 3 g 6/6h)', drogas: ['ceftriaxona', 'metronidazol', 'ampicilinasulbactam'] }]; avisos.push('Duração 4 dias após controle do foco.'); break;
-        case 'colecistite': esquemas = r.alergiaGrave ? [alt] : [{ rotulo: 'Colecistite (Tokyo I–II)', posologia: 'Ceftriaxona + Metronidazol (ou Ampicilina-sulbactam 3 g 6/6h)', drogas: ['ceftriaxona', 'metronidazol', 'ampicilinasulbactam'] }]; avisos.push('Até 24 h após colecistectomia; 4–7 dias se não operada.'); break;
-        case 'colangite': esquemas = r.alergiaGrave ? [alt] : [{ rotulo: 'Colangite', posologia: (r.grave ? 'Piperacilina-tazobactam 4,5 g 6/6h (Tokyo III ou pós-manipulação biliar)' : 'Ceftriaxona 2 g/dia + Metronidazol 500 mg 8/8h'), drogas: ['ceftriaxona', 'metronidazol', 'piperacilinatazobactam'] }]; avisos.push('4–7 dias após drenagem.'); break;
-        case 'diverticulite': esquemas = r.alergiaGrave ? [alt] : [{ rotulo: 'Diverticulite com risco / complicada', posologia: 'Amoxicilina-clavulanato VO, ou Ceftriaxona + Metronidazol IV; abscesso > 3–4 cm: drenar', drogas: ['amoxicilinaacidoclavulanico', 'ceftriaxona', 'metronidazol'] }]; avisos.push('Diverticulite não complicada de baixo risco: sem antibiótico (analgesia e reavaliação). Duração 4–7 dias.'); break;
-        case 'pbe': esquemas = r.alergiaGrave ? [{ rotulo: 'PBE — alergia grave', posologia: 'Ciprofloxacino IV (não se profilaxia prévia com quinolona) + Albumina 1,5 g/kg no D1 e 1 g/kg no D3', drogas: ['ciprofloxacino'] }] : [{ rotulo: 'PBE', posologia: 'Ceftriaxona 2 g/dia + Albumina 1,5 g/kg no D1 e 1 g/kg no D3 (Pip-tazo se nosocomial ou ATB recente)', drogas: ['ceftriaxona', 'piperacilinatazobactam'] }]; exames = ['Paracentese diagnóstica (PMN no líquido ascítico).']; avisos = ['5–7 dias; depois profilaxia secundária.']; break;
-        default: esquemas = r.grave ? [{ rotulo: 'Abdominal hospitalar grave / ESBL', posologia: 'Meropenem 2 g IV 8/8h + Metronidazol se necessário (ver protocolo de UTI na colonização por KPC/NDM)', drogas: ['meropenem', 'metronidazol'] }] : [{ rotulo: 'Abdominal hospitalar / pós-operatória', posologia: 'Piperacilina-tazobactam 4,5 g IV 6/6h', drogas: ['piperacilinatazobactam'] }]; avisos.push('Colonização por KPC/NDM: usar o esquema da UTI. Duração 4 dias após controle do foco.');
-      }
-      return { esquemas, exames, avisos };
-    }
   }
 ];
 SINDROMES_EMERGENCIA_EXTRA.forEach(s => { s.fonte = s.fonte || 'Protocolo de Infecções — Emergência e Hospitalistas, CCIH HNSC'; });
 PROTOCOLO_ATB.sindromes.push(...SINDROMES_EMERGENCIA_EXTRA);
-PROTOCOLO_ATB.adendos.push({ data: '2026-10-05', texto: 'Protocolo de Emergência/Hospitalistas ampliado (documento da CCIH, 04/10/2026): meningite, '
-  + 'encefalite, sepse sem foco, neutropenia febril, bacteremia por S. aureus, endocardite empírica, endêmicas do Sul '
-  + '(leptospirose, febre maculosa, dengue, hantavirose, influenza) e intra-abdominais.' });
+
+/* ---- Situações específicas da Emergência (05/10/2026): mordeduras, tétano, raiva e
+   acidente com material biológico. Violência sexual e tuberculose já existem como fluxos. ---- */
+const SINDROMES_ESPECIFICAS = [
+  {
+    id: 'mordedura', rotulo: 'Mordedura — antibiótico', germes: ['Pasteurella spp', 'Staphylococcus aureus', 'anaeróbios orais', 'Capnocytophaga'],
+    perguntas: [
+      { id: 'tipo', rotulo: 'Tipo de mordedura', tipo: 'escolha', opcoes: [['cao', 'Cão'], ['gato', 'Gato'], ['humano', 'Humana']] },
+      { id: 'infectada', rotulo: 'Infecção já estabelecida (dor, edema, secreção, celulite)', tipo: 'sim_nao' },
+      { id: 'fatorRisco', rotulo: 'Fator de risco para profilaxia', tipo: 'sim_nao', ajuda: ['Ferimento em mão, face ou genitais', 'Lesão profunda ou perto de osso/articulação', 'Edema importante', 'Imunossupressão, asplenia ou cirrose'] },
+      { id: 'alergiaGrave', rotulo: 'Alergia grave a beta-lactâmicos', tipo: 'sim_nao' }
+    ],
+    decidir(r) {
+      const avisos = ['Lavar a ferida com água e sabão em abundância — primeiro passo. Avaliar profilaxia de RAIVA e de TÉTANO (fluxos próprios).', 'Evitar sutura primária de mordedura na mão.'];
+      if (r.infectada) {
+        return { esquemas: [r.alergiaGrave
+          ? { rotulo: 'Mordedura infectada — alergia grave', posologia: 'Doxiciclina 100 mg VO 12/12h, ou Sulfametoxazol-trimetoprima + Clindamicina, por 7–14 dias', drogas: ['doxiciclina', 'sulfametoxazoltrimetoprima', 'clindamicina'] }
+          : { rotulo: 'Mordedura infectada', posologia: 'Amoxicilina-clavulanato 875/125 mg VO 12/12h por 7–14 dias (IV se grave: ampicilina-sulbactam 3 g 6/6h)', drogas: ['amoxicilinaacidoclavulanico', 'ampicilinasulbactam'] }], exames: ['Cultura de secreção profunda se infecção estabelecida; hemocultura se toxemia.'], avisos };
+      }
+      const indicada = r.tipo === 'gato' || r.tipo === 'humano' || r.fatorRisco;
+      if (!indicada) return { esquemas: [{ rotulo: 'Mordedura de cão sem fator de risco', posologia: 'Sem antibiótico de rotina: lavar, desbridar se necessário e observar.', drogas: [] }], exames: [], avisos };
+      return { esquemas: [r.alergiaGrave
+        ? { rotulo: 'Profilaxia — alergia grave', posologia: 'Doxiciclina 100 mg VO 12/12h, ou Sulfametoxazol-trimetoprima + Clindamicina, por 3–5 dias', drogas: ['doxiciclina', 'sulfametoxazoltrimetoprima', 'clindamicina'] }
+        : { rotulo: 'Profilaxia antibiótica (indicada)', posologia: 'Amoxicilina-clavulanato 875/125 mg VO 12/12h por 3–5 dias', drogas: ['amoxicilinaacidoclavulanico'] }], exames: [], avisos };
+    }
+  },
+  {
+    id: 'tetano', rotulo: 'Profilaxia do tétano', germes: ['Clostridium tetani'],
+    perguntas: [
+      { id: 'historia', rotulo: 'História vacinal', tipo: 'escolha', opcoes: [
+        ['incerta', 'Incerta ou menos de 3 doses'], ['recente', '≥ 3 doses, última há menos de 5 anos'],
+        ['intermediaria', '≥ 3 doses, última há 5–10 anos'], ['antiga', '≥ 3 doses, última há mais de 10 anos']] },
+      { id: 'ferimento', rotulo: 'Ferimento', tipo: 'escolha', opcoes: [['limpo', 'Limpo e superficial'],
+        ['altorisco', 'Alto risco (profundo, sujo, puntiforme, corpo estranho, desvitalizado, queimadura, mordedura, fratura exposta)']] },
+      { id: 'imunossup', rotulo: 'Imunossupressão ou ferimento muito contaminado', tipo: 'sim_nao' }
+    ],
+    decidir(r) {
+      const alto = r.ferimento === 'altorisco';
+      const avisos = ['Lavar a ferida; a profilaxia não substitui o desbridamento.'];
+      let posologia;
+      if (r.historia === 'incerta') posologia = alto ? 'Vacina dT + Imunoglobulina antitetânica 250 UI IM (ou soro 5.000 UI) em local diferente; completar o esquema vacinal' : 'Vacina dT e completar o esquema vacinal';
+      else if (r.historia === 'recente') posologia = 'Nada (esquema completo e recente)';
+      else if (r.historia === 'intermediaria') posologia = alto ? 'Reforço com dT' : 'Nada';
+      else posologia = alto ? 'Reforço com dT' + (r.imunossup ? ' + Imunoglobulina antitetânica (imunossupressão ou ferimento muito contaminado)' : '') : 'Reforço com dT';
+      return { esquemas: [{ rotulo: 'Conduta antitetânica', posologia, drogas: [] }], exames: [], avisos };
+    }
+  },
+  {
+    id: 'raiva', rotulo: 'Profilaxia da raiva', germes: ['vírus da raiva'],
+    perguntas: [
+      { id: 'animal', rotulo: 'Animal', tipo: 'escolha', opcoes: [
+        ['cao_gato_obs', 'Cão ou gato passível de observação por 10 dias'],
+        ['cao_gato_susp', 'Cão ou gato não observável, morto, desaparecido ou suspeito'],
+        ['morcego_silvestre', 'Morcego ou outro silvestre (inclusive domiciliado)'],
+        ['herbivoro', 'Herbívoro (bovino, equino)']] },
+      { id: 'gravidade', rotulo: 'Exposição', tipo: 'escolha', opcoes: [
+        ['leve', 'Leve (mordedura superficial em tronco/membros, lambedura em pele íntegra)'],
+        ['grave', 'Grave (cabeça/face/pescoço/mãos/pés/mucosas, profunda/múltipla, lambedura de mucosa)']] }
+    ],
+    decidir(r) {
+      const avisos = ['Lavar a ferida com água e sabão em abundância. Vacina nos dias 0, 3, 7 e 14 (IM no deltoide, nunca no glúteo). Soro antirrábico 40 UI/kg ou imunoglobulina 20 UI/kg, infiltrado na lesão, até 7 dias após a 1ª dose da vacina. Em falta de soro, seguir a nota técnica estadual vigente (RS/POA 2025).', 'Notificação compulsória.'];
+      const grave = r.gravidade === 'grave' || r.animal === 'morcego_silvestre';
+      let posologia;
+      if (r.animal === 'cao_gato_obs') posologia = grave ? 'Observar o animal por 10 dias; iniciar vacina se adoecer, morrer ou desaparecer' : 'Observar o animal por 10 dias; sem profilaxia se continuar sadio';
+      else if (r.animal === 'cao_gato_susp') posologia = grave ? 'Vacina + soro antirrábico (ou imunoglobulina)' : 'Vacina';
+      else if (r.animal === 'morcego_silvestre') posologia = 'Sempre grave: Vacina + soro antirrábico (ou imunoglobulina)';
+      else posologia = grave ? 'Vacina + soro antirrábico (ou imunoglobulina)' : 'Avaliar contato e epidemiologia local; vacina conforme avaliação';
+      return { esquemas: [{ rotulo: 'Conduta antirrábica', posologia, drogas: [] }], exames: [], avisos };
+    }
+  },
+  {
+    id: 'material_biologico', rotulo: 'Acidente com material biológico (PEP)', germes: [],
+    fonte: 'PCDT PEP (HIV, IST e hepatites) — Ministério da Saúde, 2021/2024',
+    perguntas: [
+      { id: 'ate72h', rotulo: 'Exposição há 72 h ou menos', tipo: 'sim_nao' },
+      { id: 'fonte', rotulo: 'Fonte (paciente-origem)', tipo: 'escolha', opcoes: [
+        ['positiva', 'HIV positivo conhecido'], ['desconhecida', 'Desconhecida ou não testável'], ['negativa', 'HIV negativo']] },
+      { id: 'hbvImune', rotulo: 'Esquema vacinal de hepatite B completo com anti-HBs ≥ 10', tipo: 'sim_nao' }
+    ],
+    decidir(r) {
+      const esquemas = [];
+      const avisos = ['Lavar o local com água e sabão (mucosa: soro fisiológico); não espremer nem usar cáustico. Notificar (CAT/ficha de acidente de trabalho).'];
+      if (r.fonte === 'negativa') {
+        esquemas.push({ rotulo: 'Fonte HIV negativa', posologia: 'PEP para HIV NÃO indicada. Avaliar hepatites B e C conforme a fonte.', drogas: [] });
+      } else if (r.ate72h) {
+        esquemas.push({ rotulo: 'PEP para HIV (iniciar o quanto antes, até 72 h)', posologia: 'Tenofovir 300 mg + Lamivudina 300 mg (1 cp) + Dolutegravir 50 mg, VO 1x/dia por 28 dias', drogas: ['tenofovir', 'lamivudina', 'dolutegravir'] });
+      } else {
+        esquemas.push({ rotulo: 'Mais de 72 h', posologia: 'PEP para HIV não indicada após 72 h. Testar HIV agora e repetir em 30 e 90 dias.', drogas: [] });
+      }
+      if (!r.hbvImune && r.fonte !== 'negativa') esquemas.push({ rotulo: 'Hepatite B', posologia: 'Vacina (iniciar/completar) + Imunoglobulina anti-hepatite B 0,06 mL/kg IM, até 7–14 dias, se fonte HBsAg+ ou de alto risco', drogas: [] });
+      return { esquemas, exames: ['Testes rápidos HIV, hepatites B e C da fonte e do acidentado na admissão; repetir HIV em 30 e 90 dias; hepatites conforme o PCDT.'], avisos };
+    }
+  }
+];
+SINDROMES_ESPECIFICAS.forEach(s => { s.fonte = s.fonte || 'Protocolo de Infecções — Emergência e Hospitalistas, CCIH HNSC'; });
+PROTOCOLO_ATB.sindromes.push(...SINDROMES_ESPECIFICAS);
+
+/* ---- Troca IV → VO (critérios IVOS + equivalências), do protocolo de Emergência ---- */
+const TROCA_IV_VO = {
+  criterios: [
+    'Sinais e sintomas melhorando e NEWS2 em queda',
+    'Temperatura entre 36 e 38 °C nas últimas 24 h',
+    'Tubo digestivo funcionante, sem vômitos nem má-absorção, deglutição segura ou sonda',
+    'Existe opção oral adequada ao agente e ao sítio'
+  ],
+  excecoes: ['Endocardite', 'Meningite', 'Bacteremia por S. aureus', 'Osteomielite', 'Artrite séptica', 'Empiema', 'Abscesso não drenado', 'Infecção necrosante'],
+  equivalencias: [
+    { iv: 'Ceftriaxona (PAC, pielonefrite, abdome)', vo: 'Amoxicilina-clavulanato 875/125 mg 12/12h; ou quinolona/SMX-TMP pela cultura', biodisp: 'Moderada' },
+    { iv: 'Ampicilina-sulbactam / amoxicilina-clavulanato IV', vo: 'Amoxicilina-clavulanato 875/125 mg 12/12h', biodisp: 'Moderada' },
+    { iv: 'Cefazolina / oxacilina (pele)', vo: 'Cefalexina 500 mg–1 g 6/6h', biodisp: 'Boa' },
+    { iv: 'Levofloxacino IV', vo: 'Levofloxacino VO, mesma dose', biodisp: '≈ 99%' },
+    { iv: 'Ciprofloxacino 400 mg IV 12/12h', vo: 'Ciprofloxacino 500–750 mg VO 12/12h', biodisp: '70–80%' },
+    { iv: 'Metronidazol IV', vo: 'Metronidazol VO, mesma dose', biodisp: '≈ 100%' },
+    { iv: 'Clindamicina IV', vo: 'Clindamicina 300–450 mg VO 6–8/8h', biodisp: '≈ 90%' },
+    { iv: 'Sulfametoxazol-trimetoprima IV', vo: 'SMX-TMP VO, mesma dose', biodisp: '≈ 90%' },
+    { iv: 'Linezolida IV', vo: 'Linezolida VO, mesma dose', biodisp: '≈ 100%' },
+    { iv: 'Fluconazol IV', vo: 'Fluconazol VO, mesma dose', biodisp: '≈ 90%' },
+    { iv: 'Doxiciclina IV', vo: 'Doxiciclina VO, mesma dose', biodisp: '≈ 90%' }
+  ],
+  notas: ['Avaliar a troca em até 48 h da 1ª dose IV (critérios IVOS). A via oral encurta a internação e reduz infecção de cateter.',
+    'Quinolonas e doxiciclina: tomar separadas de cálcio, ferro, magnésio e antiácidos.',
+    'Sem opção oral e paciente estável: avaliar OPAT (ceftriaxona, ertapenem, teicoplanina ou daptomicina em dose única diária).']
+};
+PROTOCOLO_ATB.adendos.push({ data: '2026-10-05', texto: 'Protocolo de Emergência/Hospitalistas complementado (documento da CCIH, 04/10/2026) com o que faltava: '
+  + 'encefalite herpética, neutropenia febril, bacteremia por S. aureus, endocardite empírica, endêmicas do Sul '
+  + '(leptospirose, febre maculosa, dengue, hantavirose, influenza) e situações específicas (mordedura, tétano, raiva, acidente com material biológico). '
+  + 'SNC, intra-abdominal, trato biliar, osteoarticular e sepse de foco indeterminado já existiam e foram mantidos.' });
 
 /* ---- Coleção de protocolos (03/10/2026) ----
    Públicos diferentes, donos diferentes, versões diferentes: emergência adulto (acima),
@@ -1246,6 +1312,54 @@ function antibiogramaConsolidado(bancos, germes, de, ate) {
    respostas em ordem fixa — "pneumonia|grave=S|mrsa=N". É individual por FLUXO: duas
    combinações de respostas são dois fluxos, mesmo que caiam no mesmo esquema. Não é
    regra clínica — é rótulo do registro, para a CCIH analisar adesão por caminho. */
+/* ---- Agrupamento das síndromes para a tela de 3 botões do app clínico (05/10/2026) ----
+   Botão 1 "esquema por sítio": síndromes com secao 'sitio', agrupadas por sítio (o esquema
+   considera o RISCO DE RESISTÊNCIA do paciente, não a classificação de IRAS). Botão 3
+   "situações específicas": secao 'especificas' (IST, tuberculose, profilaxias, PEP). */
+const SECAO_SINDROME = {
+  pav_pah: ['sitio', 'Respiratório'], pac_grave_uti: ['sitio', 'Respiratório'], respiratorio: ['sitio', 'Respiratório'],
+  urinario: ['sitio', 'Urinário'], itu_cateter_uti: ['sitio', 'Urinário'],
+  pele: ['sitio', 'Pele e partes moles'], pe_diabetico: ['sitio', 'Pele e partes moles'], ferida_necrosante_uti: ['sitio', 'Pele e partes moles'],
+  abdominal: ['sitio', 'Abdominal'], biliar: ['sitio', 'Abdominal'], intra_abdominal_uti: ['sitio', 'Abdominal'],
+  osteoarticular: ['sitio', 'Osteoarticular'],
+  snc: ['sitio', 'Sistema nervoso central'], encefalite: ['sitio', 'Sistema nervoso central'], ventriculite_uti: ['sitio', 'Sistema nervoso central'],
+  corrente_sanguinea: ['sitio', 'Corrente sanguínea / cateter'], bacteremia_saureus: ['sitio', 'Corrente sanguínea / cateter'], endocardite: ['sitio', 'Corrente sanguínea / cateter'],
+  sepse_fi: ['sitio', 'Sepse sem foco'], sepse_sem_foco_uti: ['sitio', 'Sepse sem foco'],
+  neutropenia_febril_emerg: ['sitio', 'Neutropenia febril'], neutropenia_febril_uti: ['sitio', 'Neutropenia febril'],
+  febre_exposicao: ['sitio', 'Febre aguda / endêmicas'],
+  ist_sifilis: ['especificas', 'IST'], ist_corrimento_uretral: ['especificas', 'IST'], ist_corrimento_vaginal: ['especificas', 'IST'], ist_dip: ['especificas', 'IST'], ist_ulcera_genital: ['especificas', 'IST'],
+  tb_tratamento: ['especificas', 'Tuberculose'], tb_iltb: ['especificas', 'Tuberculose'],
+  mordedura: ['especificas', 'Profilaxias de urgência'], raiva: ['especificas', 'Profilaxias de urgência'], tetano: ['especificas', 'Profilaxias de urgência'],
+  material_biologico: ['especificas', 'Pós-exposição (PEP)'], ist_profilaxia_violencia: ['especificas', 'Pós-exposição (PEP)']
+};
+const ORDEM_SITIOS = ['Respiratório', 'Urinário', 'Pele e partes moles', 'Osteoarticular', 'Abdominal', 'Corrente sanguínea / cateter', 'Sistema nervoso central', 'Sepse sem foco', 'Neutropenia febril', 'Febre aguda / endêmicas'];
+const ORDEM_ESPECIFICAS = ['Profilaxias de urgência', 'Pós-exposição (PEP)', 'IST', 'Tuberculose'];
+/* Carimba secao/sitio em toda síndrome de todos os protocolos. */
+function marcarSecoes(protocolos) {
+  for (const p of Object.values(protocolos || {})) {
+    for (const s of (p.sindromes || [])) {
+      const m = SECAO_SINDROME[s.id] || ['sitio', 'Outros'];
+      s.secao = m[0]; s.sitio = m[1];
+    }
+  }
+}
+/* { sitios: [{grupo, sindromes:[{id,rotulo,homologacao}]}], especificas: [...] } de um protocolo. */
+function agruparSindromes(protocolo) {
+  const sitios = new Map(), especificas = new Map();
+  for (const s of (protocolo.sindromes || [])) {
+    const alvo = s.secao === 'especificas' ? especificas : sitios;
+    const chave = s.sitio || 'Outros';
+    if (!alvo.has(chave)) alvo.set(chave, []);
+    alvo.get(chave).push({ id: s.id, rotulo: s.rotulo, homologacao: s.homologacao });
+  }
+  const ordenar = (mapa, ordem) => {
+    const chaves = [...mapa.keys()].sort((a, b) => { const ia = ordem.indexOf(a), ib = ordem.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b); });
+    return chaves.map(grupo => ({ grupo, sindromes: mapa.get(grupo) }));
+  };
+  return { sitios: ordenar(sitios, ORDEM_SITIOS), especificas: ordenar(especificas, ORDEM_ESPECIFICAS) };
+}
+marcarSecoes(PROTOCOLOS_ATB);   /* carimba secao/sitio em todas as síndromes para a tela de 3 botões */
+
 function idDoFluxo(protocoloId, sindromeId, respostas) {
   const partes = Object.keys(respostas || {}).sort().map(k => {
     const v = respostas[k];
@@ -1267,5 +1381,5 @@ function versaoDoProtocolo(protocolo) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { PROTOCOLO_ATB, PROTOCOLOS_ATB, REVISAO_PROTOCOLO_ATB, ORIENTACAO_RENAL, AJUSTE_RENAL, ajusteRenalDosEsquemas,
     contextoLocalDoPaciente, antibiogramaLocalPorGermes, antibiogramaConsolidado, avisosDeResistenciaLocal, drogaCanonicaATB,
-    idDoFluxo, versaoDoProtocolo, comprimidosTB, SINDROMES_PCDT };
+    idDoFluxo, versaoDoProtocolo, comprimidosTB, SINDROMES_PCDT, SINDROMES_ESPECIFICAS, TROCA_IV_VO, agruparSindromes };
 }

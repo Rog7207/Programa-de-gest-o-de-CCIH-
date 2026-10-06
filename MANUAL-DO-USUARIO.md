@@ -353,9 +353,17 @@ aviso; qualquer ajuste local de conduta entra como adendo também.
   e marca o esquema com **asterisco**, com a observação "em casos graves, discutir com a
   CCIH o uso de … que não é padronizada". CRAB (ampicilina-sulbactam + polimixina B) não
   leva asterisco — as drogas estão disponíveis.
-- **Emergência ampliada**: meningite, encefalite, sepse sem foco, neutropenia febril,
+- **Emergência complementada** com o que faltava: encefalite herpética, neutropenia febril,
   bacteremia por S. aureus, endocardite empírica, endêmicas do Sul (leptospirose, febre
-  maculosa, dengue, hantavirose, influenza) e intra-abdominais.
+  maculosa, dengue, hantavirose, influenza) e situações específicas (mordedura, tétano,
+  raiva, acidente com material biológico). SNC, intra-abdominal, trato biliar, osteoarticular
+  e sepse de foco indeterminado já existiam e foram mantidos.
+- **App clínico (celular) com tela de 3 botões**: **Escolher esquema antibiótico por sítio**
+  (síndromes agrupadas por sítio; o esquema considera o **risco de resistência** do paciente,
+  não a classificação de IRAS), **Troca de IV para VO** (critérios IVOS + tabela de
+  equivalência) e **Situações específicas** (profilaxias de urgência, pós-exposição, IST,
+  tuberculose). As doses e o ajuste renal continuam aparecendo na sequência da decisão,
+  quando o antibiótico escolhido exige.
 
 ---
 

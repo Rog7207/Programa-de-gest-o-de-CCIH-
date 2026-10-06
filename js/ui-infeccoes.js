@@ -52,12 +52,21 @@ function densidade(casos, diasPaciente) {
 
 async function montarInfeccoes(conteudo) {
   conteudo.append(el('h1', {}, 'Infecções relacionadas à assistência'));
-  let bancoIras, bancoCulturas, bancoPacientes, bancoEvolucoes;
+  let bancoIras, bancoCulturas, bancoPacientes, bancoEvolucoes, bancoCirurgias;
   try {
-    [bancoIras, bancoCulturas, bancoPacientes, bancoEvolucoes] = await Promise.all([
-      lerBanco('iras'), lerBanco('culturas'), lerBanco('pacientes'), lerBanco('evolucoes').catch(() => ({ evolucoes: [] }))
+    [bancoIras, bancoCulturas, bancoPacientes, bancoEvolucoes, bancoCirurgias] = await Promise.all([
+      lerBanco('iras'), lerBanco('culturas'), lerBanco('pacientes'), lerBanco('evolucoes').catch(() => ({ evolucoes: [] })),
+      lerBanco('cirurgias').catch(() => ({ cirurgias: [] }))
     ]);
   } catch (e) { conteudo.append(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message)); return; }
+
+  /* Suspeita que veio da vigilância pós-alta: a observação da enfermeira fica no diário da
+     cirurgia (ObservacoesVigilancia), ligada ao caso por ID_IRAS. Indexamos para mostrá-la
+     no cartão da segunda análise. */
+  const vigilanciaPorIras = new Map();
+  for (const c of (bancoCirurgias.cirurgias || [])) {
+    if (c.ID_IRAS && String(c.ObservacoesVigilancia || '').trim()) vigilanciaPorIras.set(c.ID_IRAS, c.ObservacoesVigilancia);
+  }
 
   const culturas = bancoCulturas.culturas || [];
   const casos = bancoIras.casos || [];
@@ -466,6 +475,11 @@ async function montarInfeccoes(conteudo) {
       el('div', { class: 'linha-campos' },
         el('label', {}, 'Agente (cultura): ', selAgente), campoMicro,
         el('label', {}, 'Critério: ', campoCriterio)),
+      vigilanciaPorIras.has(caso.ID_IRAS)
+        ? el('div', { style: 'border-left:3px solid #2e7d32;padding-left:8px;margin:4px 0' },
+            el('p', { class: 'texto-suave', style: 'margin:0 0 2px' }, el('strong', {}, '🔎 Observação da vigilância pós-alta')),
+            el('p', { class: 'texto-suave', style: 'white-space:pre-line;margin:0' }, vigilanciaPorIras.get(caso.ID_IRAS)))
+        : null,
       String(caso.Observacoes || '').trim()
         ? el('p', { class: 'texto-suave', style: 'white-space:pre-line;border-left:3px solid #ccc;padding-left:8px' },
             caso.Observacoes)

@@ -4992,6 +4992,68 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     }
   }
 
+  /* == 97. Fumaça da aba Decisão ATB: seletor de protocolo + 3 botões (06/10/2026) == */
+  {
+    console.log('\n== 97. Fumaça da aba Decisão ATB (DOM falso: protocolo UTI + 3 botões) ==');
+    const mkNode = (tag, attrs) => {
+      const n = { tag, attrs: attrs || {}, kids: [], parent: null, style: {}, label: '', classes: new Set(), ouvintes: {}, value: '', textContent: '',
+        append(...k) { for (const x of k.flat(9)) if (x != null) { n.kids.push(x); if (typeof x === 'object') x.parent = n; } },
+        appendChild(x) { n.append(x); }, replaceChildren(...k) { n.kids = []; n.append(...k); },
+        addEventListener(ev, fn) { (n.ouvintes[ev] = n.ouvintes[ev] || []).push(fn); },
+        setAttribute(k, v) { n.attrs[k] = v; }, classList: { add: c => n.classes.add(c), remove: c => n.classes.delete(c), contains: c => n.classes.has(c) },
+        querySelectorAll() { return []; }, querySelector() { return null; }, remove() {}, get children() { return n.kids.filter(x => typeof x === 'object'); } };
+      return n;
+    };
+    const elFalso = (tag, attrs, ...filhos) => { const n = mkNode(tag, attrs); for (const [k, v] of Object.entries(attrs || {})) { if (k.startsWith('on')) n.addEventListener(k.slice(2), v); if (k === 'value') n.value = v; } n.append(...filhos); if (tag === 'select') { const o = n.children[0]; n.value = o ? (o.attrs.value || '') : ''; } return n; };
+    const texto = n => typeof n === 'string' ? n : (n && n.kids ? n.kids.map(texto).join(' ') : '');
+    const achar = (n, pred, saida = []) => { if (n && typeof n === 'object') { if (pred(n)) saida.push(n); (n.kids || []).forEach(k => achar(k, pred, saida)); } return saida; };
+    const prot2 = require(path.join(__dirname, '..', 'js', 'protocolo-atb.js'));
+    const sg2 = require(path.join(__dirname, '..', 'js', 'sincronizacao-google.js'));
+    const antes = {};
+    const chaves = ['el', 'fmtInt', 'hojeISO', 'aoPararDeDigitar', 'lerBanco', 'navegar', 'abrirPaciente', 'document', 'window',
+      'PROTOCOLO_ATB', 'PROTOCOLOS_ATB', 'agruparSindromes', 'TROCA_IV_VO', 'ORIENTACAO_RENAL', 'REVISAO_PROTOCOLO_ATB',
+      'ajusteRenalDosEsquemas', 'antibiogramaLocalPorGermes', 'avisosDeResistenciaLocal', 'contextoLocalDoPaciente',
+      'sincronizacaoGoogle', 'sincronizacaoConfigurada', 'urlAppMedicos', 'MINIAPPS_PARA_PASTA', 'qrDe', 'CATALOGO_MINIAPPS', 'cartaoSincronizarMiniapp'];
+    chaves.forEach(k => { antes[k] = global[k]; });
+    try {
+      Object.assign(global, {
+        el: elFalso, fmtInt: n => String(n), hojeISO: () => '2026-10-06', aoPararDeDigitar: fn => fn, navegar: () => {}, abrirPaciente: () => {},
+        document: { createElement: t => elFalso(t) }, window: { open: () => {} },
+        PROTOCOLO_ATB: prot2.PROTOCOLO_ATB, PROTOCOLOS_ATB: prot2.PROTOCOLOS_ATB, agruparSindromes: prot2.agruparSindromes, TROCA_IV_VO: prot2.TROCA_IV_VO,
+        ORIENTACAO_RENAL: prot2.ORIENTACAO_RENAL, REVISAO_PROTOCOLO_ATB: prot2.REVISAO_PROTOCOLO_ATB, ajusteRenalDosEsquemas: prot2.ajusteRenalDosEsquemas,
+        antibiogramaLocalPorGermes: prot2.antibiogramaLocalPorGermes, avisosDeResistenciaLocal: prot2.avisosDeResistenciaLocal, contextoLocalDoPaciente: prot2.contextoLocalDoPaciente,
+        sincronizacaoGoogle: { config: async () => ({}), configurada: async () => false }, sincronizacaoConfigurada: () => false,
+        urlAppMedicos: sg2.urlAppMedicos, MINIAPPS_PARA_PASTA: [], qrDe: () => elFalso('img'), CATALOGO_MINIAPPS: [], cartaoSincronizarMiniapp: async () => null,
+        lerBanco: async n => ({ culturas: { culturas: [], sensibilidade: [] }, antibioticos: { decisoes_empiricas: [], prescricoes: [] }, pacientes: { pacientes: [], internacoes: [] }, config: { meta: [] } }[n] || {})
+      });
+      eval(fs.readFileSync(path.join(__dirname, '..', 'js', 'ui-decisao.js'), 'utf-8'));
+      const raiz = elFalso('div');
+      await montarDecisaoATB(raiz);
+      verificar('aba Decisão ATB monta sem exceção', true);
+      const selProt = achar(raiz, n => n.tag === 'select')[0];
+      verificar('tem seletor de protocolo com Emergência e UTI', selProt && achar(selProt, n => n.tag === 'option').some(o => /UTI/.test(texto(o))) && achar(selProt, n => n.tag === 'option').some(o => /Emerg/.test(texto(o))));
+      /* 3 botões presentes. */
+      const bt = rot => achar(raiz, n => n.tag === 'button' && new RegExp(rot).test(texto(n)))[0];
+      verificar('3 botões: por sítio, IV→VO, situações específicas', bt('por sítio') && bt('IV para VO') && bt('específicas'));
+      /* Trocar para o protocolo da UTI e abrir "por sítio" → escolher PAV → Analisar. */
+      selProt.value = 'uti-nosocomial'; (selProt.ouvintes.change || []).forEach(fn => fn({}));
+      bt('por sítio').ouvintes.click[0]({});
+      const selSind = achar(raiz, n => n.tag === 'select' && n.kids.some(k => k.tag === 'optgroup'))[0];
+      verificar('por sítio popula o seletor agrupado (optgroups) com as síndromes da UTI', selSind && achar(selSind, n => n.tag === 'option').some(o => o.attrs.value === 'pav_pah'));
+      selSind.value = 'pav_pah'; (selSind.ouvintes.change || []).forEach(fn => fn({}));
+      const btAnalisar = achar(raiz, n => n.tag === 'button' && /Analisar/.test(texto(n)))[0];
+      btAnalisar.ouvintes.click[0]({});
+      verificar('Analisar a PAV da UTI mostra a sugestão sem exceção', /Sugestão/.test(texto(raiz)) && /Polimixina|Cefepima|Meropenem/.test(texto(raiz)));
+      /* IV→VO abre a tabela. */
+      bt('IV para VO').ouvintes.click[0]({});
+      verificar('botão IV→VO mostra a tabela de equivalências', /Troca de IV para VO/.test(texto(raiz)) && /Equivalente oral/.test(texto(raiz)));
+    } catch (e) {
+      verificar('aba Decisão ATB monta e navega sem exceção', false, e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e.message);
+    } finally {
+      Object.assign(global, antes);
+    }
+  }
+
   console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
   process.exit(falharam ? 1 : 0);
 })();

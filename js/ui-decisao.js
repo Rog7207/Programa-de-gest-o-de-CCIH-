@@ -75,13 +75,65 @@ async function montarDecisaoATB(conteudo) {
   };
   campoProntuario.addEventListener('input', aoPararDeDigitar(buscarContexto, 400));
 
-  /* ---- Síndrome e perguntas do protocolo ---- */
-  const selSindrome = el('select', {},
-    el('option', { value: '' }, 'escolha a síndrome…'),
-    PROTOCOLO_ATB.sindromes.map(s => el('option', { value: s.id }, s.rotulo + (s.homologacao === 'pendente' ? ' (PCDT MS — a homologar)' : ''))));
+  /* ---- Protocolo, navegação por 3 botões e síndrome (06/10/2026) ----
+     O computador passa a ter o que o celular já tinha: seletor de protocolo (Emergência,
+     UTI…) e os 3 caminhos — por sítio, troca IV→VO, situações específicas. */
+  const protocolosDisponiveis = (typeof PROTOCOLOS_ATB !== 'undefined' ? Object.values(PROTOCOLOS_ATB) : [PROTOCOLO_ATB]).filter(p => (p.sindromes || []).length);
+  const selProtocolo = el('select', {}, protocolosDisponiveis.map(p => el('option', { value: p.id }, p.rotulo + (p.homologado ? '' : ' (em construção)'))));
+  const protocoloAtual = () => (typeof PROTOCOLOS_ATB !== 'undefined' && PROTOCOLOS_ATB[selProtocolo.value]) || PROTOCOLO_ATB;
+  const grupos = () => (typeof agruparSindromes === 'function' ? agruparSindromes(protocoloAtual()) : { sitios: [], especificas: [] });
+
+  const selSindrome = el('select', {}, el('option', { value: '' }, 'escolha…'));
+  const rotuloSindrome = el('span', {}, 'Síndrome');
   const areaPerguntas = el('div', {});
+  const areaSindrome = el('div', {}, el('button', { class: 'botao-secundario', onclick: () => mostrar('home') }, '← voltar'),
+    el('div', { class: 'linha-campos' }, el('label', {}, rotuloSindrome, ' ', selSindrome)), areaPerguntas);
+  const areaIVVO = el('div', {});
   const areaResultado = el('div', {});
   const controles = new Map();
+
+  function mostrar(qual) {
+    areaSindrome.style.display = qual === 'sindrome' ? '' : 'none';
+    areaIVVO.style.display = qual === 'ivvo' ? '' : 'none';
+    if (qual !== 'sindrome') areaResultado.replaceChildren();
+  }
+  function popularSindromes(listaGrupos, rotulo) {
+    rotuloSindrome.textContent = rotulo;
+    selSindrome.replaceChildren(el('option', { value: '' }, 'escolha…'));
+    for (const g of listaGrupos) {
+      const og = document.createElement('optgroup');
+      og.label = g.grupo;
+      for (const s of g.sindromes) og.append(el('option', { value: s.id }, s.rotulo + (s.homologacao === 'pendente' ? ' (a homologar)' : '')));
+      selSindrome.append(og);
+    }
+    selSindrome.value = '';
+    desenharPerguntas();
+  }
+  function desenharIVVO() {
+    const t = typeof TROCA_IV_VO !== 'undefined' ? TROCA_IV_VO : null;
+    if (!t) { areaIVVO.replaceChildren(el('p', { class: 'texto-suave' }, 'Dados de troca IV→VO indisponíveis.')); return; }
+    areaIVVO.replaceChildren(
+      el('button', { class: 'botao-secundario', onclick: () => mostrar('home') }, '← voltar'),
+      el('h3', {}, 'Troca de IV para VO'),
+      el('p', { class: 'texto-suave' }, 'Pode trocar quando TODOS estiverem presentes:'),
+      el('ul', {}, t.criterios.map(c => el('li', {}, c))),
+      el('p', { class: 'texto-suave' }, 'Decisão individual com o infectologista nestes casos: ' + t.excecoes.join(', ') + '.'),
+      el('table', { class: 'tabela' }, el('thead', {}, el('tr', {}, ['IV', 'Equivalente oral', 'Biodisp.'].map(c => el('th', {}, c)))),
+        el('tbody', {}, t.equivalencias.map(e => el('tr', {}, el('td', {}, e.iv), el('td', {}, e.vo), el('td', {}, e.biodisp))))),
+      el('ul', { class: 'texto-suave' }, t.notas.map(n => el('li', {}, n))));
+  }
+  const btSitio = el('button', { class: 'botao-primario', onclick: () => { popularSindromes(grupos().sitios, 'Sítio / síndrome (o esquema considera o risco de resistência do paciente)'); mostrar('sindrome'); } }, '🩺 Esquema antibiótico por sítio');
+  const btIVVO = el('button', { class: 'botao-secundario', onclick: () => { desenharIVVO(); mostrar('ivvo'); } }, '💊 Troca de IV para VO');
+  const btEspecificas = el('button', { class: 'botao-secundario', onclick: () => { popularSindromes(grupos().especificas, 'Situação específica'); mostrar('sindrome'); } }, '📋 Situações específicas');
+  const areaNavegacao = el('div', { class: 'linha-botoes' }, btSitio, btIVVO, btEspecificas);
+  const pPublico = el('p', { class: 'texto-suave' });
+  function aoTrocarProtocolo() {
+    pPublico.textContent = protocoloAtual().publico || '';
+    btEspecificas.style.display = grupos().especificas.length ? '' : 'none';
+    mostrar('home');
+    areaResultado.replaceChildren();
+  }
+  selProtocolo.addEventListener('change', aoTrocarProtocolo);
 
   /* Perguntas que o contexto local responde sozinho (o médico pode desmarcar). */
   const PERGUNTAS_DE_RISCO = ['riscoEsbl', 'riscoMDR', 'comorbAtb90', 'riscoMRSAHosp', 'riscoMRSA'];
@@ -89,7 +141,7 @@ async function montarDecisaoATB(conteudo) {
   function desenharPerguntas() {
     areaResultado.replaceChildren();
     controles.clear();
-    const sindrome = PROTOCOLO_ATB.sindromes.find(s => s.id === selSindrome.value);
+    const sindrome = protocoloAtual().sindromes.find(s => s.id === selSindrome.value);
     if (!sindrome) { areaPerguntas.replaceChildren(); return; }
     const linhas = sindrome.perguntas.map(p => {
       let controle;
@@ -116,7 +168,7 @@ async function montarDecisaoATB(conteudo) {
   selSindrome.addEventListener('change', desenharPerguntas);
 
   function analisar() {
-    const sindrome = PROTOCOLO_ATB.sindromes.find(s => s.id === selSindrome.value);
+    const sindrome = protocoloAtual().sindromes.find(s => s.id === selSindrome.value);
     if (!sindrome) return;
     const respostas = {};
     for (const [id, { controle, tipo }] of controles) {
@@ -168,21 +220,24 @@ async function montarDecisaoATB(conteudo) {
       ...antibiograma.map(tabelaAntibiograma),
       el('p', { class: 'texto-suave' }, REVISAO_PROTOCOLO_ATB),
       el('p', { class: 'texto-suave' },
-        'Fonte: ' + PROTOCOLO_ATB.fonte + '. Ferramenta de APOIO à decisão — não substitui o julgamento '
+        'Fonte: ' + (sindrome.fonte || protocoloAtual().fonte) + '. Ferramenta de APOIO à decisão — não substitui o julgamento '
         + 'clínico nem a avaliação da CCIH para antimicrobianos auditados.'),
-      PROTOCOLO_ATB.adendos.length ? el('p', { class: 'texto-suave' }, 'Adendos validados pela CCIH: '
-        + PROTOCOLO_ATB.adendos.map(a => `${a.data.split('-').reverse().join('/')} — ${a.texto}`).join(' · ')) : null));
+      (protocoloAtual().adendos || []).length ? el('p', { class: 'texto-suave' }, 'Adendos validados pela CCIH: '
+        + protocoloAtual().adendos.map(a => `${a.data.split('-').reverse().join('/')} — ${a.texto}`).join(' · ')) : null));
   }
 
   conteudo.append(el('div', { class: 'cartao' },
     el('h2', {}, 'Caso'),
-    el('p', { class: 'texto-suave' }, PROTOCOLO_ATB.publico),
     el('div', { class: 'linha-campos' },
-      el('label', {}, 'Prontuário: ', campoProntuario),
-      el('label', {}, 'Síndrome: ', selSindrome)),
+      el('label', {}, 'Protocolo: ', selProtocolo),
+      el('label', {}, 'Prontuário: ', campoProntuario)),
+    pPublico,
     areaContexto,
-    areaPerguntas),
+    areaNavegacao,
+    areaSindrome,
+    areaIVVO),
     areaResultado);
+  aoTrocarProtocolo();   /* estado inicial: público, botão de específicas e home */
 
   /* ---- Decisões recebidas dos médicos assistentes (miniapp) ----
      Fecha o ciclo: o que foi perguntado, o que o protocolo sugeriu e o que foi prescrito.

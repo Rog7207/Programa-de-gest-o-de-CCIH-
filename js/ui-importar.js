@@ -307,6 +307,10 @@ async function processarArquivo(arquivo, codificacao, opcoesAba) {
           const matrizCrua = XLSX.utils.sheet_to_json(wbCru.Sheets[n], { header: 1, raw: true, defval: '' });
           const niss = lerCensoNISS(matrizCrua);
           if (niss.reconhecido && niss.linhas.length) { telaCensoNISS(arquivo, niss); return; }
+          /* IMAS (2485): lista oficial de IRAS por classificação. Datas dd/mm/aaaa em texto
+             — por isso também vai na leitura crua. */
+          const imas = lerImasOcorrencias(matrizCrua);
+          if (imas.reconhecido && imas.linhas.length) { telaImasOcorrencias(arquivo, imas); return; }
           const evolucoes = lerEvolucoesTasy(matrizCrua);
           if (evolucoes.reconhecido && evolucoes.evolucoes.length) { await telaEvolucoes(arquivo, evolucoes); return; }
           /* Sinais vitais (2411) antes da foto (2396): os dois têm atendimento + setor. */
@@ -735,6 +739,89 @@ function telaCensoNISS(arquivo, leitura) {
         imp.forcarPlanilhaComum = true;
         processarArquivo(arquivo, 'auto');
       } }, 'Não é isso — ler como planilha comum'))));
+}
+
+/* IMAS — Ficha de ocorrência por classificação (2485): a lista oficial de IRAS. Grava
+   direto nos casos, SEM duplicar episódio já conhecido (registrarCasoIras pela identidade
+   do paciente + grupo de topografia + janela de datas) e SEM mexer no status de um caso
+   que já existe aqui — só completa campos vazios. Casos que só existem no IMAS entram com
+   o status da classificação (Confirmada → confirmado). */
+function telaImasOcorrencias(arquivo, leitura) {
+  const campoCriterio = el('input', { type: 'text', value: 'Notificação IMAS', style: 'width:220px' });
+  const previa = el('p', { class: 'texto-suave' });
+  const candidatosDe = (casos, pacientes) => {
+    const identidadeDe = identidadePorNome(pacientes);
+    const gerar = proximoID(casos, 'ID_IRAS', 'IRA');
+    let novos = 0, vinculados = 0;
+    for (const o of leitura.linhas) {
+      const pront = normalizarProntuario(o.Prontuario) || (o.Atendimento ? 'AT-' + o.Atendimento : '');
+      if (!pront) continue;
+      const r = registrarCasoIras(casos, {
+        Prontuario: pront, DataInfeccao: o.DataInfeccao, Topografia: o.Topografia, Setor: o.Setor,
+        Procedimento: o.Procedimento || '', CriterioDiagnostico: campoCriterio.value + (o.TopografiaIMAS ? ' — ' + o.TopografiaIMAS : ''),
+        StatusInvestigacao: o.StatusInvestigacao, NotificadoANVISA: '', CriadoPor: app.usuario, CriadoEm: agoraCurto()
+      }, gerar, identidadeDe);
+      if (r.novo) novos++; else vinculados++;
+    }
+    return { novos, vinculados };
+  };
+  const simular = async () => {
+    try {
+      const [bIras, bPac] = await Promise.all([lerBanco('iras'), lerBanco('pacientes')]);
+      const copia = JSON.parse(JSON.stringify(bIras.casos || []));
+      const r = candidatosDe(copia, bPac.pacientes || []);
+      previa.textContent = `Prévia: ${fmtInt(r.novos)} caso(s) novo(s) e ${fmtInt(r.vinculados)} que já existem aqui (não duplicam)`
+        + (leitura.ignoradasDescartadas ? `; ${fmtInt(leitura.ignoradasDescartadas)} descartada(s) no IMAS, ignorada(s)` : '') + '.';
+    } catch (e) { previa.textContent = 'Erro ao ler o banco: ' + e.message; }
+  };
+  campoCriterio.addEventListener('change', simular);
+  simular();
+  const setores = [...new Set(leitura.linhas.map(l => l.Setor))].sort();
+  imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
+    el('h2', {}, 'IRAS do IMAS (ficha de ocorrência por classificação)'),
+    el('p', {}, `Reconheci ${arquivo.name} como a lista de IRAS do IMAS: ${fmtInt(leitura.linhas.length)} ocorrência(s) em ${fmtInt(setores.length)} setor(es).`),
+    el('p', { class: 'texto-suave' }, 'Entram como casos de IRAS (topografia e, nas ISC, o procedimento). O que já existe aqui não duplica, '
+      + 'e o status de um caso que já está no app não é alterado — serve para conferir e completar. O texto abaixo vai ao critério diagnóstico de cada caso.'),
+    el('div', { class: 'linha-campos' }, el('label', {}, 'Critério diagnóstico: ', campoCriterio)),
+    previa,
+    leitura.problemas.length ? el('details', {},
+      el('summary', {}, `${fmtInt(leitura.problemas.length)} linha(s) com problema`),
+      el('ul', {}, leitura.problemas.slice(0, 30).map(p => el('li', {}, p)))) : null,
+    el('div', { class: 'linha-botoes' },
+      el('button', { class: 'botao-primario', onclick: async () => {
+        imp.detalhes.replaceChildren(el('div', { class: 'cartao' }, el('p', {}, 'Gravando…')));
+        try {
+          const resumo = await comTrava(['iras', 'pacientes'], async () => {
+            const bIras = await lerBanco('iras');
+            const bPac = await lerBanco('pacientes');
+            bIras.casos = bIras.casos || [];
+            const r = candidatosDe(bIras.casos, bPac.pacientes || []);
+            /* Nome do paciente vive no cadastro, não no caso: upsert por prontuário. */
+            const porPront = new Map((bPac.pacientes || []).map(p => [normalizarProntuario(p.Prontuario), p]));
+            let mudouPac = false;
+            for (const o of leitura.linhas) {
+              const pront = normalizarProntuario(o.Prontuario);
+              if (!pront || !String(o.NomePaciente || '').trim()) continue;
+              const ex = porPront.get(pront);
+              if (!ex) { const novo = { Prontuario: pront, Nome: o.NomePaciente, CriadoPor: app.usuario, CriadoEm: agoraCurto() }; bPac.pacientes.push(novo); porPront.set(pront, novo); mudouPac = true; }
+              else if (!String(ex.Nome || '').trim()) { ex.Nome = o.NomePaciente; mudouPac = true; }
+            }
+            await gravarBanco('iras', bIras);
+            if (mudouPac) await gravarBanco('pacientes', bPac);
+            return r;
+          });
+          await arquivarOriginal(arquivo);
+          imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
+            el('h2', {}, 'Importado'),
+            el('p', {}, `${fmtInt(resumo.novos)} caso(s) novo(s); ${fmtInt(resumo.vinculados)} já existiam (completados sem duplicar).`),
+            el('p', { class: 'texto-suave' }, 'Confira na aba Infecções. Casos confirmados no IMAS entram como confirmados; suspeitos vão para a fila de confirmação.')));
+        } catch (e) {
+          imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao gravar: ' + e.message));
+        }
+      } }, 'Importar IRAS do IMAS'),
+      ' ',
+      el('button', { onclick: () => { imp.forcarPlanilhaComum = true; processarArquivo(arquivo, 'auto'); } },
+        'Não é isso — ler como planilha comum'))));
 }
 
 /* Um PDF pode ser três relatórios diferentes; cada um tem seu leitor. A ordem importa:

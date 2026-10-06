@@ -1177,6 +1177,39 @@ console.log('\n== 84b. Classificador ligado à importação, à dedup e ao vocab
   const d = imp.deduplicar([{ Prontuario: '2', DataCirurgia: '2026-08-10', Procedimento: 'COLECISTECTOMIA VIDEOLAPAROSCOPICA' }], existente, 'cirurgias');
   verificar('rótulo antigo no banco não faz a mesma cirurgia reimportar como nova', d.novos.length === 0 && d.duplicados.length === 1, d);
 
+  /* ---- IMAS: Ficha de ocorrência por classificação (relatório 2485) ---- */
+  const matrizImas = [
+    ['IMAS - Ficha de ocorrência por classificação', '', '', '', '', '', '', '', '', '', '', ''],
+    ['', 'Atend / Setor - Infecção', 'Dt. Infecção', 'Pront.', 'Paciente', '', 'Classif. Evento', '', 'Topografia', 'Classificação Topografia', '', 'Proced. Cirurgico'],
+    ['', '1406317 - CTI - Dr. Joaquim David Ferreira Lima', '17/08/2026 13:09:19', '830905', 'Maria Zuleide', '', 'Confirmada', '', 'Pulmonar', 'PAV-Pneumonia Associada à Ventilação Mecânica', '', ''],
+    ['', '1394712 - Centro Cirúrgico', '29/07/2026 08:19:36', '925949', 'Getulio da Silva', '', 'Confirmada', '', 'Sítio Cirúrgico', 'ISC- OC- Infecção do Sítio Cirúrgico Órgão e Cavidade', '', 'NEFRECTOMIA TOTAL EM ONCOLOGIA'],
+    ['', '1400000 - CTI - Dr. Joaquim David Ferreira Lima', '01/08/2026', '111222', 'Ana Paula', '', 'Suspeita', '', 'Trato Urinário', 'ITU associada a cateter vesical', '', ''],
+    ['', '1400001 - CTI - Dr. Joaquim David Ferreira Lima', '02/08/2026', '333444', 'Bruno Lima', '', 'Descartada', '', 'Corrente Sanguínea', 'IPCS com confirmação laboratorial', '', ''],
+    ['', 'Impresso em:  06/10/2026 11:20:27', '', '', 'Página   1', '', 'M595487', '', '', '', 'CATE2485', '']
+  ];
+  const imas = imp.lerImasOcorrencias(matrizImas);
+  verificar('IMAS: relatório 2485 reconhecido', imas.reconhecido === true);
+  verificar('IMAS: descartada é ignorada, restam 3 ocorrências', imas.linhas.length === 3 && imas.ignoradasDescartadas === 1, { n: imas.linhas.length, desc: imas.ignoradasDescartadas });
+  const o0 = imas.linhas[0];
+  verificar('IMAS: separa atendimento e setor da célula combinada', o0.Atendimento === '1406317' && o0.Setor === 'CTI - Dr. Joaquim David Ferreira Lima', o0);
+  verificar('IMAS: data dd/mm/aaaa vira ISO', o0.DataInfeccao === '2026-08-17', o0.DataInfeccao);
+  verificar('IMAS: PAV vira a topografia canônica', o0.Topografia === 'Pneumonia associada à ventilação mecânica (PAV)', o0.Topografia);
+  verificar('IMAS: Confirmada → confirmado', o0.StatusInvestigacao === 'confirmado', o0.StatusInvestigacao);
+  const oIsc = imas.linhas[1];
+  verificar('IMAS: ISC-OC vira ISC de órgão/espaço e guarda o procedimento', oIsc.Topografia === 'ISC de órgão/espaço' && oIsc.Procedimento === 'NEFRECTOMIA TOTAL EM ONCOLOGIA', oIsc);
+  const oItu = imas.linhas[2];
+  verificar('IMAS: Suspeita → em investigação', oItu.StatusInvestigacao === 'em investigação' && oItu.Topografia === 'ITU associada a cateter vesical', oItu);
+  verificar('IMAS: grupoTopografia reconhece a topografia canônica (PAV→pneumonia, ISC→isc)',
+    imp.grupoTopografia(o0.Topografia) === 'pneumonia' && imp.grupoTopografia(oIsc.Topografia) === 'isc', { a: imp.grupoTopografia(o0.Topografia), b: imp.grupoTopografia(oIsc.Topografia) });
+  verificar('IMAS: topografiaCanonicaImas mapeia ISC superficial e profunda',
+    imp.topografiaCanonicaImas('ISC-S- Infecção do Sítio Cirúrgico Superficial', 'Sítio Cirúrgico') === 'ISC incisional superficial'
+    && imp.topografiaCanonicaImas('ISC- P- Infecção do Sítio Cirúrgico Profunda', '') === 'ISC incisional profunda');
+  verificar('IMAS: statusDaClassificacaoImas (confirmada/descartada/suspeita)',
+    imp.statusDaClassificacaoImas('Confirmada') === 'confirmado' && imp.statusDaClassificacaoImas('Descartada') === null && imp.statusDaClassificacaoImas('Suspeita') === 'em investigação');
+  /* Não sequestra outros relatórios: sem o título, não reconhece. */
+  const naoImas = imp.lerImasOcorrencias([['Censo diário de Invasividade - NISS'], ['', 'Referência', 'Pacientes']]);
+  verificar('IMAS: sem o título próprio, não reconhece (não colide com NISS/foto)', naoImas.reconhecido === false);
+
   /* config.carregar garante que toda categoria exista no vocabulário, com código e corte. */
   global.VOCABULARIO_INICIAL = esquemas.VOCABULARIO_INICIAL;
   global.categoriasDeProcedimento = imp.categoriasDeProcedimento;

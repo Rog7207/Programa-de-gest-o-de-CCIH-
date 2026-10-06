@@ -1225,6 +1225,103 @@ function lerCensoNISS(matriz) {
   return { reconhecido, linhas, problemas, cobertura, conferencia: [] };
 }
 
+/* ---- IMAS: Ficha de ocorrência por classificação (relatório 2485 do Tasy) ------------
+   Lista oficial das IRAS classificadas: uma linha por ocorrência, com atendimento+setor
+   numa célula só ("1406317 - CTI - Dr. Fulano"), data/hora, prontuário, paciente, a
+   classificação do evento (Confirmada/…), a topografia ampla (Pulmonar, Sítio Cirúrgico…),
+   a classificação específica da topografia (PAV, ISC-S/P/OC…) e, nas ISC, o procedimento.
+   É texto tabulado paginado, com título no topo e rodapé "Impresso em". Devolve casos já
+   prontos para registrarCasoIras — a topografia específica vira o vocabulário canônico e o
+   grupoTopografia continua reconhecendo (PAV→pneumonia, ISC→isc). */
+function statusDaClassificacaoImas(classif) {
+  const c = normalizarTexto(classif);
+  if (!c) return 'confirmado';
+  if (c.includes('descart')) return null;              /* descartada não entra */
+  if (c.includes('confirm')) return 'confirmado';
+  return 'em investigação';                            /* suspeita/notificada → fila de confirmação */
+}
+function topografiaCanonicaImas(especifica, grupo) {
+  const e = normalizarTexto(especifica), g = normalizarTexto(grupo);
+  const t = e || g;
+  if (!t) return '';
+  if (t.startsWith('pav') || (t.includes('pneumonia') && t.includes('ventila'))) return 'Pneumonia associada à ventilação mecânica (PAV)';
+  if (t.includes('traqueobronqui')) return 'Traqueobronquite';
+  if (t.includes('pneumonia') || t === 'pulmonar') return 'Pneumonia não associada à VM';
+  if (t.startsWith('isc') || t.includes('sitiocirurgic')) {
+    if (t.includes('superficial')) return 'ISC incisional superficial';
+    if (t.includes('profund')) return 'ISC incisional profunda';
+    if (t.includes('orgao') || t.includes('cavidade') || /\boc\b/.test(especifica.toLowerCase())) return 'ISC de órgão/espaço';
+    return especifica || grupo;
+  }
+  if (t.includes('urinari') || t === 'itu' || t.includes('tratourinario')) return t.includes('cateter') || t.includes('sonda') ? 'ITU associada a cateter vesical' : 'ITU não associada a cateter';
+  if (t.includes('corrente') || t.includes('bacteremia') || t.startsWith('ipcs')) return t.includes('clinic') ? 'IPCS clínica' : 'IPCS com confirmação laboratorial';
+  return especifica || grupo;
+}
+function lerImasOcorrencias(matriz) {
+  const linhas = (matriz || []);
+  let reconhecido = false, cab = -1, col = null;
+  for (let i = 0; i < linhas.length; i++) {
+    const cels = (linhas[i] || []).map(c => String(c == null ? '' : c));
+    const junto = normalizarTexto(cels.join(' '));
+    if (junto.includes('ficha') && junto.includes('ocorr') && junto.includes('classific')) reconhecido = true;
+    /* Cabeçalho: tem a célula combinada atend/setor e a data da infecção. */
+    const norm = cels.map(c => normalizarTexto(c));
+    const achar = (teste) => { const j = norm.findIndex(teste); return j < 0 ? null : j; };
+    const iAtendSetor = achar(n => n.includes('atend') && n.includes('setor'));
+    const iDataInf = achar(n => n.startsWith('dtinfec') || n.includes('dtinfeccao') || n.includes('datainfec'));
+    if (iAtendSetor != null && iDataInf != null) {
+      cab = i;
+      col = {
+        atendSetor: iAtendSetor,
+        dataInf: iDataInf,
+        pront: achar(n => n === 'pront' || n.startsWith('pront')),
+        paciente: achar(n => n === 'paciente'),
+        classif: achar(n => n.includes('classifevento')),
+        topoEspecifica: achar(n => n.includes('classificacaotopografia')),
+        topoGrupo: achar(n => n === 'topografia'),
+        procedimento: achar(n => n.includes('proced'))
+      };
+      break;
+    }
+  }
+  if (!reconhecido || cab < 0) return { reconhecido: false, linhas: [], problemas: [] };
+  const valor = (l, j) => j == null ? '' : String(l[j] == null ? '' : l[j]).trim();
+  const dataDe = v => { const m = String(v).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : ''; };
+  const saida = [], problemas = [];
+  let ignoradasDescartadas = 0;
+  for (const bruta of linhas.slice(cab + 1)) {
+    const l = (bruta || []);
+    const junto = normalizarTexto(l.map(c => String(c == null ? '' : c)).join(' '));
+    if (!junto || junto.startsWith('impressoem') || junto.includes('pagina') || /^total/.test(junto)) continue;
+    const comb = valor(l, col.atendSetor);
+    if (!comb) continue;
+    const mComb = comb.match(/^\s*(\d+)\s*-\s*(.+?)\s*$/);
+    const atendimento = mComb ? mComb[1] : '';
+    const setor = mComb ? mComb[2] : comb;
+    const prontuario = valor(l, col.pront);
+    const dataInf = dataDe(valor(l, col.dataInf));
+    const especifica = valor(l, col.topoEspecifica);
+    const grupo = valor(l, col.topoGrupo);
+    if (!especifica && !grupo) continue;                /* linha de continuação/ruído */
+    const status = statusDaClassificacaoImas(valor(l, col.classif));
+    if (status === null) { ignoradasDescartadas++; continue; }
+    if (!prontuario && !atendimento) { problemas.push('ocorrência sem prontuário nem atendimento: ' + comb); continue; }
+    saida.push({
+      Atendimento: atendimento,
+      Prontuario: prontuario,
+      NomePaciente: valor(l, col.paciente),
+      DataInfeccao: dataInf,
+      Setor: setor,
+      Topografia: topografiaCanonicaImas(especifica, grupo),
+      TopografiaIMAS: especifica || grupo,
+      Procedimento: valor(l, col.procedimento),
+      Classificacao: valor(l, col.classif),
+      StatusInvestigacao: status
+    });
+  }
+  return { reconhecido: true, linhas: saida, problemas, ignoradasDescartadas };
+}
+
 /* ---- Evoluções do Tasy (foto operacional) --------------------------------------------
    Export diário das evoluções em texto livre. Não é histórico: por atendimento ficam só a
    ÚLTIMA evolução e a última MÉDICA (categoria E), texto aparado — contexto para revisar
@@ -4429,7 +4526,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome, resolverProntuarioPorNomeEData, NAO_ANTIMICROBIANO, pareceNomeTruncado,
     enriquecerCirurgia, classificarProcedimentoNHSN, NHSN_CATEGORIAS, categoriasDeProcedimento, categoriaDoProcedimento, CATEGORIA_SEM_CLASSIFICACAO, contaminacaoPresumida, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerEvolucoesTasy, filtrarEvolucoesRetidas, mesclarEvolucoes, sinaisDeInfeccaoNaEvolucao, extrairTemplateEvolucao, topografiaSugeridaPorSinais, EVOLUCAO_SILENCIO_DIAS, sinaisVitaisNaEvolucao, EVOLUCAO_UTI_HORAS, LIMITES_VITAIS, lerSinaisVitaisTasy, alteracoesDaMedida, mesclarSinaisVitais, SINAIS_VITAIS_RETENCAO_DIAS, internadosAgora, lerFotoInternados, aplicarFotoInternados, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerImasOcorrencias, topografiaCanonicaImas, statusDaClassificacaoImas, lerEvolucoesTasy, filtrarEvolucoesRetidas, mesclarEvolucoes, sinaisDeInfeccaoNaEvolucao, extrairTemplateEvolucao, topografiaSugeridaPorSinais, EVOLUCAO_SILENCIO_DIAS, sinaisVitaisNaEvolucao, EVOLUCAO_UTI_HORAS, LIMITES_VITAIS, lerSinaisVitaisTasy, alteracoesDaMedida, mesclarSinaisVitais, SINAIS_VITAIS_RETENCAO_DIAS, internadosAgora, lerFotoInternados, aplicarFotoInternados, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

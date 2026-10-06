@@ -342,6 +342,21 @@ MS 2019 e 3HP). Entram marcados **"PCDT MS — a homologar"**: a tela e o miniap
 o fluxo ainda não foi homologado pela CCIH do HNSC. A homologação vira adendo e tira o
 aviso; qualquer ajuste local de conduta entra como adendo também.
 
+**Protocolo de UTI Adulto e ampliação da Emergência** (05/10/2026, documentos da CCIH):
+- **UTI Adulto** (protocolo próprio, homologado): PAV/PAH, corrente sanguínea/cateter, ITU
+  de cateter, intra-abdominal, PAC grave, ferida/partes moles necrosante, ventriculite,
+  neutropenia febril e sepse sem foco. A decisão empírica se apoia na **colonização/risco
+  de MDR** (ESBL, KPC, NDM, CRAB, Pseudomonas DTR) e no choque.
+- **Regra do HNSC**: **ceftazidima-avibactam e aztreonam não são padronizados**. Onde o
+  esquema ideal os usaria (KPC, NDM, Pseudomonas DTR), o protocolo entrega o que está
+  disponível (**polimixina B, tigeciclina, amicacina, ampicilina-sulbactam, carbapenêmico**)
+  e marca o esquema com **asterisco**, com a observação "em casos graves, discutir com a
+  CCIH o uso de … que não é padronizada". CRAB (ampicilina-sulbactam + polimixina B) não
+  leva asterisco — as drogas estão disponíveis.
+- **Emergência ampliada**: meningite, encefalite, sepse sem foco, neutropenia febril,
+  bacteremia por S. aureus, endocardite empírica, endêmicas do Sul (leptospirose, febre
+  maculosa, dengue, hantavirose, influenza) e intra-abdominais.
+
 ---
 
 ## 7. Isolamentos

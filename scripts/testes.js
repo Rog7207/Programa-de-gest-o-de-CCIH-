@@ -1744,9 +1744,10 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
 
   console.log('\n== 94. Coleção de protocolos e fluxos do PCDT (IST, TB) ==');
   const P = prot.PROTOCOLOS_ATB;
-  verificar('quatro protocolos: emergência adulto (homologado, com fluxos) e UTI/gestante/pediatria (vazios, não homologados)',
+  verificar('quatro protocolos: emergência adulto e UTI homologados com fluxos; gestante/pediatria vazios (05/10/2026)',
     Object.keys(P).sort().join(',') === 'emergencia-adulto,gestante,pediatria,uti-nosocomial' && P['emergencia-adulto'] === prot.PROTOCOLO_ATB && P['emergencia-adulto'].homologado === true
-    && ['uti-nosocomial', 'gestante', 'pediatria'].every(k => P[k].homologado === false && P[k].sindromes.length === 0 && P[k].rotulo && P[k].publico));
+    && P['uti-nosocomial'].homologado === true && P['uti-nosocomial'].sindromes.length === 9
+    && ['gestante', 'pediatria'].every(k => P[k].homologado === false && P[k].sindromes.length === 0 && P[k].rotulo && P[k].publico));
   const porId = id => prot.PROTOCOLO_ATB.sindromes.find(s => s.id === id);
   verificar('fluxos do PCDT entraram no protocolo de emergência, todos marcados "pendente" e com fonte',
     prot.SINDROMES_PCDT.length === 8 && prot.SINDROMES_PCDT.every(s => s.homologacao === 'pendente' && s.fonte && porId(s.id) === s)
@@ -1800,6 +1801,64 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
       const r = {}; s.perguntas.forEach(p => { r[p.id] = p.tipo === 'escolha' ? p.opcoes[0][0] : false; });
       const d = s.decidir(r); return Array.isArray(d.esquemas) && d.esquemas.length && Array.isArray(d.exames) && Array.isArray(d.avisos);
     }));
+
+  console.log('\n== 96. Protocolo de UTI e complemento da Emergência (05/10/2026) ==');
+  const UTI = prot.PROTOCOLOS_ATB['uti-nosocomial'];
+  verificar('protocolo de UTI homologado, 9 síndromes, versão = data do adendo', UTI.homologado === true && UTI.sindromes.length === 9 && prot.versaoDoProtocolo(UTI) === '2026-10-05');
+  /* Toda síndrome de UTI e de emergência, em TODA combinação de respostas, devolve esquema/exames/avisos no padrão. */
+  const exercitar = p => {
+    for (const s of p.sindromes) {
+      const campos = s.perguntas.map(q => q.tipo === 'escolha' ? q.opcoes.map(o => [q.id, o[0]]) : [[q.id, true], [q.id, false]]);
+      const combos = campos.reduce((acc, opts) => acc.flatMap(a => opts.map(o => a.concat([o]))), [[]]);
+      for (const combo of combos) {
+        const d = s.decidir(Object.fromEntries(combo));
+        if (!Array.isArray(d.esquemas) || !d.esquemas.length || !Array.isArray(d.exames) || !Array.isArray(d.avisos)) return false;
+        if (d.esquemas.some(e => !e.rotulo || !('posologia' in e) || !Array.isArray(e.drogas))) return false;
+      }
+    }
+    return true;
+  };
+  verificar('UTI e Emergência: toda síndrome responde no padrão em todas as combinações', exercitar(UTI) && exercitar(prot.PROTOCOLO_ATB));
+  const sUTI = id => UTI.sindromes.find(s => s.id === id);
+  const pav = sUTI('pav_pah').decidir.bind(sUTI('pav_pah'));
+  /* Regra do HNSC: KPC/NDM/Pseudomonas DTR substituídos por polimixina/amicacina/tigeciclina + asterisco; CRAB sem asterisco. */
+  verificar('KPC → polimixina B + meropenem/amicacina, com asterisco e aviso de ceftazidima-avibactam não padronizada; nunca prescreve ceftazidima-avibactam',
+    /Polimixina B/.test(pav({ colonizacao: 'kpc', choque: true }).esquemas[0].posologia)
+    && /\*/.test(pav({ colonizacao: 'kpc' }).esquemas[0].rotulo)
+    && pav({ colonizacao: 'kpc' }).avisos.some(a => /ceftazidima-avibactam, que não é padronizada/.test(a))
+    && !/avibactam/i.test(pav({ colonizacao: 'kpc' }).esquemas[0].posologia));
+  verificar('NDM → polimixina B em combinação, aviso cita ceftazidima-avibactam + aztreonam; sem prescrever aztreonam',
+    pav({ colonizacao: 'ndm' }).avisos.some(a => /ceftazidima-avibactam \+ aztreonam, que não é padronizada/.test(a))
+    && !/aztreonam/i.test(pav({ colonizacao: 'ndm' }).esquemas[0].posologia));
+  verificar('CRAB → ampicilina-sulbactam alta dose + polimixina B, SEM asterisco (drogas disponíveis)',
+    /Ampicilina-sulbactam/.test(pav({ colonizacao: 'crab' }).esquemas[0].posologia) && !pav({ colonizacao: 'crab' }).esquemas.some(e => /\*/.test(e.rotulo))
+    && !pav({ colonizacao: 'crab' }).avisos.some(a => /não é padronizada/.test(a)));
+  verificar('sem colonização: choque → meropenem; estável → cefepima/pip-tazo',
+    /Meropenem/.test(pav({ colonizacao: 'nenhuma', choque: true }).esquemas[0].posologia) && /Cefepima|Piperacilina/.test(pav({ colonizacao: 'nenhuma', choque: false }).esquemas[0].posologia));
+  verificar('risco de MRSA acrescenta linezolida/vancomicina na PAV', pav({ colonizacao: 'nenhuma', riscoMRSA: true }).esquemas.some(e => /Linezolida|Vancomicina/.test(e.posologia)));
+  /* ITU: colistina em vez de polimixina B na KPC (concentração urinária). */
+  const itu = sUTI('itu_cateter_uti').decidir;
+  verificar('ITU por KPC → colistina (não polimixina B) + amicacina, com asterisco', /Colistina/.test(itu({ colonizacao: 'kpc' }).esquemas[0].posologia) && itu({ colonizacao: 'kpc' }).avisos.some(a => /padronizada/.test(a)));
+  /* Intra-abdominal mantém metronidazol mesmo com esquema de polimixina. */
+  const abd = sUTI('intra_abdominal_uti').decidir;
+  verificar('intra-abdominal com NDM mantém metronidazol (polimixina não cobre anaeróbio)', /Metronidazol/.test(abd({ colonizacao: 'ndm', choque: true }).esquemas[0].posologia));
+  /* Complemento da Emergência. */
+  const E = id => prot.PROTOCOLO_ATB.sindromes.find(s => s.id === id);
+  verificar('emergência ganhou meningite, encefalite, sepse sem foco, neutropenia, bacteremia S. aureus, endocardite, endêmicas e intra-abdominal',
+    ['meningite', 'encefalite', 'sepse_sem_foco_emerg', 'neutropenia_febril_emerg', 'bacteremia_saureus', 'endocardite', 'febre_exposicao', 'intra_abdominal_emerg'].every(id => E(id)));
+  const men = E('meningite').decidir;
+  verificar('meningite: ceftriaxona+vanco+dexametasona; +ampicilina se risco de Listeria; alergia grave → vanco+moxifloxacino',
+    /Ceftriaxona 2 g IV 12\/12h/.test(men({}).esquemas[0].posologia) && men({}).esquemas.some(e => /Dexametasona/.test(e.posologia))
+    && /Ampicilina/.test(men({ listeria: true }).esquemas[0].posologia) && /Moxifloxacino/.test(men({ alergiaGrave: true }).esquemas[0].posologia));
+  verificar('bacteremia por S. aureus: MSSA → cefazolina/oxacilina; MRSA com pneumonia não oferece daptomicina',
+    /Cefazolina|Oxacilina/.test(E('bacteremia_saureus').decidir({ fase: 'mssa' }).esquemas[0].posologia)
+    && !/Daptomicina/.test(E('bacteremia_saureus').decidir({ fase: 'mrsa', pneumonia: true }).esquemas[0].posologia)
+    && /Daptomicina/.test(E('bacteremia_saureus').decidir({ fase: 'mrsa', pneumonia: false }).esquemas[0].posologia));
+  const fe = E('febre_exposicao').decidir;
+  verificar('endêmicas: leptospirose grave → penicilina/ceftriaxona; maculosa → doxiciclina; dengue/hanta sem antibiótico; exposição duvidosa → doxiciclina',
+    /Penicilina|Ceftriaxona/.test(fe({ exposicao: 'lepto', grave: true }).esquemas[0].posologia) && /Doxiciclina/.test(fe({ exposicao: 'maculosa' }).esquemas[0].posologia)
+    && fe({ exposicao: 'dengue' }).esquemas[0].drogas.length === 0 && fe({ exposicao: 'hanta' }).esquemas[0].drogas.length === 0
+    && /Doxiciclina/.test(fe({ exposicao: 'indefinida' }).esquemas[0].posologia));
   verificar('endereço dos médicos = URL do script + ?app=decisao-atb', sg.urlAppMedicos(cfgS, 'decisao-atb') === 'https://script.google.com/macros/s/ABC/exec?app=decisao-atb' && sg.urlAppMedicos({}, 'x') === '');
   const fonteDecisao = fs.readFileSync(path.join(__dirname, '..', 'miniapps', 'fonte', 'decisao-atb.html'), 'utf-8');
   const registroFonte = fonteDecisao.slice(fonteDecisao.indexOf('function registrar'), fonteDecisao.indexOf('function desenharLista'));

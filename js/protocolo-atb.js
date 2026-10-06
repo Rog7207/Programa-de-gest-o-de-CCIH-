@@ -756,6 +756,337 @@ const SINDROMES_PCDT = [
 ];
 PROTOCOLO_ATB.sindromes.push(...SINDROMES_PCDT);
 
+/* ============================================================================
+   Protocolos de UTI Adulto e complemento da Emergência (05/10/2026)
+   Fontes (documentos do HNSC criados pela CCIH): "Protocolo de Tratamento de
+   Infecções em UTI Adulto" e "Protocolo de Tratamento de Infecções — Emergência e
+   Hospitalistas" (base SSC 2026, IDSA AMR 2026, SBI 2025, PCDT MS).
+
+   REGRA DO HNSC (decisão de 05/10/2026): ceftazidima-avibactam e aztreonam NÃO são
+   padronizados. Onde o esquema ideal os usaria, o protocolo entrega o plano disponível
+   (polimixina B, tigeciclina, amicacina, ampicilina-sulbactam, carbapenêmico) e marca o
+   esquema com asterisco, com a observação `naoPadronizado(...)` em avisos. */
+function naoPadronizado(drogas) {
+  return '* Em casos graves, discutir com a CCIH o uso de ' + drogas + ', que não é padronizada no HNSC.';
+}
+
+/* Cobertura empírica do gram-negativo em UTI pela colonização/risco conhecido, já com a
+   substituição das drogas não padronizadas. `sitio`: 'abdominal' acrescenta anaeróbio;
+   'urinario' prefere colistina à polimixina B (concentração urinária); 'pulmonar' etc. só
+   muda avisos. Devolve { esquemas: [{rotulo, posologia, drogas}], avisos: [] }. */
+function coberturaGramNegativoUTI(colonizacao, sitio, choqueOuRisco) {
+  const anaerobio = sitio === 'abdominal' ? ' + Metronidazol 500 mg IV 8/8h' : '';
+  const dAna = sitio === 'abdominal' ? ['metronidazol'] : [];
+  if (colonizacao === 'kpc') {
+    return { esquemas: [{ rotulo: 'KPC conhecida — esquema do HNSC *', posologia: 'Polimixina B (ataque 2–2,5 mg/kg, depois 1,25–1,5 mg/kg IV 12/12h) + Meropenem 2 g IV 8/8h em infusão de 3 h (se CIM de carbapenêmico baixa) ou + Amicacina 25–30 mg/kg/dia' + anaerobio, drogas: ['polimixinab', 'meropenem', 'amicacina'].concat(dAna) }],
+      avisos: [naoPadronizado('ceftazidima-avibactam'), 'Combinação sempre com infectologista/CCIH; ajustar pela microdiluição (polimixina) e pelo sinergismo quando disponível.'] };
+  }
+  if (colonizacao === 'ndm') {
+    return { esquemas: [{ rotulo: 'NDM (ou KPC+NDM) conhecida — esquema do HNSC *', posologia: 'Polimixina B (ataque 2–2,5 mg/kg, depois 1,25–1,5 mg/kg IV 12/12h) em combinação + Amicacina 25–30 mg/kg/dia ou Tigeciclina 200 mg e depois 100 mg IV 12/12h (conforme sítio e sinergismo)' + anaerobio, drogas: ['polimixinab', 'amicacina', 'tigeciclina'].concat(dAna) }],
+      avisos: [naoPadronizado('ceftazidima-avibactam + aztreonam'), 'MBL: combinação guiada por sinergismo, com infectologista. Notificar NDM à CCIH (vigilância de surto).'] };
+  }
+  if (colonizacao === 'crab') {
+    return { esquemas: [{ rotulo: 'Acinetobacter resistente (CRAB) conhecido', posologia: 'Ampicilina-sulbactam em alta dose (9 g IV 8/8h — 9 g de sulbactam/dia, infusão 4 h) + Polimixina B (ataque, depois 1,25–1,5 mg/kg 12/12h) ou + Tigeciclina 200/100 mg' + anaerobio, drogas: ['ampicilinasulbactam', 'polimixinab', 'tigeciclina'].concat(dAna) }],
+      avisos: ['Ampicilina-sulbactam em alta dose é a base contra CRAB (SBI 2025). Precaução de contato e comunicar a CCIH (surto).'] };
+  }
+  if (colonizacao === 'pseudo') {
+    return { esquemas: [{ rotulo: 'Pseudomonas resistente (DTR) conhecido — esquema do HNSC *', posologia: 'Polimixina B (ataque, depois 1,25–1,5 mg/kg 12/12h) ± Amicacina 25–30 mg/kg/dia' + anaerobio, drogas: ['polimixinab', 'amicacina'].concat(dAna) }],
+      avisos: [naoPadronizado('ceftolozano-tazobactam, ceftazidima-avibactam ou imipenem-relebactam'), 'Pseudomonas KPC+VIM: os novos β-lactâmicos falham — esquema com infectologista e notificação de surto.'] };
+  }
+  if (colonizacao === 'esbl') {
+    return { esquemas: [{ rotulo: 'ESBL conhecida', posologia: (choqueOuRisco ? 'Meropenem 2 g IV 8/8h (infusão 3 h)' : 'Ertapenem 1 g IV 1x/dia (estável, sem hipoalbuminemia); Meropenem se grave') + anaerobio, drogas: ['meropenem', 'ertapenem'].concat(dAna) }], avisos: [] };
+  }
+  /* Sem colonização conhecida: risco/choque decide carbapenêmico × antipseudomonas. */
+  return choqueOuRisco
+    ? { esquemas: [{ rotulo: 'Risco de MDR ou choque (sem colonização conhecida)', posologia: 'Meropenem 2 g IV 8/8h (infusão 3 h)' + anaerobio, drogas: ['meropenem'].concat(dAna) }],
+        avisos: ['No choque séptico hospitalar, a cobertura ampla vale mesmo sem colonização conhecida; descalonar em 48–72 h pelo teste fenotípico e cultura.'] }
+    : { esquemas: [{ rotulo: 'Sem risco de MDR, sem choque', posologia: 'Cefepima 2 g IV 8/8h (infusão 3 h) ou Piperacilina-tazobactam 4,5 g IV 6/6h (infusão 3–4 h)' + anaerobio, drogas: ['cefepima', 'piperacilinatazobactam'].concat(dAna) }], avisos: [] };
+}
+
+/* Pergunta de colonização/risco de MDR reutilizada nas síndromes de UTI. */
+const COLONIZACAO_UTI = { id: 'colonizacao', rotulo: 'Colonização ou infecção prévia conhecida (swab de vigilância ou cultura ≤ 90 dias)', tipo: 'escolha', opcoes: [
+  ['nenhuma', 'Nenhuma conhecida / desconhecida'],
+  ['esbl', 'Enterobactérias ESBL'],
+  ['kpc', 'KPC (carbapenemase de classe A)'],
+  ['ndm', 'NDM ou KPC+NDM (metalo-β-lactamase)'],
+  ['crab', 'Acinetobacter resistente (CRAB)'],
+  ['pseudo', 'Pseudomonas resistente (DTR)']],
+  ajuda: ['Colonização/infecção pelo agente nos últimos 90 dias é o fator mais forte e, sozinho, justifica a cobertura.',
+    'O teste imunocromatográfico de carbapenemase (≈15 min do frasco positivo) permite o primeiro ajuste no mesmo dia.'] };
+const AVISO_TIMEOUT_UTI = 'Reavaliação obrigatória em 48–72 h (time-out): culturas, teste fenotípico, clínica e procalcitonina — descalonar, ajustar ou suspender. Dose de ataque plena mesmo na lesão renal aguda das primeiras 24–48 h.';
+const EXAMES_UTI_BASE = ['2 pares de hemocultura e cultura do sítio provável antes da 1ª dose (sem atrasar mais de 45 min).',
+  'Betalactâmicos: 1ª dose em bolus (ataque) e manutenção em infusão prolongada (SSC 2026).'];
+
+const SINDROMES_UTI = [
+  {
+    id: 'pav_pah', rotulo: 'Pneumonia hospitalar / associada à VM (PAV/PAH)', germes: ['Pseudomonas aeruginosa', 'Klebsiella pneumoniae', 'Acinetobacter baumannii', 'Staphylococcus aureus'],
+    perguntas: [COLONIZACAO_UTI, { id: 'choque', rotulo: 'Choque séptico ou sepse grave', tipo: 'sim_nao' }, riscoMRSA('riscoMRSA', ['Pneumonia necrosante/cavitária', 'Ferida/cateter infectado'])],
+    decidir(r) {
+      const gn = coberturaGramNegativoUTI(r.colonizacao, 'pulmonar', r.choque || r.colonizacao !== 'nenhuma');
+      const esquemas = gn.esquemas.slice();
+      if (r.riscoMRSA) esquemas.push({ rotulo: 'Cobertura de MRSA (risco presente)', posologia: 'Linezolida 600 mg IV 12/12h (preferir na pneumonia) ou Vancomicina por AUC 400–600', drogas: ['linezolida', 'vancomicina'] });
+      return { esquemas, exames: ['Aspirado traqueal quantitativo antes da 1ª dose; 2 pares de hemocultura.', ...EXAMES_UTI_BASE.slice(1)],
+        avisos: [...gn.avisos, 'Sem nebulização de antibiótico de rotina. Duração 7 dias (IDSA/ATS 2016); estender se empiema, abscesso ou necrose.', AVISO_TIMEOUT_UTI] };
+    }
+  },
+  {
+    id: 'corrente_sanguinea', rotulo: 'Corrente sanguínea / cateter (UTI)', germes: ['Staphylococcus aureus', 'Staphylococcus epidermidis', 'Klebsiella pneumoniae', 'Pseudomonas aeruginosa', 'Candida spp'],
+    perguntas: [COLONIZACAO_UTI, { id: 'choque', rotulo: 'Choque séptico', tipo: 'sim_nao' },
+      { id: 'candida', rotulo: 'Critério para antifúngico empírico (NPT/cateter femoral, colonização multifocal por Candida, cirurgia abdominal recorrente)', tipo: 'sim_nao' }],
+    decidir(r) {
+      const gn = r.colonizacao === 'nenhuma'
+        ? { esquemas: [{ rotulo: 'Empírico sem colonização', posologia: 'Vancomicina (ataque 20–35 mg/kg, depois por AUC) + ' + (r.choque ? 'Meropenem 2 g IV 8/8h' : 'Cefepima 2 g IV 8/8h'), drogas: ['vancomicina', r.choque ? 'meropenem' : 'cefepima'] }], avisos: [] }
+        : (() => { const c = coberturaGramNegativoUTI(r.colonizacao, 'corrente', true); return { esquemas: [{ rotulo: 'Vancomicina + ' + c.esquemas[0].rotulo, posologia: 'Vancomicina por AUC + ' + c.esquemas[0].posologia, drogas: ['vancomicina', ...c.esquemas[0].drogas] }], avisos: c.avisos }; })();
+      const esquemas = gn.esquemas.slice();
+      if (r.candida) esquemas.push({ rotulo: 'Antifúngico empírico', posologia: 'Anidulafungina 200 mg e depois 100 mg/dia (ou micafungina/caspofungina)', drogas: ['anidulafungina'] });
+      return { esquemas, exames: ['2 pares de hemocultura de sítios diferentes antes da 1ª dose.', ...EXAMES_UTI_BASE.slice(1)],
+        avisos: [...gn.avisos, 'Retirar o cateter se S. aureus, Pseudomonas, Candida ou choque. S. aureus na hemocultura nunca é contaminante: seguir o pacote da bacteremia por S. aureus (eco, hemoculturas de controle, duração 14 d da 1ª negativa).', AVISO_TIMEOUT_UTI] };
+    }
+  },
+  {
+    id: 'itu_cateter_uti', rotulo: 'ITU associada a cateter (UTI)', germes: ['Escherichia coli', 'Klebsiella pneumoniae', 'Pseudomonas aeruginosa', 'Enterococcus spp'],
+    perguntas: [COLONIZACAO_UTI, { id: 'choque', rotulo: 'Sepse grave / choque', tipo: 'sim_nao' }],
+    decidir(r) {
+      let esquemas, avisos = [];
+      if (r.colonizacao === 'kpc') { esquemas = [{ rotulo: 'ITU por KPC — esquema do HNSC *', posologia: 'Colistina 300 mg CBA de ataque, depois 300–360 mg CBA/dia em 2 doses (preferível à polimixina B na ITU) + Amicacina 25–30 mg/kg/dia se cistite por KPC sensível', drogas: ['colistina', 'amicacina'] }]; avisos = [naoPadronizado('ceftazidima-avibactam'), 'Polimixina B tem baixa concentração urinária — na ITU preferir colistina.']; }
+      else if (r.colonizacao === 'ndm' || r.colonizacao === 'pseudo' || r.colonizacao === 'crab') { const c = coberturaGramNegativoUTI(r.colonizacao, 'urinario', true); esquemas = c.esquemas; avisos = [...c.avisos, 'Na ITU, preferir colistina à polimixina B (concentração urinária); amicacina é boa opção se sensível.']; }
+      else { const c = coberturaGramNegativoUTI(r.colonizacao, 'urinario', r.choque); esquemas = c.esquemas; avisos = c.avisos; }
+      return { esquemas, exames: ['Trocar o cateter e colher urocultura da NOVA sonda antes da 1ª dose; hemoculturas se febril.', ...EXAMES_UTI_BASE.slice(1)],
+        avisos: [...avisos, 'Amicacina é alternativa na cistite por KPC sensível. Duração 7 dias; estender em abscesso renal/prostático.', AVISO_TIMEOUT_UTI] };
+    }
+  },
+  {
+    id: 'intra_abdominal_uti', rotulo: 'Intra-abdominal hospitalar / pós-operatória (UTI)', germes: ['Escherichia coli', 'Klebsiella pneumoniae', 'Enterococcus spp', 'Bacteroides spp', 'Candida spp'],
+    perguntas: [COLONIZACAO_UTI, { id: 'choque', rotulo: 'Choque séptico', tipo: 'sim_nao' },
+      { id: 'candida', rotulo: 'Critério para antifúngico (reabordagens, fístula ou deiscência de anastomose, NPT)', tipo: 'sim_nao' }],
+    decidir(r) {
+      const gn = coberturaGramNegativoUTI(r.colonizacao, 'abdominal', r.choque || r.colonizacao !== 'nenhuma');
+      const esquemas = gn.esquemas.slice();
+      if (r.candida) esquemas.push({ rotulo: 'Antifúngico empírico', posologia: 'Anidulafungina 200 mg e depois 100 mg/dia', drogas: ['anidulafungina'] });
+      return { esquemas, exames: ['Hemoculturas + cultura do líquido abdominal (controle de foco).', ...EXAMES_UTI_BASE.slice(1)],
+        avisos: [...gn.avisos, 'O controle de foco (cirurgia/drenagem) é o tratamento principal; antibiótico 4 dias após foco controlado (STOP-IT). Pip-tazo cobre E. faecalis; esquemas com polimixina/ceftazidima-avibactam NÃO cobrem anaeróbios — manter metronidazol.', AVISO_TIMEOUT_UTI] };
+    }
+  },
+  {
+    id: 'pac_grave_uti', rotulo: 'PAC grave na admissão (UTI)', germes: ['Streptococcus pneumoniae', 'Legionella pneumophila', 'Staphylococcus aureus', 'Haemophilus influenzae'],
+    perguntas: [{ id: 'choque', rotulo: 'Choque séptico', tipo: 'sim_nao' }, { id: 'pseudomonas', rotulo: 'Fator de risco para Pseudomonas (bronquiectasia, ATB IV recente, VM prolongada)', tipo: 'sim_nao' }, riscoMRSA('riscoMRSA', ['Pós-influenza', 'Pneumonia necrosante/cavitária', 'Empiema'])],
+    decidir(r) {
+      const esquemas = [r.pseudomonas
+        ? { rotulo: 'PAC grave com risco de Pseudomonas', posologia: 'Cefepima 2 g IV 8/8h ou Piperacilina-tazobactam 4,5 g IV 6/6h + Azitromicina 500 mg/dia', drogas: ['cefepima', 'piperacilinatazobactam', 'azitromicina'] }
+        : { rotulo: 'PAC grave', posologia: 'Ceftriaxona 2 g IV 1x/dia + Azitromicina 500 mg IV/dia', drogas: ['ceftriaxona', 'azitromicina'] }];
+      if (r.riscoMRSA) esquemas.push({ rotulo: 'Cobertura de MRSA', posologia: 'Vancomicina por AUC ou Linezolida 600 mg 12/12h', drogas: ['vancomicina', 'linezolida'] });
+      return { esquemas, exames: ['2 pares de hemocultura, antígenos urinários de pneumococo e Legionella, aspirado/escarro; teste para influenza/SARS-CoV-2 na sazonalidade.'],
+        avisos: ['Oseltamivir 75 mg 12/12h na sazonalidade. Hidrocortisona na PAC grave com choque (SSC 2026). Duração 5 dias após estabilidade (ATS 2025).', AVISO_TIMEOUT_UTI] };
+    }
+  },
+  {
+    id: 'ferida_necrosante_uti', rotulo: 'Ferida operatória profunda / partes moles necrosante (UTI)', germes: ['Streptococcus pyogenes', 'Staphylococcus aureus', 'Clostridium spp', 'Enterobacterales'],
+    perguntas: [COLONIZACAO_UTI, { id: 'necrosante', rotulo: 'Infecção necrosante (dor desproporcional, crepitação, bolhas, toxemia)', tipo: 'sim_nao' }],
+    decidir(r) {
+      const base = r.colonizacao === 'nenhuma'
+        ? { esquemas: [{ rotulo: 'Ferida profunda / necrosante', posologia: 'Vancomicina por AUC + Piperacilina-tazobactam 4,5 g 6/6h + Clindamicina 900 mg IV 8/8h', drogas: ['vancomicina', 'piperacilinatazobactam', 'clindamicina'] }], avisos: [] }
+        : (() => { const c = coberturaGramNegativoUTI(r.colonizacao, 'partes-moles', true); return { esquemas: [{ rotulo: 'Vancomicina + ' + c.esquemas[0].rotulo + ' + clindamicina', posologia: 'Vancomicina por AUC + ' + c.esquemas[0].posologia + ' + Clindamicina 900 mg IV 8/8h', drogas: ['vancomicina', ...c.esquemas[0].drogas, 'clindamicina'] }], avisos: c.avisos }; })();
+      return { esquemas: base.esquemas, exames: ['Hemoculturas e cultura de tecido profundo.', ...EXAMES_UTI_BASE.slice(1)],
+        avisos: [...base.avisos, 'Desbridamento cirúrgico IMEDIATO (não espera imagem). Clindamicina para supressão de toxina. Manter até cessarem os desbridamentos e haver estabilidade.', AVISO_TIMEOUT_UTI] };
+    }
+  },
+  {
+    id: 'ventriculite_uti', rotulo: 'Ventriculite / meningite pós-neurocirúrgica (UTI)', germes: ['Staphylococcus aureus', 'Staphylococcus epidermidis', 'Enterobacterales', 'Pseudomonas aeruginosa', 'Acinetobacter baumannii'],
+    perguntas: [COLONIZACAO_UTI, { id: 'choque', rotulo: 'Sepse grave / choque', tipo: 'sim_nao' }],
+    decidir(r) {
+      const esquemas = [{ rotulo: 'Ventriculite pós-neurocirúrgica', posologia: 'Vancomicina por AUC + ' + (r.colonizacao === 'nenhuma' ? 'Cefepima 2 g IV 8/8h' : 'Meropenem 2 g IV 8/8h'), drogas: ['vancomicina', r.colonizacao === 'nenhuma' ? 'cefepima' : 'meropenem'] }];
+      let avisos = [];
+      if (r.colonizacao === 'crab' || r.colonizacao === 'kpc' || r.colonizacao === 'ndm' || r.colonizacao === 'pseudo') {
+        esquemas.push({ rotulo: 'Gram-negativo resistente no SNC — associar', posologia: 'Polimixina B IV + Polimixina B intraventricular 5 mg (50.000 UI) 1x/dia, além da dose IV', drogas: ['polimixinab'] });
+        if (r.colonizacao !== 'crab') avisos.push(naoPadronizado('ceftazidima-avibactam (± aztreonam na NDM)'));
+      }
+      return { esquemas, exames: ['Líquor (celularidade, bioquímica, Gram, cultura) + hemoculturas.', ...EXAMES_UTI_BASE.slice(1)],
+        avisos: [...avisos, 'Retirar ou trocar a DVE/derivação. Meropenem 2 g 8/8h no SNC. Duração 10–14 dias após a última cultura de líquor negativa (gram-negativo: alguns usam 21 dias).', AVISO_TIMEOUT_UTI] };
+    }
+  },
+  {
+    id: 'neutropenia_febril_uti', rotulo: 'Neutropenia febril em UTI', germes: ['Pseudomonas aeruginosa', 'Enterobacterales', 'Staphylococcus spp', 'Candida spp'],
+    perguntas: [COLONIZACAO_UTI, { id: 'instavel', rotulo: 'Instabilidade hemodinâmica', tipo: 'sim_nao' }, { id: 'vanco', rotulo: 'Cateter infectado, pele/partes moles, pneumonia ou instabilidade', tipo: 'sim_nao' }],
+    decidir(r) {
+      const gn = r.colonizacao === 'nenhuma'
+        ? { esquemas: [{ rotulo: r.instavel ? 'Neutropenia febril com instabilidade' : 'Neutropenia febril', posologia: r.instavel ? 'Meropenem 2 g IV 8/8h' : 'Cefepima 2 g IV 8/8h ou Piperacilina-tazobactam 4,5 g 6/6h', drogas: [r.instavel ? 'meropenem' : 'cefepima'] }], avisos: [] }
+        : coberturaGramNegativoUTI(r.colonizacao, 'neutropenia', true);
+      const esquemas = gn.esquemas.slice();
+      if (r.vanco) esquemas.push({ rotulo: 'Associar vancomicina', posologia: 'Vancomicina por AUC 400–600', drogas: ['vancomicina'] });
+      return { esquemas, exames: ['2 pares de hemocultura (incluindo do cateter) antes da 1ª dose — antibiótico em até 1 h.'],
+        avisos: [...gn.avisos, 'Vancomicina só se cateter, pele, pneumonia ou instabilidade. Antifúngico (equinocandina) nos critérios da seção própria. Reavaliar diariamente.', AVISO_TIMEOUT_UTI] };
+    }
+  },
+  {
+    id: 'sepse_sem_foco_uti', rotulo: 'Sepse hospitalar sem foco definido (UTI)', germes: ['Enterobacterales', 'Pseudomonas aeruginosa', 'Staphylococcus aureus'],
+    perguntas: [COLONIZACAO_UTI, { id: 'candida', rotulo: 'Critério para antifúngico empírico (choque + colonização multifocal/cirurgia abdominal/NPT/BDG+)', tipo: 'sim_nao' }],
+    decidir(r) {
+      const gn = r.colonizacao === 'nenhuma'
+        ? { esquemas: [{ rotulo: 'Sepse hospitalar sem foco', posologia: 'Meropenem 2 g IV 8/8h + Vancomicina por AUC', drogas: ['meropenem', 'vancomicina'] }], avisos: [] }
+        : (() => { const c = coberturaGramNegativoUTI(r.colonizacao, 'sepse', true); return { esquemas: [{ rotulo: c.esquemas[0].rotulo + ' + vancomicina', posologia: c.esquemas[0].posologia + ' + Vancomicina por AUC', drogas: [...c.esquemas[0].drogas, 'vancomicina'] }], avisos: c.avisos }; })();
+      const esquemas = gn.esquemas.slice();
+      if (r.candida) esquemas.push({ rotulo: 'Antifúngico empírico', posologia: 'Anidulafungina 200 mg e depois 100 mg/dia', drogas: ['anidulafungina'] });
+      return { esquemas, exames: ['2 pares de hemocultura, urina, lactato, imagem dirigida — buscar foco ativamente.', ...EXAMES_UTI_BASE.slice(1)],
+        avisos: [...gn.avisos, 'Antibiótico em até 1 h no choque. Buscar foco e reavaliar em 48 h; descalonar pelo teste fenotípico e cultura.', AVISO_TIMEOUT_UTI] };
+    }
+  }
+];
+SINDROMES_UTI.forEach(s => { s.fonte = 'Protocolo de Tratamento de Infecções em UTI Adulto — CCIH HNSC'; });
+
+/* ---- Complemento da Emergência: síndromes agudas de alto risco (05/10/2026) ---- */
+const SINDROMES_EMERGENCIA_EXTRA = [
+  {
+    id: 'meningite', rotulo: 'Meningite bacteriana comunitária', germes: ['Streptococcus pneumoniae', 'Neisseria meningitidis', 'Listeria monocytogenes', 'Haemophilus influenzae'],
+    perguntas: [{ id: 'listeria', rotulo: 'Idade ≥ 50 anos, etilismo ou imunossupressão (risco de Listeria)', tipo: 'sim_nao' }, { id: 'alergiaGrave', rotulo: 'Alergia grave a beta-lactâmicos (anafilaxia/Stevens-Johnson)', tipo: 'sim_nao' }],
+    decidir(r) {
+      const esquemas = r.alergiaGrave
+        ? [{ rotulo: 'Meningite — alergia grave a beta-lactâmicos', posologia: 'Vancomicina 15–20 mg/kg IV 8–12/12h + Moxifloxacino 400 mg IV/dia' + (r.listeria ? ' + Sulfametoxazol-trimetoprima (cobertura de Listeria)' : ''), drogas: ['vancomicina', 'moxifloxacino'].concat(r.listeria ? ['sulfametoxazoltrimetoprima'] : []) }]
+        : [{ rotulo: 'Meningite bacteriana', posologia: 'Ceftriaxona 2 g IV 12/12h + Vancomicina 15–20 mg/kg IV 8–12/12h' + (r.listeria ? ' + Ampicilina 2 g IV 4/4h (Listeria)' : ''), drogas: ['ceftriaxona', 'vancomicina'].concat(r.listeria ? ['ampicilina'] : []) }];
+      esquemas.push({ rotulo: 'Corticoide (antes ou junto da 1ª dose)', posologia: 'Dexametasona 10 mg IV 6/6h por 4 dias', drogas: [] });
+      return { esquemas, exames: ['Líquor (citologia, bioquímica, Gram, cultura, látex/PCR) + 2 pares de hemocultura — NÃO atrasar o antibiótico pela TC ou pela punção.', 'TC antes da punção só se déficit focal, convulsão, papiledema, imunossupressão ou rebaixamento; nesse caso, antibiótico antes da TC.'],
+        avisos: ['Dexametasona antes ou junto da 1ª dose. Notificação compulsória e quimioprofilaxia dos contatos. Duração: meningococo 7 dias, pneumococo 10–14, Listeria 21.'] };
+    }
+  },
+  {
+    id: 'encefalite', rotulo: 'Encefalite (suspeita de herpes)', germes: ['Herpes simplex vírus'],
+    perguntas: [],
+    decidir() {
+      return { esquemas: [{ rotulo: 'Encefalite herpética — imediato', posologia: 'Aciclovir 10 mg/kg (peso ideal) IV 8/8h', drogas: ['aciclovir'] }],
+        exames: ['PCR para HSV no líquor; repetir se o 1º for negativo e a suspeita alta. Considerar arboviroses e raiva.'],
+        avisos: ['Iniciar imediatamente, sem esperar PCR. Hidratar; ajuste renal (nefro/neurotoxicidade). Duração 14–21 dias se confirmada.'] };
+    }
+  },
+  {
+    id: 'sepse_sem_foco_emerg', rotulo: 'Sepse sem foco definido (emergência/enfermaria)', germes: ['Escherichia coli', 'Klebsiella pneumoniae', 'Staphylococcus aureus'],
+    perguntas: [{ id: 'origem', rotulo: 'Origem', tipo: 'escolha', opcoes: [['comunitaria', 'Comunitária'], ['iras', 'Relacionada à assistência (internação ≥ 48 h, ATB IV/quinolona em 90 dias, ILPI, cultura prévia MDR)']] },
+      { id: 'abdome', rotulo: 'Foco abdominal possível', tipo: 'sim_nao' }, { id: 'vanco', rotulo: 'Cateter, pele/partes moles ou MRSA provável', tipo: 'sim_nao' },
+      { id: 'alergiaGrave', rotulo: 'Alergia grave a beta-lactâmicos', tipo: 'sim_nao' }],
+    decidir(r) {
+      const esquemas = [];
+      if (r.origem === 'iras') {
+        esquemas.push(r.alergiaGrave
+          ? { rotulo: 'Sepse sem foco IRAS — alergia grave', posologia: 'Aztreonam 2 g IV 8/8h + Vancomicina por AUC' + (r.abdome ? ' + Metronidazol 500 mg 8/8h' : ''), drogas: ['aztreonam', 'vancomicina'].concat(r.abdome ? ['metronidazol'] : []) }
+          : { rotulo: 'Sepse sem foco, relacionada à assistência', posologia: 'Piperacilina-tazobactam 4,5 g IV 6/6h ou Cefepima 2 g 8/8h' + (r.abdome ? ' + Metronidazol 500 mg 8/8h' : '') + ' (Meropenem se ESBL conhecida)', drogas: ['piperacilinatazobactam', 'cefepima', 'meropenem'].concat(r.abdome ? ['metronidazol'] : []) });
+        esquemas.push({ rotulo: 'Associar vancomicina se', posologia: 'Cateter, pele ou MRSA → Vancomicina por AUC', drogas: ['vancomicina'] });
+      } else {
+        esquemas.push(r.alergiaGrave
+          ? { rotulo: 'Sepse sem foco comunitária — alergia grave', posologia: 'Levofloxacino 750 mg IV/dia + Metronidazol 500 mg 8/8h (ou Amicacina 15 mg/kg/dia + Clindamicina)', drogas: ['levofloxacino', 'metronidazol'] }
+          : { rotulo: 'Sepse sem foco, comunitária', posologia: 'Ceftriaxona 2 g IV/dia' + (r.abdome ? ' + Metronidazol 500 mg 8/8h' : ''), drogas: ['ceftriaxona'].concat(r.abdome ? ['metronidazol'] : []) });
+      }
+      if (r.vanco && r.origem === 'comunitaria') esquemas.push({ rotulo: 'Associar vancomicina', posologia: 'Vancomicina por AUC', drogas: ['vancomicina'] });
+      return { esquemas, exames: ['2 pares de hemocultura, urina, lactato e imagem dirigida antes da 1ª dose.'],
+        avisos: ['Choque séptico → protocolo de UTI. Buscar foco ativamente (urina, imagem, pele, líquor) e descalonar em 48 h pelo foco e cultura.'] };
+    }
+  },
+  {
+    id: 'neutropenia_febril_emerg', rotulo: 'Neutropenia febril', germes: ['Pseudomonas aeruginosa', 'Enterobacterales', 'Staphylococcus spp'],
+    perguntas: [{ id: 'instavel', rotulo: 'Instabilidade ou colonização por ESBL', tipo: 'sim_nao' }, { id: 'vanco', rotulo: 'Cateter infectado, pele, pneumonia ou instabilidade', tipo: 'sim_nao' }, { id: 'alergiaGrave', rotulo: 'Alergia grave a beta-lactâmicos', tipo: 'sim_nao' }],
+    decidir(r) {
+      const esquemas = [r.alergiaGrave
+        ? { rotulo: 'Neutropenia febril — alergia grave', posologia: 'Aztreonam 2 g IV 8/8h + Vancomicina por AUC (ou Levofloxacino + Clindamicina conforme gravidade)', drogas: ['aztreonam', 'vancomicina'] }
+        : (r.instavel
+          ? { rotulo: 'Neutropenia febril com instabilidade/ESBL', posologia: 'Meropenem 2 g IV 8/8h', drogas: ['meropenem'] }
+          : { rotulo: 'Neutropenia febril', posologia: 'Cefepima 2 g IV 8/8h ou Piperacilina-tazobactam 4,5 g 6/6h — antibiótico em até 1 h', drogas: ['cefepima', 'piperacilinatazobactam'] })];
+      if (r.vanco) esquemas.push({ rotulo: 'Associar vancomicina', posologia: 'Vancomicina por AUC', drogas: ['vancomicina'] });
+      return { esquemas, exames: ['2 pares de hemocultura (incluindo cateter) antes da 1ª dose.'],
+        avisos: ['Vancomicina só se cateter, pele, pneumonia ou instabilidade. MASCC ≥ 21: considerar alta com amoxicilina-clavulanato + ciprofloxacino. Duração até 48 h afebril e recuperação neutrofílica (ABHH 2024).'] };
+    }
+  },
+  {
+    id: 'bacteremia_saureus', rotulo: 'Bacteremia por S. aureus', germes: ['Staphylococcus aureus'],
+    perguntas: [{ id: 'fase', rotulo: 'Resultado do antibiograma', tipo: 'escolha', opcoes: [['empirico', 'Antes do antibiograma (empírico)'], ['mssa', 'MSSA (sensível à oxacilina)'], ['mrsa', 'MRSA']] },
+      { id: 'grave', rotulo: 'Sepse grave', tipo: 'sim_nao' }, { id: 'pneumonia', rotulo: 'Pneumonia presente', tipo: 'sim_nao' }],
+    decidir(r) {
+      let esquemas;
+      if (r.fase === 'mssa') esquemas = [{ rotulo: 'MSSA (trocar da vancomicina)', posologia: 'Cefazolina 2 g IV 8/8h ou Oxacilina 2 g IV 4/4h (oxacilina se foco no SNC)', drogas: ['cefazolina', 'oxacilina'] }];
+      else if (r.fase === 'mrsa') esquemas = [{ rotulo: 'MRSA', posologia: r.pneumonia ? 'Vancomicina por AUC 400–600 (daptomicina NÃO serve na pneumonia)' : 'Vancomicina por AUC 400–600 ou Daptomicina 8–10 mg/kg/dia', drogas: ['vancomicina'].concat(r.pneumonia ? [] : ['daptomicina']) }];
+      else esquemas = [{ rotulo: 'Empírico (antes do antibiograma)', posologia: 'Vancomicina 25–30 mg/kg de ataque, depois por AUC' + (r.grave ? ' + Cefazolina 2 g 8/8h até o resultado' : ''), drogas: ['vancomicina'].concat(r.grave ? ['cefazolina'] : []) }];
+      return { esquemas, exames: ['Hemoculturas de controle: 2 pares 48 h após a 1ª positiva e a cada 24–48 h até negativar.', 'Ecocardiograma transtorácico em todos; transesofágico se prótese/dispositivo, valvopatia, bacteremia persistente, embolia ou múltiplos focos.'],
+        avisos: ['S. aureus na hemocultura NUNCA é contaminante e sempre pede busca de endocardite — avaliação do infectologista/CCIH. Retirar cateter venoso central e drenar focos. Trocar vancomicina por cefazolina/oxacilina assim que MSSA (vancomicina é inferior no MSSA). Duração: 14 dias da 1ª hemocultura negativa se foco profundo excluído; 4–6 semanas se endocardite, foco metastático ou persistência.'] };
+    }
+  },
+  {
+    id: 'endocardite', rotulo: 'Endocardite — esquema empírico', germes: ['Staphylococcus aureus', 'Streptococcus spp', 'Enterococcus faecalis'],
+    perguntas: [{ id: 'cenario', rotulo: 'Cenário', tipo: 'escolha', opcoes: [['nativa', 'Valva nativa ou prótese há mais de 12 meses, comunitária'], ['protese', 'Prótese há menos de 12 meses ou relacionada à assistência (cateter, hemodiálise)']] },
+      { id: 'alergiaGrave', rotulo: 'Alergia grave a beta-lactâmicos', tipo: 'sim_nao' }],
+    decidir(r) {
+      let esquemas;
+      if (r.alergiaGrave) esquemas = [{ rotulo: 'Endocardite — alergia grave a beta-lactâmicos', posologia: 'Vancomicina por AUC + Gentamicina 3 mg/kg/dia' + (r.cenario === 'protese' ? ' + Rifampicina 900 mg/dia em 3 doses (prótese, iniciada 3–5 dias depois)' : ''), drogas: ['vancomicina', 'gentamicina'].concat(r.cenario === 'protese' ? ['rifampicina'] : []) }];
+      else if (r.cenario === 'protese') esquemas = [{ rotulo: 'Prótese < 12 meses ou relacionada à assistência', posologia: 'Vancomicina por AUC + Gentamicina 3 mg/kg/dia + Rifampicina 900 mg/dia em 3 doses (iniciada 3–5 dias depois)', drogas: ['vancomicina', 'gentamicina', 'rifampicina'] }];
+      else esquemas = [{ rotulo: 'Valva nativa / prótese > 12 meses, comunitária', posologia: 'Ampicilina 2 g IV 4/4h + Oxacilina 2 g IV 4/4h + Gentamicina 3 mg/kg/dia (ou Ampicilina 2 g 4/4h + Ceftriaxona 2 g 12/12h)', drogas: ['ampicilina', 'oxacilina', 'gentamicina', 'ceftriaxona'] }];
+      return { esquemas, exames: ['Colher 3 pares de hemocultura com intervalo antes da 1ª dose, se o paciente estiver estável.'],
+        avisos: ['Avaliação do infectologista/CCIH em todo caso. Ajustar gentamicina pela função renal e suspendê-la assim que o agente for conhecido, salvo indicação específica. Discutir cedo com a cirurgia cardíaca (transferência faz parte do tratamento). Fontes: IDSA/ESCMID 2026, ESC 2023, AHA 2026.'] };
+    }
+  },
+  {
+    id: 'febre_exposicao', rotulo: 'Febre aguda com exposição (endêmicas do Sul)', germes: ['Leptospira', 'Rickettsia', 'vírus da dengue', 'hantavírus', 'influenza'],
+    perguntas: [{ id: 'exposicao', rotulo: 'Exposição / quadro predominante', tipo: 'escolha', opcoes: [
+      ['lepto', 'Água de enchente, lama, esgoto ou roedores (leptospirose)'],
+      ['maculosa', 'Carrapato, mata, capivara ou cavalo (febre maculosa)'],
+      ['dengue', 'Mosquito e epidemia local (dengue)'],
+      ['hanta', 'Galpão/paiol/mata com roedores silvestres + dispneia (hantavirose)'],
+      ['influenza', 'Síndrome gripal / SRAG (influenza)'],
+      ['indefinida', 'Febre com plaquetopenia e exposição duvidosa']] },
+      { id: 'grave', rotulo: 'Sinais de gravidade (icterícia/oligúria/hemoptise; sinais de alarme; SRAG)', tipo: 'sim_nao' }],
+    decidir(r) {
+      const notif = 'Notificação compulsória.';
+      if (r.exposicao === 'lepto') return { esquemas: [r.grave
+          ? { rotulo: 'Leptospirose grave', posologia: 'Penicilina cristalina 1,5 milhão UI IV 6/6h, Ampicilina 1 g IV 6/6h ou Ceftriaxona 1–2 g/dia por 7 dias', drogas: ['penicilinacristalina', 'ampicilina', 'ceftriaxona'] }
+          : { rotulo: 'Leptospirose leve', posologia: 'Doxiciclina 100 mg VO 12/12h ou Amoxicilina 500 mg 8/8h por 5–7 dias', drogas: ['doxiciclina', 'amoxicilina'] }],
+        exames: ['qPCR precoce (NT 6/2026); hemograma, função renal, enzimas hepáticas.'],
+        avisos: ['Tratar na suspeita — não esperar exame. Gravidade (icterícia rubínica, oligúria, hemoptise, plaquetopenia): internar, UTI e diálise precoce. ' + notif] };
+      if (r.exposicao === 'maculosa') return { esquemas: [{ rotulo: 'Febre maculosa', posologia: 'Doxiciclina 100 mg VO/IV 12/12h em qualquer idade, na suspeita (criança < 45 kg: 2,2 mg/kg 12/12h)', drogas: ['doxiciclina'] }],
+        exames: ['Sorologia/PCR não devem atrasar o tratamento.'],
+        avisos: ['Tratar na suspeita — a doença mata quando o antibiótico espera o exame. Duração 7 dias ou até 3 dias sem febre. No Sul predomina R. parkeri. ' + notif] };
+      if (r.exposicao === 'dengue') return { esquemas: [{ rotulo: 'Dengue — sem antibiótico', posologia: 'Hidratação pelo grupo de risco (A/B/C/D). Sem AINE nem AAS.', drogas: [] }],
+        exames: ['Hemograma seriado (hematócrito e plaquetas), prova do laço.'],
+        avisos: ['Sem antibiótico. Sinais de alarme (dor abdominal intensa, vômitos, sangramento de mucosa, letargia, hepatomegalia, hematócrito subindo com plaquetas caindo): internar (grupo C/D). ' + notif] };
+      if (r.exposicao === 'hanta') return { esquemas: [{ rotulo: 'Hantavirose — suporte', posologia: 'Sem antiviral (ribavirina não indicada). Suporte intensivo; tratar como leptospirose até o diagnóstico.', drogas: [] }],
+        exames: ['Hemograma (hemoconcentração, plaquetopenia), RX de tórax.'],
+        avisos: ['UTI precoce, ventilação protetora, fluidos com cautela e droga vasoativa cedo. Letalidade 25–44% — transferir com médico. ' + notif] };
+      if (r.exposicao === 'influenza') return { esquemas: [{ rotulo: 'Influenza (SRAG ou síndrome gripal com fator de risco)', posologia: 'Oseltamivir 75 mg VO 12/12h por 5 dias, mesmo após 48 h e sem esperar exame', drogas: ['oseltamivir'] }],
+        exames: ['Painel viral/RT-PCR não deve atrasar o oseltamivir.'],
+        avisos: ['Pico de maio a agosto no Sul. Isolamento por gotículas. Mais tempo em imunossuprimido. ' + notif] };
+      return { esquemas: [{ rotulo: 'Febre + plaquetopenia, exposição duvidosa', posologia: 'Doxiciclina 100 mg VO 12/12h (cobre leptospirose e riquetsiose); associar Ceftriaxona 1–2 g/dia se houver sepse', drogas: ['doxiciclina', 'ceftriaxona'] }],
+        exames: ['qPCR de leptospirose, sorologias; hemograma e função renal.'],
+        avisos: ['Doxiciclina empírica cobre leptospirose e riquetsiose ao mesmo tempo. ' + notif] };
+    }
+  },
+  {
+    id: 'intra_abdominal_emerg', rotulo: 'Intra-abdominal (emergência/enfermaria)', germes: ['Escherichia coli', 'Klebsiella pneumoniae', 'Bacteroides spp', 'Enterococcus spp'],
+    perguntas: [{ id: 'quadro', rotulo: 'Quadro', tipo: 'escolha', opcoes: [
+      ['apendicite_simples', 'Apendicite não complicada'],
+      ['peritonite', 'Apendicite complicada / peritonite comunitária'],
+      ['colecistite', 'Colecistite aguda (Tokyo I–II)'],
+      ['colangite', 'Colangite'],
+      ['diverticulite', 'Diverticulite com risco ou complicada'],
+      ['pbe', 'PBE (PMN ≥ 250/mm³ no líquido ascítico)'],
+      ['hospitalar', 'Infecção abdominal hospitalar ou pós-operatória']] },
+      { id: 'grave', rotulo: 'Grave / choque / Tokyo III / ESBL conhecida', tipo: 'sim_nao' },
+      { id: 'alergiaGrave', rotulo: 'Alergia grave a beta-lactâmicos', tipo: 'sim_nao' }],
+    decidir(r) {
+      const alt = { rotulo: 'Alternativa (alergia grave)', posologia: 'Ciprofloxacino 400 mg IV 12/12h + Metronidazol 500 mg 8/8h (ou Amicacina + Metronidazol)', drogas: ['ciprofloxacino', 'metronidazol', 'amicacina'] };
+      const foco = 'Controle de foco (cirurgia, drenagem, CPRE) é o tratamento principal; com foco controlado, 4 dias bastam (STOP-IT).';
+      let esquemas, exames = ['Hemoculturas se febril/grave; imagem e cultura do foco.'], avisos = [foco];
+      switch (r.quadro) {
+        case 'apendicite_simples': esquemas = [{ rotulo: 'Apendicite não complicada — profilaxia cirúrgica', posologia: 'Cefazolina 2 g + Metronidazol 500 mg (dose única; sem antibiótico pós-operatório)', drogas: ['cefazolina', 'metronidazol'] }]; break;
+        case 'peritonite': esquemas = r.alergiaGrave ? [alt] : [{ rotulo: 'Peritonite comunitária', posologia: 'Ceftriaxona 2 g/dia + Metronidazol 500 mg 8/8h (ou Ampicilina-sulbactam 3 g 6/6h)', drogas: ['ceftriaxona', 'metronidazol', 'ampicilinasulbactam'] }]; avisos.push('Duração 4 dias após controle do foco.'); break;
+        case 'colecistite': esquemas = r.alergiaGrave ? [alt] : [{ rotulo: 'Colecistite (Tokyo I–II)', posologia: 'Ceftriaxona + Metronidazol (ou Ampicilina-sulbactam 3 g 6/6h)', drogas: ['ceftriaxona', 'metronidazol', 'ampicilinasulbactam'] }]; avisos.push('Até 24 h após colecistectomia; 4–7 dias se não operada.'); break;
+        case 'colangite': esquemas = r.alergiaGrave ? [alt] : [{ rotulo: 'Colangite', posologia: (r.grave ? 'Piperacilina-tazobactam 4,5 g 6/6h (Tokyo III ou pós-manipulação biliar)' : 'Ceftriaxona 2 g/dia + Metronidazol 500 mg 8/8h'), drogas: ['ceftriaxona', 'metronidazol', 'piperacilinatazobactam'] }]; avisos.push('4–7 dias após drenagem.'); break;
+        case 'diverticulite': esquemas = r.alergiaGrave ? [alt] : [{ rotulo: 'Diverticulite com risco / complicada', posologia: 'Amoxicilina-clavulanato VO, ou Ceftriaxona + Metronidazol IV; abscesso > 3–4 cm: drenar', drogas: ['amoxicilinaacidoclavulanico', 'ceftriaxona', 'metronidazol'] }]; avisos.push('Diverticulite não complicada de baixo risco: sem antibiótico (analgesia e reavaliação). Duração 4–7 dias.'); break;
+        case 'pbe': esquemas = r.alergiaGrave ? [{ rotulo: 'PBE — alergia grave', posologia: 'Ciprofloxacino IV (não se profilaxia prévia com quinolona) + Albumina 1,5 g/kg no D1 e 1 g/kg no D3', drogas: ['ciprofloxacino'] }] : [{ rotulo: 'PBE', posologia: 'Ceftriaxona 2 g/dia + Albumina 1,5 g/kg no D1 e 1 g/kg no D3 (Pip-tazo se nosocomial ou ATB recente)', drogas: ['ceftriaxona', 'piperacilinatazobactam'] }]; exames = ['Paracentese diagnóstica (PMN no líquido ascítico).']; avisos = ['5–7 dias; depois profilaxia secundária.']; break;
+        default: esquemas = r.grave ? [{ rotulo: 'Abdominal hospitalar grave / ESBL', posologia: 'Meropenem 2 g IV 8/8h + Metronidazol se necessário (ver protocolo de UTI na colonização por KPC/NDM)', drogas: ['meropenem', 'metronidazol'] }] : [{ rotulo: 'Abdominal hospitalar / pós-operatória', posologia: 'Piperacilina-tazobactam 4,5 g IV 6/6h', drogas: ['piperacilinatazobactam'] }]; avisos.push('Colonização por KPC/NDM: usar o esquema da UTI. Duração 4 dias após controle do foco.');
+      }
+      return { esquemas, exames, avisos };
+    }
+  }
+];
+SINDROMES_EMERGENCIA_EXTRA.forEach(s => { s.fonte = s.fonte || 'Protocolo de Infecções — Emergência e Hospitalistas, CCIH HNSC'; });
+PROTOCOLO_ATB.sindromes.push(...SINDROMES_EMERGENCIA_EXTRA);
+PROTOCOLO_ATB.adendos.push({ data: '2026-10-05', texto: 'Protocolo de Emergência/Hospitalistas ampliado (documento da CCIH, 04/10/2026): meningite, '
+  + 'encefalite, sepse sem foco, neutropenia febril, bacteremia por S. aureus, endocardite empírica, endêmicas do Sul '
+  + '(leptospirose, febre maculosa, dengue, hantavirose, influenza) e intra-abdominais.' });
+
 /* ---- Coleção de protocolos (03/10/2026) ----
    Públicos diferentes, donos diferentes, versões diferentes: emergência adulto (acima),
    UTI/nosocomial, gestante e pediatria. Os três últimos nascem vazios — recebem os
@@ -763,10 +1094,14 @@ PROTOCOLO_ATB.sindromes.push(...SINDROMES_PCDT);
 const PROTOCOLOS_ATB = {
   'emergencia-adulto': PROTOCOLO_ATB,
   'uti-nosocomial': {
-    id: 'uti-nosocomial', rotulo: 'UTI — infecções nosocomiais', homologado: false,
-    fonte: '(documento a definir pela CCIH com os intensivistas)', adendos: [],
-    publico: 'Pacientes internados em UTI/CTI com infecção após 48 h de internação (PAV, ICS relacionada a cateter, ITU associada a sonda, infecção de sítio cirúrgico, sepse nosocomial).',
-    sindromes: []
+    id: 'uti-nosocomial', rotulo: 'UTI — adulto', homologado: true,
+    fonte: 'Protocolo de Tratamento de Infecções em UTI Adulto — CCIH HNSC (base SSC 2026, IDSA AMR 2026, SBI 2025)',
+    adendos: [{ data: '2026-10-05', texto: 'Ceftazidima-avibactam e aztreonam não são padronizados no HNSC: onde o esquema ideal '
+      + 'os usaria (KPC, NDM, Pseudomonas DTR, OXA-48), o protocolo entrega o plano disponível (polimixina B, tigeciclina, amicacina, '
+      + 'ampicilina-sulbactam, carbapenêmico) e marca o esquema com asterisco — em casos graves, discutir o uso das drogas não padronizadas com a CCIH.' }],
+    publico: 'Adulto em UTI/CTI com suspeita de infecção bacteriana ou fúngica. Choque séptico ou infecção adquirida na UTI. '
+      + 'Premissas: KPC endêmica com NDM em ascensão, CRAB frequente e testes moleculares lentos — a decisão empírica se apoia em risco e colonização conhecida.',
+    sindromes: SINDROMES_UTI
   },
   'gestante': {
     id: 'gestante', rotulo: 'Gestantes e puérperas', homologado: false,

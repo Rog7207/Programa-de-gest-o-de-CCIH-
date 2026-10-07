@@ -12,11 +12,12 @@ const DIAS_REVALIDAR_AVALIACAO = 7;
 
 async function montarAntibioticosNovo(conteudo) {
   conteudo.append(el('h1', {}, 'Antibióticos'));
-  let banco, bancoPacientes, bancoCulturas, bancoUti;
+  let banco, bancoPacientes, bancoCulturas, bancoUti, bancoEvolucoes;
   try {
-    [banco, bancoPacientes, bancoCulturas, bancoUti] = await Promise.all([
+    [banco, bancoPacientes, bancoCulturas, bancoUti, bancoEvolucoes] = await Promise.all([
       lerBanco('antibioticos'), lerBanco('pacientes'), lerBanco('culturas'),
-      lerBanco('uti').catch(() => ({ avaliacoes_atb: [] }))]);
+      lerBanco('uti').catch(() => ({ avaliacoes_atb: [] })),
+      lerBanco('evolucoes').catch(() => ({ evolucoes: [] }))]);
   } catch (e) { conteudo.append(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message)); return; }
 
   const hoje = hojeISO();
@@ -120,6 +121,24 @@ async function montarAntibioticosNovo(conteudo) {
     const doCurso = alertasDoCurso(curso);
     const dose = analisarDose(curso.ultima.Dose);
 
+    /* Última evolução médica (Categoria 'E') do paciente — por prontuário ou por um
+       atendimento dele. Fica recolhida no cartão para consulta sem abrir o prontuário. */
+    const atds = new Set((bancoPacientes.internacoes || [])
+      .filter(i => normalizarProntuario(i.Prontuario) === chavePaciente)
+      .map(i => normalizarProntuario(i.Atendimento)).filter(Boolean));
+    const evoMedica = (bancoEvolucoes.evolucoes || [])
+      .filter(e => e.Categoria === 'E'
+        && (normalizarProntuario(e.Prontuario) === chavePaciente || atds.has(normalizarProntuario(e.Atendimento))))
+      .sort((a, b) => String(b.DataEvolucao).localeCompare(String(a.DataEvolucao)))[0];
+
+    /* Antibiograma expandível ao clicar na cultura: cor por resultado, R primeiro. */
+    const ordemSIR = { R: 0, I: 1, S: 2 };
+    const corSIR = r => ({ R: '#b00020', S: '#1b7a2f', I: '#9a6a00' }[r] || '#555');
+    const grade = sens => el('div', { style: 'display:flex;flex-wrap:wrap;gap:4px;margin:4px 0' },
+      sens.slice().sort((a, b) => (ordemSIR[a.Resultado] ?? 3) - (ordemSIR[b.Resultado] ?? 3) || String(a.Antibiotico).localeCompare(String(b.Antibiotico)))
+        .map(s => el('span', { style: `padding:1px 7px;border-radius:4px;border:1px solid ${corSIR(s.Resultado)};color:${corSIR(s.Resultado)};font-size:0.85em` },
+          `${s.Antibiotico}: ${s.Resultado}`)));
+
     const selAval = el('select', {}, AVALIACOES_ATB.map(o => el('option', { value: o }, o)));
     const selRec = el('select', {}, RECOMENDACOES_ATB.map(o => el('option', { value: o }, o)));
     const campoParecer = el('textarea', { rows: 2, style: 'width:100%', placeholder: 'parecer (opcional)' });
@@ -132,17 +151,28 @@ async function montarAntibioticosNovo(conteudo) {
         + (dose && dose.mgDia ? ` · ${(dose.mgDia / 1000).toFixed(1)} g/dia calculados` : '')),
       doCurso.length ? el('div', { class: 'aviso-alerta' },
         doCurso.map(a => el('div', {}, a.detalhe))) : null,
+      culturasRecentes.length ? el('p', { class: 'texto-suave' }, 'Clique numa cultura para ver o antibiograma completo.') : null,
       culturasRecentes.length ? el('table', { class: 'tabela' },
         el('thead', {}, el('tr', {}, ['Coleta', 'Material', 'Microrganismo', 'Este ATB'].map(c => el('th', {}, c)))),
-        el('tbody', {}, culturasRecentes.slice(0, 5).map(c => {
-          const resultado = (sensPorCultura.get(c.ID_Cultura) || [])
-            .find(s => normalizarTexto(s.Antibiotico) === normalizarTexto(curso.Antibiotico));
-          return el('tr', {},
+        el('tbody', {}, culturasRecentes.slice(0, 8).flatMap(c => {
+          const sens = sensPorCultura.get(c.ID_Cultura) || [];
+          const resultado = sens.find(s => normalizarTexto(s.Antibiotico) === normalizarTexto(curso.Antibiotico));
+          const detalhe = el('tr', { style: 'display:none' }, el('td', { colspan: '4' },
+            sens.length ? grade(sens)
+              : el('span', { class: 'texto-suave' }, c.Antibiograma ? 'Laudo do laboratório: ' + c.Antibiograma : 'Sem antibiograma cadastrado para esta cultura.')));
+          const linha = el('tr', { class: 'linha-clicavel', title: 'Clique para ver o antibiograma',
+            onclick: () => { detalhe.style.display = detalhe.style.display === 'none' ? '' : 'none'; } },
             el('td', {}, c.DataColeta), el('td', {}, c.Material), el('td', {}, c.Microrganismo),
             el('td', { class: resultado && resultado.Resultado === 'R' ? 'aviso-erro-texto' : '' },
               resultado ? resultado.Resultado : '—'));
+          return [linha, detalhe];
         })))
         : el('p', { class: 'texto-suave' }, 'Sem cultura positiva nos últimos 30 dias.'),
+      evoMedica ? el('details', {},
+        el('summary', {}, `🩺 Última evolução médica (${String(evoMedica.DataEvolucao || '').slice(0, 10)}${evoMedica.Autor ? ' — ' + evoMedica.Autor : ''})`),
+        evoMedica.SinaisInfeccao ? el('p', { class: 'aviso-erro-texto' }, `⚠ Sinais sugestivos de infecção: ${evoMedica.SinaisInfeccao}`) : null,
+        el('p', { class: 'texto-suave', style: 'white-space:pre-wrap' }, evoMedica.Texto || ''))
+        : el('p', { class: 'texto-suave' }, 'Sem evolução médica registrada para este paciente.'),
       el('div', { class: 'linha-botoes' },
         el('button', { class: 'botao-secundario', onclick: e => { e.stopPropagation(); abrirPaciente(curso.Prontuario); } },
           'Ver ficha do paciente')),

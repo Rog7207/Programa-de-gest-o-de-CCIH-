@@ -5100,6 +5100,86 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     }
   }
 
+  /* == 98. Fumaça da avaliação de ATB: antibiograma expansível + evolução (06/10/2026) == */
+  {
+    console.log('\n== 98. Fumaça da avaliação de ATB (DOM falso: clicar na cultura abre o antibiograma; evolução recolhida) ==');
+    const mkNode = (tag, attrs) => {
+      const n = { tag, attrs: attrs || {}, kids: [], parent: null, style: {}, classes: new Set(), ouvintes: {}, value: '', textContent: '',
+        append(...k) { for (const x of k.flat(9)) if (x != null) { n.kids.push(x); if (typeof x === 'object') x.parent = n; } },
+        appendChild(x) { n.append(x); }, replaceChildren(...k) { n.kids = []; n.append(...k); },
+        addEventListener(ev, fn) { (n.ouvintes[ev] = n.ouvintes[ev] || []).push(fn); },
+        setAttribute(k, v) { n.attrs[k] = v; }, classList: { add: c => n.classes.add(c), remove: c => n.classes.delete(c), contains: c => n.classes.has(c) },
+        closest() { return null; }, querySelectorAll() { return []; }, querySelector() { return null; }, remove() {}, scrollIntoView() {},
+        after(x) { if (n.parent) n.parent.append(x); }, get children() { return n.kids.filter(x => typeof x === 'object'); } };
+      return n;
+    };
+    const elFalso = (tag, attrs, ...filhos) => { const n = mkNode(tag, attrs); for (const [k, v] of Object.entries(attrs || {})) { if (k.startsWith('on')) n.addEventListener(k.slice(2), v); if (k === 'value') n.value = v; } n.append(...filhos); if (tag === 'select') { const o = n.children[0]; n.value = o ? (o.attrs.value || '') : ''; } return n; };
+    const texto = n => typeof n === 'string' ? n : (n && n.kids ? n.kids.map(texto).join(' ') : '');
+    const achar = (n, pred, saida = []) => { if (n && typeof n === 'object') { if (pred(n)) saida.push(n); (n.kids || []).forEach(k => achar(k, pred, saida)); } return saida; };
+
+    const curso = { Prontuario: '100', Antibiotico: 'Meropenem', Setor: 'CTI', inicio: '2026-10-01', fim: '2026-10-06', dias: 5, ids: ['PRE-1'], ultima: { ID_Prescricao: 'PRE-1', Dose: '1g', Indicacao: '' } };
+    const fx = {
+      antibioticos: { prescricoes: [{ ID_Prescricao: 'PRE-1', Prontuario: '100', Antibiotico: 'Meropenem', DataInicio: '2026-10-01', Dose: '1g' }], avaliacoes: [] },
+      pacientes: { pacientes: [{ Prontuario: '100', Nome: 'Fulano de Tal' }], internacoes: [{ Prontuario: '100', Atendimento: 'A1' }] },
+      culturas: { culturas: [{ ID_Cultura: 'CUL-1', Prontuario: '100', DataColeta: '2026-10-02', Material: 'Hemocultura', Microrganismo: 'Klebsiella pneumoniae', StatusRevisao: 'pendente' }],
+        sensibilidade: [{ ID_Cultura: 'CUL-1', Antibiotico: 'Meropenem', Resultado: 'R' }, { ID_Cultura: 'CUL-1', Antibiotico: 'Amicacina', Resultado: 'S' }, { ID_Cultura: 'CUL-1', Antibiotico: 'Polimixina B', Resultado: 'S' }] },
+      uti: { avaliacoes_atb: [] },
+      evolucoes: { evolucoes: [{ Prontuario: '100', Atendimento: 'A1', Categoria: 'E', DataEvolucao: '2026-10-05', Autor: 'Dr. X', Texto: 'Paciente estável, afebril, sem novos focos.', SinaisInfeccao: '' }] }
+    };
+    const chaves = ['el', 'fmtInt', 'app', 'config', 'lerBanco', 'gravarBanco', 'navegar', 'abrirPaciente', 'normalizarProntuario', 'normalizarTexto',
+      'hojeISO', 'agoraCurto', 'diasDesde', 'comTrava', 'detalharNaLinha', 'analisarDose', 'cursosDeAntibiotico', 'alertasDeAntibioticos',
+      'DIAS_CURSO_PROLONGADO', 'grafLinhas', 'grafBarras', 'chavePeriodo', 'montarCartaoPublicacaoRemota', 'publicacao', 'sincronizacaoGoogle'];
+    const antes = {}; chaves.forEach(k => { antes[k] = global[k]; });
+    Object.assign(global, {
+      el: elFalso, fmtInt: n => String(n), app: { usuario: 'Dr. Teste' },
+      config: { ehAtbAvaliado: () => true, classeDoAntimicrobiano: () => '', vocabulario: {} },
+      lerBanco: async n => JSON.parse(JSON.stringify(fx[n] || {})), gravarBanco: async () => {},
+      navegar() {}, abrirPaciente() {}, normalizarProntuario: imp.normalizarProntuario, normalizarTexto: leitura.normalizarTexto,
+      hojeISO: () => '2026-10-06', agoraCurto: () => '2026-10-06 10:00', diasDesde: () => 5, comTrava: async (_l, fn) => fn(),
+      detalharNaLinha: (tr, cartao) => tr.after(cartao), analisarDose: () => null,
+      cursosDeAntibiotico: () => [curso], alertasDeAntibioticos: () => [], DIAS_CURSO_PROLONGADO: 10,
+      grafLinhas: () => elFalso('div'), grafBarras: () => elFalso('div'), chavePeriodo: () => '', montarCartaoPublicacaoRemota: () => {},
+      publicacao: { restaurar: async () => null, escolher: async () => ({ name: 'x' }), gravar: async () => {}, handle: null },
+      sincronizacaoGoogle: { configurada: async () => false, publicarNoDrive: async () => ({}) }
+    });
+    try {
+      /* Os evals das seções 96/97 (ui-abas/ui-decisao) deixaram helpers no escopo deste
+         IIFE que sombreariam os stubs globais dentro de montarAntibioticosNovo. Fixamos as
+         referências aos stubs com `var` locais antes de avaliar o arquivo. */
+      const prefixo = 'var el=global.el,fmtInt=global.fmtInt,hojeISO=global.hojeISO,agoraCurto=global.agoraCurto,'
+        + 'diasDesde=global.diasDesde,detalharNaLinha=global.detalharNaLinha,analisarDose=global.analisarDose,'
+        + 'grafLinhas=global.grafLinhas,grafBarras=global.grafBarras,chavePeriodo=global.chavePeriodo,'
+        + 'montarCartaoPublicacaoRemota=global.montarCartaoPublicacaoRemota,abrirPaciente=global.abrirPaciente,'
+        + 'navegar=global.navegar,comTrava=global.comTrava,lerBanco=global.lerBanco,gravarBanco=global.gravarBanco,'
+        + 'normalizarProntuario=global.normalizarProntuario,normalizarTexto=global.normalizarTexto,config=global.config,'
+        + 'app=global.app,DIAS_CURSO_PROLONGADO=global.DIAS_CURSO_PROLONGADO,cursosDeAntibiotico=global.cursosDeAntibiotico,'
+        + 'alertasDeAntibioticos=global.alertasDeAntibioticos;\n';
+      eval(prefixo + fs.readFileSync(path.join(__dirname, '..', 'js', 'ui-antibioticos.js'), 'utf-8') + '\nglobal.__montarATB = montarAntibioticosNovo;');
+      const raiz = mkNode('div');
+      await global.__montarATB(raiz);
+      const linhaFila = achar(raiz, n => n.tag === 'tr' && n.ouvintes.click && /Meropenem/.test(texto(n)))[0];
+      verificar('avaliação de ATB: curso pendente aparece na fila', !!linhaFila, linhaFila && texto(linhaFila));
+      linhaFila.ouvintes.click[0]({ currentTarget: linhaFila });
+      const cartao = achar(raiz, n => n.tag === 'div' && String(n.attrs.class || '').includes('cartao-detalhe'))[0];
+      verificar('avaliação de ATB: cartão mostra a cultura do paciente', !!cartao && /Klebsiella pneumoniae/.test(texto(cartao)), cartao && texto(cartao).slice(0, 120));
+      const linhaCultura = achar(cartao, n => n.tag === 'tr' && n.ouvintes.click && /Klebsiella/.test(texto(n)))[0];
+      verificar('avaliação de ATB: a linha da cultura é clicável (abre o antibiograma)', !!linhaCultura);
+      const detalheAntibiograma = achar(cartao, n => n.tag === 'tr' && /Amicacina: S/.test(texto(n)))[0];
+      verificar('avaliação de ATB: o antibiograma completo (S/I/R) está embutido na cultura',
+        !!detalheAntibiograma && /Meropenem: R/.test(texto(detalheAntibiograma)) && /Polimixina B: S/.test(texto(detalheAntibiograma)),
+        detalheAntibiograma && texto(detalheAntibiograma));
+      const antesDisplay = detalheAntibiograma.style.display;
+      linhaCultura.ouvintes.click[0]({});
+      verificar('avaliação de ATB: clicar na cultura alterna a exibição do antibiograma', detalheAntibiograma.style.display !== antesDisplay);
+      const evo = achar(cartao, n => n.tag === 'details' && /Última evolução médica/.test(texto(n)))[0];
+      verificar('avaliação de ATB: última evolução médica recolhida no cartão', !!evo && /estável, afebril/.test(texto(evo)), evo && texto(evo).slice(0, 120));
+    } catch (e) {
+      verificar('aba de avaliação de ATB monta e expande o antibiograma sem exceção', false, e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e.message);
+    } finally {
+      Object.assign(global, antes);
+    }
+  }
+
   console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
   process.exit(falharam ? 1 : 0);
 })();

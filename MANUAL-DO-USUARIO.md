@@ -99,7 +99,7 @@ além de por setor individual ou hospital inteiro.
 
 ### Rotina da instituição
 
-Três listas que ligam/desligam o que é da sua CCIH (desligado = comportamento completo, de
+Quatro listas que ligam/desligam o que é da sua CCIH (desligado = comportamento completo, de
 fábrica):
 
 - **Antibióticos avaliados** rotineiramente — quais entram na fila de avaliação e na página
@@ -107,7 +107,9 @@ fábrica):
 - **Multirresistentes isolados** rotineiramente — quais mecanismos geram alerta de MDR no
   painel e pendência de isolamento;
 - **Cirurgias com vigilância pós-alta** — quais categorias entram pré-marcadas na triagem da
-  aba Pós-alta.
+  aba Pós-alta;
+- **Germes que só viram surto com resistência** — bactérias muito frequentes (ex.: E. coli)
+  só geram suspeita de surto quando há marcador de resistência; vazio = padrão (E. coli).
 
 Ainda aqui ficam os **perfis de importação** (memorizam o layout de cada relatório, para não
 remapear a cada vez) e a **auditoria de vocabulário** (junta termos quase iguais, como
@@ -260,8 +262,11 @@ A aba Antibióticos traz:
 
 ## 6. Miniapps (celular)
 
-Três miniaplicativos rodam **offline no celular**, distribuídos por QR code (aba
-Configurações → distribuição):
+Os miniaplicativos rodam **offline no celular**, distribuídos por **QR code**. Cada um fica
+**na sua própria aba** (o QR da higiene na aba Higiene, o da avaliação de antimicrobianos na
+aba Antibióticos, o da decisão de ATB na aba Decisão ATB, e a visita à UTI na aba UTI). Em
+**Configurações** ficam só as *configurações* deles (planilha do Google, pasta espelhada,
+publicação na web).
 
 - **Visita à UTI**: dispositivos por paciente (com indicação e "sugerir retirada"),
   avaliação de antibióticos à beira do leito e **suspeita de IRAS** com foco.

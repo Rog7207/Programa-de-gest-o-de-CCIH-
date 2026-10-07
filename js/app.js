@@ -349,7 +349,7 @@ async function montarPainel(conteudo) {
   let investigacoes = [];
   try { investigacoes = (await lerBanco('surtos')).investigacoes || []; } catch (e) { /* banco novo */ }
   const todosSurtos = detectarSurtos(culturas.culturas,
-    { sensibilidade: culturas.sensibilidade, cirurgias: cirurgias.cirurgias, identidadeDe, investigacoes });
+    { sensibilidade: culturas.sensibilidade, cirurgias: cirurgias.cirurgias, identidadeDe, investigacoes, germesSoComResistencia: config.rotina.germesSoComResistencia });
   /* Suspeita marcada como "não é surto" sai do painel, mas continua registrada na aba Surtos;
      suspeita ANTIGA (mais de 6 meses) sem avaliação também sai — vive na aba Surtos, com
      descarte em lote. */
@@ -520,7 +520,7 @@ async function montarPainel(conteudo) {
       cirurgias: cirurgias.cirurgias, visitasUti: uti.visitas,
       observacoesHigiene: higiene.observacoes, investigacoesSurto: bancoSurtos.investigacoes,
       avaliacoesAtb: antibioticos.avaliacoes
-    }, dataRef, { mdrMonitorados: config.rotina.mdrMonitorados, hoje });
+    }, dataRef, { mdrMonitorados: config.rotina.mdrMonitorados, germesSoComResistencia: config.rotina.germesSoComResistencia, hoje });
     const rotuloFuncao = Object.fromEntries(FUNCOES_CCIH);
     const corStatus = { atrasado: '#b91c1c', 'em dia': '#15803d', 'sem dados': '#a16207' };
     const seloStatus = st => el('span', { style: `font-weight:600;color:${corStatus[st] || '#6b7280'}` },
@@ -816,6 +816,12 @@ async function montarConfiguracoes(conteudo) {
       mecanismosConhecidos,
       config.rotina.mdrMonitorados,
       async lista => { config.rotina.mdrMonitorados = lista; await config.salvar(); }),
+    grupoRotina('Germes que só viram surto com resistência',
+      'Bactérias muito frequentes (ex.: E. coli) só geram suspeita de surto quando há marcador de resistência — evita o ruído de flora comum sensível. As com marcador (ESBL, carbapenem-R…) continuam. Vazio = padrão.',
+      (config.vocabulario.microrganismos || []).slice().sort(),
+      config.rotina.germesSoComResistencia,
+      async lista => { config.rotina.germesSoComResistencia = lista; await config.salvar(); },
+      'padrão de fábrica: Escherichia coli'),
     grupoRotina('Cirurgias com vigilância pós-alta',
       'Quais categorias entram PRÉ-MARCADAS na triagem da aba Pós-alta. As demais aparecem esmaecidas e podem ser marcadas à mão, caso a caso. Prótese e cesariana são reconhecidas pelo nome do procedimento; as categorias de contaminação dependem do campo vir preenchido no relatório do centro cirúrgico.',
       CATEGORIAS_VIGILANCIA,
@@ -976,7 +982,8 @@ async function montarConfiguracoes(conteudo) {
     ? el('p', { class: 'texto-suave' }, config.aliases.map(a => `${a.De} → ${a.Para}`).join(' · '))
     : el('p', { class: 'texto-suave' }, 'Nenhum sinônimo registrado ainda.');
   conteudo.append(vocabDiv, el('div', { class: 'cartao' }, el('h2', {}, 'Sinônimos (aliases)'), aliasesDiv));
-  conteudo.append(montarDistribuicao());
+  /* Os cartões de miniapp (QR) agora ficam em CADA ABA (higiene na aba Higiene, decisão de
+     ATB na aba Decisão ATB, etc.). Em Configurações ficam só as configurações deles. */
   conteudo.append(await montarPlanilhaGoogle());
   conteudo.append(montarMiniappsNaPasta());
   /* GitHub Pages é o plano B para o iPhone: com a planilha do Google configurada, o
@@ -1201,38 +1208,34 @@ function qrDe(url, rotulo) {
   }
 }
 
-function montarDistribuicao() {
-  const cartao = el('div', { class: 'cartao' }, el('h2', {}, 'Distribuição dos aplicativos'),
-    el('p', { class: 'texto-suave' }, 'Aponte a câmera do celular para o QR code, ou envie o link pelo WhatsApp. Os arquivos ficam na pasta do projeto sincronizada com o Drive: quando os miniapps são reconstruídos, a versão nova sobe sozinha e o mesmo QR continua valendo.'),
-    el('div', { class: 'cartao aviso-alerta' },
-      el('strong', {}, 'No celular, o arquivo precisa ser BAIXADO e aberto no navegador.'),
-      el('p', { class: 'texto-suave' }, 'A pré-visualização do Google Drive mostra a tela do aplicativo mas não executa nada — os campos não respondem. '
-        + 'Depois de baixado (⋮ → Abrir com → Chrome, ou abrir pela pasta Downloads), funciona offline. O próprio miniapp avisa isso na tela se for aberto do jeito errado.')));
-  const grade = el('div', { style: 'display:flex;flex-wrap:wrap;gap:16px' });
-  for (const item of APPS_DISTRIBUICAO) {
-    /* Miniapp pronto mas ainda não publicado no Drive: sem link não há QR — o cartão
-       ensina o caminho em vez de mostrar um código quebrado. */
-    if (!item.url) {
-      grade.append(el('div', { style: 'text-align:center;max-width:220px' },
-        el('h3', { style: 'margin:4px 0' }, item.titulo),
-        el('p', { class: 'texto-suave' },
-          'Arquivo pronto em miniapps/decisao-atb.html. Suba-o na pasta do Drive da CCIH e cole o link '
-          + 'de download em APPS_DISTRIBUICAO (js/app.js) — o QR code aparece aqui.')));
-      continue;
-    }
-    const aviso = el('span', { class: 'texto-suave' });
-    const caixaQR = el('div', {}, qrDe(item.url, item.titulo));
-    const legenda = el('p', { class: 'texto-suave', style: 'margin:2px 0' }, 'abre a página de download');
-    let forcando = false;
-    const alternarChrome = el('button', { class: 'botao-secundario', style: 'margin:4px;font-size:13px',
-      onclick: e => {
-        forcando = !forcando;
-        caixaQR.replaceChildren(qrDe(forcando ? linkForcandoChrome(item.url) : item.url, item.titulo));
-        legenda.textContent = forcando ? 'abre direto no Chrome (só Android)' : 'abre a página de download';
-        e.target.textContent = forcando ? 'Usar QR comum' : 'QR que abre no Chrome';
-      } }, 'QR que abre no Chrome');
-    grade.append(el('div', { style: 'text-align:center;max-width:200px' },
-      el('h3', { style: 'margin:4px 0' }, item.titulo),
+/* Cartão de UM miniapp (QR + WhatsApp + link), para ficar na ABA correspondente — cada
+   miniapp mora no seu painel (higiene na aba Higiene, etc.), não mais em Configurações.
+   `item` é uma entrada de CATALOGO_MINIAPPS. */
+function cartaoMiniapp(item) {
+  if (!item) return null;
+  const cabecalho = [el('h2', {}, '📱 ' + item.titulo + ' (celular)'),
+    el('p', { class: 'texto-suave' }, item.descricao || '')];
+  if (!item.url) {
+    return el('div', { class: 'cartao' }, ...cabecalho,
+      el('p', { class: 'texto-suave' }, 'Ainda não publicado. Gere e publique o miniapp em '
+        + 'Configurações → "Miniapps na pasta espelhada" e o QR code aparece aqui.'));
+  }
+  const aviso = el('span', { class: 'texto-suave' });
+  const caixaQR = el('div', {}, qrDe(item.url, item.titulo));
+  const legenda = el('p', { class: 'texto-suave', style: 'margin:2px 0' }, 'abre a página de download');
+  let forcando = false;
+  const alternarChrome = el('button', { class: 'botao-secundario', style: 'margin:4px;font-size:13px',
+    onclick: e => {
+      forcando = !forcando;
+      caixaQR.replaceChildren(qrDe(forcando ? linkForcandoChrome(item.url) : item.url, item.titulo));
+      legenda.textContent = forcando ? 'abre direto no Chrome (só Android)' : 'abre a página de download';
+      e.target.textContent = forcando ? 'Usar QR comum' : 'QR que abre no Chrome';
+    } }, 'QR que abre no Chrome');
+  return el('div', { class: 'cartao' }, ...cabecalho,
+    el('p', { class: 'texto-suave' }, 'Aponte a câmera do celular para o QR, ou envie o link pelo WhatsApp. '
+      + 'No celular, o arquivo precisa ser BAIXADO e aberto no navegador (⋮ → Abrir com → Chrome) — a '
+      + 'pré-visualização do Drive não executa nada.'),
+    el('div', { style: 'text-align:center;max-width:220px' },
       caixaQR, legenda,
       el('div', {},
         el('button', { class: 'botao-secundario', style: 'margin:4px', onclick: () =>
@@ -1242,9 +1245,11 @@ function montarDistribuicao() {
           try { await navigator.clipboard.writeText(item.url); aviso.textContent = 'Link copiado.'; }
           catch (e) { aviso.textContent = item.url; }
         } }, 'Copiar link'), aviso)));
-  }
-  cartao.append(grade);
-  return cartao;
+}
+/* Acha a entrada do catálogo pelo título e devolve o cartão (ou null). */
+function cartaoMiniappPorTitulo(titulo) {
+  const cat = (typeof CATALOGO_MINIAPPS !== 'undefined' ? CATALOGO_MINIAPPS : []);
+  return cartaoMiniapp(cat.find(m => m.titulo === titulo));
 }
 
 window.addEventListener('DOMContentLoaded', iniciar);

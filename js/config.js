@@ -12,7 +12,7 @@ const config = {
   /* Rotina da instituição: quais antibióticos entram na avaliação rotineira e quais
      mecanismos de multirresistência disparam alerta/isolamento. LISTA VAZIA = TUDO —
      quem nunca configurou continua vendo o comportamento completo. */
-  rotina: { atbAvaliados: [], mdrMonitorados: [], vigilanciaCategorias: [] },
+  rotina: { atbAvaliados: [], mdrMonitorados: [], vigilanciaCategorias: [], germesSoComResistencia: [] },
   /* Equipe: [{Nome, Funcao (chave de FUNCOES_CCIH), CadaDias}] — uma linha por função. */
   profissionais: [],
   /* Grupos de setores para os relatórios padrão: [{Grupo, Setor}] — uma linha por membro
@@ -34,7 +34,8 @@ const config = {
     this.rotina = {
       atbAvaliados: (dados.atb_avaliados || []).map(l => l.Nome).filter(Boolean),
       mdrMonitorados: (dados.mdr_monitorados || []).map(l => l.Nome).filter(Boolean),
-      vigilanciaCategorias: (dados.vigilancia_categorias || []).map(l => l.Nome).filter(Boolean)
+      vigilanciaCategorias: (dados.vigilancia_categorias || []).map(l => l.Nome).filter(Boolean),
+      germesSoComResistencia: (dados.germes_so_com_resistencia || []).map(l => l.Nome).filter(Boolean)
     };
     for (const v of Object.keys(this.vocabulario)) {
       this.vocabulario[v] = (dados[v] || []).map(l => l.Nome).filter(Boolean);
@@ -106,6 +107,7 @@ const config = {
       atb_avaliados: this.rotina.atbAvaliados.map(n => ({ Nome: n })),
       mdr_monitorados: this.rotina.mdrMonitorados.map(n => ({ Nome: n })),
       vigilancia_categorias: this.rotina.vigilanciaCategorias.map(n => ({ Nome: n })),
+      germes_so_com_resistencia: this.rotina.germesSoComResistencia.map(n => ({ Nome: n })),
       /* Profissionais e grupos de setores NÃO passam pela fusão com o disco: a tela de
          edição é uma só, e a fusão impediria excluir alguém (o disco ressuscitaria a
          linha apagada). Vale a regra de quem salvou por último. */

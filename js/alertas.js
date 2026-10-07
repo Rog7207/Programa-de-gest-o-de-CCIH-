@@ -325,7 +325,9 @@ function detectarSurtos(culturas, opcoes) {
   }
   const chaveMicro = m => normalizarTexto(m).replace(/spp?$/, '');
   /* Germes muito frequentes (E. coli…) só suspeitam com marcador de resistência. */
-  const soComResistencia = (opcoes.germesSoComResistencia || GERMES_SO_COM_RESISTENCIA_PADRAO).map(chaveMicro);
+  /* Lista VAZIA = padrão (convenção das listas de rotina): cai no GERMES_SO_COM_RESISTENCIA_PADRAO. */
+  const soComResistencia = (opcoes.germesSoComResistencia && opcoes.germesSoComResistencia.length
+    ? opcoes.germesSoComResistencia : GERMES_SO_COM_RESISTENCIA_PADRAO).map(chaveMicro);
   /* Descartes da CCIH: [setor normalizado|germe] → datas de corte. */
   const cortes = {};
   for (const inv of opcoes.investigacoes || []) {
@@ -599,7 +601,7 @@ function rotinaDaEquipe(profissionais, bancos, referencia, opcoes) {
       m => m.DataColeta, 'isolamentos'),
     investigacao_surtos: () => {
       const suspeitas = detectarSurtos(bancos.culturas || [],
-        { sensibilidade: bancos.sensibilidade, cirurgias: bancos.cirurgias });
+        { sensibilidade: bancos.sensibilidade, cirurgias: bancos.cirurgias, germesSoComResistencia: opcoes.germesSoComResistencia });
       const ativas = suspeitas.filter(s => {
         const inv = (bancos.investigacoesSurto || []).find(i => mesmaSuspeita(s, i));
         return !inv || normalizarTexto(inv.Situacao) !== 'descartado';

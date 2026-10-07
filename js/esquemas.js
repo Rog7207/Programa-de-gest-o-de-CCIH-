@@ -158,6 +158,7 @@ const ESQUEMAS = {
       atb_avaliados: ['Nome'],
       mdr_monitorados: ['Nome'],
       vigilancia_categorias: ['Nome'],
+      germes_so_com_resistencia: ['Nome'],
       profissionais: ['Nome', 'Funcao', 'CadaDias'],
       grupos_setores: ['Grupo', 'Setor'],
       meta: ['Chave', 'Valor']

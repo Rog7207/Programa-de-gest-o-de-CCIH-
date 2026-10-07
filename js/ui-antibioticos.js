@@ -12,6 +12,8 @@ const DIAS_REVALIDAR_AVALIACAO = 7;
 
 async function montarAntibioticosNovo(conteudo) {
   conteudo.append(el('h1', {}, 'Antibióticos'));
+  /* Miniapp de celular desta aba (QR code) — avaliação de antimicrobianos à beira do leito. */
+  if (typeof cartaoMiniappPorTitulo === 'function') { const c = cartaoMiniappPorTitulo('Avaliação de antimicrobianos'); if (c) conteudo.append(c); }
   let banco, bancoPacientes, bancoCulturas, bancoUti, bancoEvolucoes;
   try {
     [banco, bancoPacientes, bancoCulturas, bancoUti, bancoEvolucoes] = await Promise.all([

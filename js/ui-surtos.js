@@ -73,7 +73,7 @@ async function montarSurtos(conteudo) {
      prontuários/atendimentos não pode virar vários "pacientes" no surto. */
   const identidadeDe = pr => normalizarTexto(nomes.get(pr)) || pr;
   const suspeitas = detectarSurtos(culturas.culturas,
-    { sensibilidade: culturas.sensibilidade, cirurgias: cirurgias.cirurgias, identidadeDe, investigacoes });
+    { sensibilidade: culturas.sensibilidade, cirurgias: cirurgias.cirurgias, identidadeDe, investigacoes, germesSoComResistencia: config.rotina.germesSoComResistencia });
   const hoje = hojeISO();
 
   /* Suspeitas ativas + investigações já registradas que não aparecem mais na detecção

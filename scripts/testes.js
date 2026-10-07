@@ -1315,8 +1315,10 @@ console.log('\n== 80c. Surtos em hospital grande: linha de base endêmica, clone
   verificar('E. coli COM marcador (ESBL) vira suspeita e é MDR',
     sEcoliESBL.length === 1 && sEcoliESBL[0].Pacientes === 3 && sEcoliESBL[0].Mecanismo === 'ESBL', JSON.stringify(sEcoliESBL));
   const perfilEcoli = ['EC1', 'EC2', 'EC3'].flatMap(id => [{ ID_Cultura: id, Antibiotico: 'Ampicilina', Resultado: 'R' }, { ID_Cultura: id, Antibiotico: 'Gentamicina', Resultado: 'S' }, { ID_Cultura: id, Antibiotico: 'Ciprofloxacino', Resultado: 'S' }]);
-  verificar('germesSoComResistencia:[] reaceita E. coli sensível (com o mesmo perfil)',
-    al.detectarSurtos(trioEcoli, { germesSoComResistencia: [], sensibilidade: perfilEcoli }).length === 1);
+  verificar('germesSoComResistencia personalizado sem E. coli reaceita E. coli sensível (mesmo perfil)',
+    al.detectarSurtos(trioEcoli, { germesSoComResistencia: ['Klebsiella pneumoniae'], sensibilidade: perfilEcoli }).length === 1);
+  verificar('germesSoComResistencia:[] cai no padrão (E. coli segue restrita)',
+    al.detectarSurtos(trioEcoli, { germesSoComResistencia: [] }).length === 0);
   verificar('Escherichia coli está na lista padrão de germes-só-com-resistência', al.GERMES_SO_COM_RESISTENCIA_PADRAO.includes('Escherichia coli'));
 
   /* (6) Mesmo PERFIL DE RESISTÊNCIA obrigatório para germe sensível: perfis diferentes não agregam. */

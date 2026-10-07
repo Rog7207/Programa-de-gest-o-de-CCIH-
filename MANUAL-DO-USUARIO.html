@@ -8,7 +8,7 @@ tr:nth-child(even) td { background: #f7f9fb; }
 code { background: #f0f2f5; padding: 1px 5px; border-radius: 4px; }
 hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 </style></head><body><h1>Aplicativo CCIH — Manual do usuário</h1>
-<p><em>Versão de setembro/2026. Este manual acompanha o aplicativo e cresce com ele.</em></p>
+<p><em>Versão de outubro/2026. Este manual acompanha o aplicativo e cresce com ele.</em></p>
 <hr>
 <h2>1. Começando</h2>
 <ul>
@@ -74,6 +74,9 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 <tr><td>Pacientes em isolamento</td><td>foto de quem está isolado agora</td><td>Tasy</td></tr>
 <tr><td>Óbitos</td><td>desfecho das internações</td><td>Tasy</td></tr>
 <tr><td>Antibióticos prescritos</td><td>prescrições em janelas renovadas</td><td>Tasy</td></tr>
+<tr><td>Sinais vitais (Tasy 2411)</td><td>medidas por atendimento (para a visita à UTI)</td><td>Tasy</td></tr>
+<tr><td>IRAS do IMAS (Tasy 2485)</td><td>lista oficial de IRAS por classificação</td><td>Tasy</td></tr>
+<tr><td>Invasividade — NISS (Tasy 3066)</td><td>pacientes-dia e dispositivos-dia por setor</td><td>Tasy (um por setor)</td></tr>
 <tr><td>Higiene das mãos</td><td>observações dos 5 momentos</td><td>miniapp</td></tr>
 <tr><td>Protocolo de sepse</td><td>ficha dos enfermeiros</td><td>planilha própria</td></tr>
 <tr><td>Casos de IRAS</td><td>migração de outro sistema</td><td>eventual</td></tr>
@@ -87,6 +90,27 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 <li><strong>Importar pasta</strong>: o botão "Importar pasta" varre uma pasta inteira e importa tudo que já tem layout memorizado — ideal para o lote diário de anexos.</li>
 <li><strong>Arquivos de miniapp entram sozinhos</strong>, sem assistente (o cabeçalho já diz o que são).</li>
 </ul>
+<h3>Ordem de importação (para o mínimo de erros e o máximo de dados)</h3>
+<p><strong>Regra de ouro:</strong> vários relatórios descobrem o paciente <strong>cruzando o número do atendimento com o censo de internações</strong>. Se o censo não foi importado antes, o prontuário fica em branco e o registro aparece <strong>sem paciente</strong> (é o que acontece com a <em>análise de antibióticos</em>, que vem por atendimento). Por isso: <strong>o censo de internações (50023) entra sempre primeiro</strong>, e a análise de antibióticos <strong>depois</strong> dele.</p>
+<p><strong>Todo dia, nesta ordem:</strong></p>
+<ol>
+<li><strong>Internações — censo (Tasy 50023)</strong> — cria a identidade atendimento ↔ prontuário ↔ nome ↔ setor. <em>(Se usar o relatório de transferências 2536, importe-o aqui também.)</em></li>
+<li><strong>Internados hoje, com leito (Tasy 2396)</strong> — atualiza setor/leito atuais e a passagem por setores. <em>Reimporte antes de cada visita ao setor, não só uma vez ao dia.</em></li>
+<li><strong>Culturas</strong> — do laboratório (ou do Tasy, se tiver prontuário).</li>
+<li><strong>Evoluções médicas (Tasy 2362)</strong>.</li>
+<li><strong>Isolamentos (Tasy 1042)</strong>.</li>
+<li><strong>Bundles — CVC/SVD (1116) e PAV (2166)</strong>.</li>
+<li><strong>Análise de antibióticos (Tasy)</strong> — vem por atendimento, por isso <strong>depois</strong> do censo.</li>
+<li><strong>IRAS para conciliação (Tasy 2485)</strong> — por último: casa com os pacientes e casos já carregados.</li>
+</ol>
+<p><strong>No primeiro dia do mês, acrescente:</strong></p>
+<ul>
+<li><strong>Cirurgias + telefones (Tasy 2550)</strong> — para a vigilância pós-alta.</li>
+<li><strong>Profilaxia cirúrgica (Tasy 1714)</strong> — depois das cirurgias.</li>
+<li><strong>Óbitos (Tasy 836)</strong> — atualiza o desfecho das internações.</li>
+<li><strong>Invasividade — NISS (Tasy 3066)</strong> — é <strong>independente</strong> (denominador por setor, não liga a paciente); pode entrar a qualquer hora. Puxe <strong>um relatório para a CTI e outro para a UTI neonatal</strong>.</li>
+</ul>
+<p><em>Resumindo a dependência: <strong>50023 → 2396 → (tudo que se liga ao paciente)</strong>. O 3066 (invasividade) é o único que não depende de ninguém.</em></p>
 <h3>Atualizações e reimportação — pode repetir sem medo</h3>
 <p>A regra geral do app é: <strong>reimportar não duplica</strong>. Cada tipo tem sua identidade (nº do exame do laboratório, atendimento+data, etc.) e o que já existe é ignorado ou atualizado. Na prática:</p>
 <ul>
@@ -115,7 +139,7 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 <p>A aba Antibióticos traz:</p>
 <ul>
 <li><strong>Alertas</strong>: 🦠 germe do paciente resistente ao antibiótico em uso (culturas de até 30 dias) · 💊 dose diária acima do teto usual de adulto (setores pediátricos ficam fora) · ⏱ curso com 10+ dias sem interrupção. Os alertas também aparecem no painel inicial.</li>
-<li><strong>Fila de avaliação</strong>: como a de culturas — clique no curso, o cartão mostra as culturas recentes com o resultado daquele antibiótico, e você registra Avaliação + Recomendação (Manter / Ajustar dose / Descalonar / Modificar / Suspender) com parecer. A avaliação vale pelo curso; se ele continuar correndo, volta à fila em 7 dias.</li>
+<li><strong>Fila de avaliação</strong>: como a de culturas — clique no curso, o cartão mostra as culturas recentes com o resultado daquele antibiótico, e você registra Avaliação + Recomendação (Manter / Ajustar dose / Descalonar / Modificar / Suspender) com parecer. A avaliação vale pelo curso; se ele continuar correndo, volta à fila em 7 dias. <strong>Sem sair da ficha</strong>: clique numa cultura para abrir o <strong>antibiograma completo</strong> (todos os S/I/R, R em destaque) e consulte a <strong>última evolução médica</strong> no bloco recolhível. <em>Antibióticos que vieram por atendimento sem casar com o censo (sem prontuário) não aparecem na fila — o cartão avisa quantos ficaram de fora; importe o censo/foto para vinculá-los ao paciente (ver "Ordem de importação", seção 3).</em></li>
 <li><strong>Indicadores</strong>: DOT (dias de terapia) por semana, por setor, por droga e por classe (quando o catálogo da farmácia estiver importado), duração média dos cursos.</li>
 <li><strong>Página remota dos médicos</strong>: gera um HTML cifrado com os pacientes pendentes para os prescritores avaliarem de fora; o retorno entra pela aba Importar.</li>
 </ul>
@@ -160,6 +184,8 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 <li><strong>confirma</strong> (fica registrado quem notificou e quem confirmou) ou <strong>descarta</strong>.</li>
 </ul>
 <p>Se você tentar confirmar uma suspeita que você mesmo abriu, o app avisa — não impede, mas o ideal é que sejam duas pessoas.</p>
+<p>Quando a suspeita veio da <strong>vigilância pós-alta</strong>, o cartão de confirmação mostra em destaque a <strong>observação que a enfermeira registrou</strong> (relato do paciente e avaliação) — assim quem valida lê o que foi apurado sem abrir o prontuário.</p>
+<p><strong>Lista oficial do IMAS (Tasy 2485)</strong>: dá para importar a <em>Ficha de ocorrência por classificação</em> pela aba Importar. Ela entra como casos de IRAS (topografia e, nas ISC, o procedimento), <strong>sem duplicar</strong> o que você já tem e <strong>sem mexer no status</strong> de um caso que já existe aqui — serve para conferir e completar contra o registro oficial.</p>
 <p><strong>Agente da infecção</strong>: na confirmação, o germe é escolhido entre as <strong>culturas positivas válidas do paciente em ±14 dias</strong> (a cultura escolhida fica vinculada ao caso), ou "Sem cultura positiva válida", ou outro nome digitado.</p>
 <p><strong>Digitação no Tasy e conciliação</strong> (o passo final do processo):</p>
 <ol>

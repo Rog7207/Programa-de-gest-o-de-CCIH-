@@ -130,6 +130,9 @@ remapear a cada vez) e a **auditoria de vocabulário** (junta termos quase iguai
 | Pacientes em isolamento | foto de quem está isolado agora | Tasy |
 | Óbitos | desfecho das internações | Tasy |
 | Antibióticos prescritos | prescrições em janelas renovadas | Tasy |
+| Sinais vitais (Tasy 2411) | medidas por atendimento (para a visita à UTI) | Tasy |
+| IRAS do IMAS (Tasy 2485) | lista oficial de IRAS por classificação | Tasy |
+| Invasividade — NISS (Tasy 3066) | pacientes-dia e dispositivos-dia por setor | Tasy (um por setor) |
 | Higiene das mãos | observações dos 5 momentos | miniapp |
 | Protocolo de sepse | ficha dos enfermeiros | planilha própria |
 | Casos de IRAS | migração de outro sistema | eventual |
@@ -148,6 +151,35 @@ arquivo → tipo e cabeçalho → mapeamento de colunas → prévia e validaçã
 - **Importar pasta**: o botão "Importar pasta" varre uma pasta inteira e importa tudo que
   já tem layout memorizado — ideal para o lote diário de anexos.
 - **Arquivos de miniapp entram sozinhos**, sem assistente (o cabeçalho já diz o que são).
+
+### Ordem de importação (para o mínimo de erros e o máximo de dados)
+
+**Regra de ouro:** vários relatórios descobrem o paciente **cruzando o número do
+atendimento com o censo de internações**. Se o censo não foi importado antes, o
+prontuário fica em branco e o registro aparece **sem paciente** (é o que acontece com a
+*análise de antibióticos*, que vem por atendimento). Por isso: **o censo de internações
+(50023) entra sempre primeiro**, e a análise de antibióticos **depois** dele.
+
+**Todo dia, nesta ordem:**
+
+1. **Internações — censo (Tasy 50023)** — cria a identidade atendimento ↔ prontuário ↔ nome ↔ setor. *(Se usar o relatório de transferências 2536, importe-o aqui também.)*
+2. **Internados hoje, com leito (Tasy 2396)** — atualiza setor/leito atuais e a passagem por setores. *Reimporte antes de cada visita ao setor, não só uma vez ao dia.*
+3. **Culturas** — do laboratório (ou do Tasy, se tiver prontuário).
+4. **Evoluções médicas (Tasy 2362)**.
+5. **Isolamentos (Tasy 1042)**.
+6. **Bundles — CVC/SVD (1116) e PAV (2166)**.
+7. **Análise de antibióticos (Tasy)** — vem por atendimento, por isso **depois** do censo.
+8. **IRAS para conciliação (Tasy 2485)** — por último: casa com os pacientes e casos já carregados.
+
+**No primeiro dia do mês, acrescente:**
+
+- **Cirurgias + telefones (Tasy 2550)** — para a vigilância pós-alta.
+- **Profilaxia cirúrgica (Tasy 1714)** — depois das cirurgias.
+- **Óbitos (Tasy 836)** — atualiza o desfecho das internações.
+- **Invasividade — NISS (Tasy 3066)** — é **independente** (denominador por setor, não liga a paciente); pode entrar a qualquer hora. Puxe **um relatório para a CTI e outro para a UTI neonatal**.
+
+> Resumindo a dependência: **50023 → 2396 → (tudo que se liga ao paciente)**. O 3066
+> (invasividade) é o único que não depende de ninguém.
 
 ### Atualizações e reimportação — pode repetir sem medo
 
@@ -214,6 +246,11 @@ A aba Antibióticos traz:
   recentes com o resultado daquele antibiótico, e você registra Avaliação + Recomendação
   (Manter / Ajustar dose / Descalonar / Modificar / Suspender) com parecer. A avaliação
   vale pelo curso; se ele continuar correndo, volta à fila em 7 dias.
+  **Sem sair da ficha**: clique numa cultura para abrir o **antibiograma completo** (todos
+  os S/I/R, R em destaque) e consulte a **última evolução médica** no bloco recolhível.
+  *Antibióticos que vieram por atendimento sem casar com o censo (sem prontuário) não
+  aparecem na fila — o cartão avisa quantos ficaram de fora; importe o censo/foto para
+  vinculá-los ao paciente (ver "Ordem de importação", seção 3).*
 - **Indicadores**: DOT (dias de terapia) por semana, por setor, por droga e por classe
   (quando o catálogo da farmácia estiver importado), duração média dos cursos.
 - **Página remota dos médicos**: gera um HTML cifrado com os pacientes pendentes para os
@@ -400,6 +437,15 @@ notificação oficial só nasce na **aba Infecções**, onde um segundo profissi
 
 Se você tentar confirmar uma suspeita que você mesmo abriu, o app avisa — não impede,
 mas o ideal é que sejam duas pessoas.
+
+Quando a suspeita veio da **vigilância pós-alta**, o cartão de confirmação mostra em
+destaque a **observação que a enfermeira registrou** (relato do paciente e avaliação) —
+assim quem valida lê o que foi apurado sem abrir o prontuário.
+
+**Lista oficial do IMAS (Tasy 2485)**: dá para importar a *Ficha de ocorrência por
+classificação* pela aba Importar. Ela entra como casos de IRAS (topografia e, nas ISC, o
+procedimento), **sem duplicar** o que você já tem e **sem mexer no status** de um caso
+que já existe aqui — serve para conferir e completar contra o registro oficial.
 
 **Agente da infecção**: na confirmação, o germe é escolhido entre as **culturas positivas
 válidas do paciente em ±14 dias** (a cultura escolhida fica vinculada ao caso), ou

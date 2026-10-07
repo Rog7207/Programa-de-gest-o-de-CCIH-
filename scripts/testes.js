@@ -5118,6 +5118,8 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     const achar = (n, pred, saida = []) => { if (n && typeof n === 'object') { if (pred(n)) saida.push(n); (n.kids || []).forEach(k => achar(k, pred, saida)); } return saida; };
 
     const curso = { Prontuario: '100', Antibiotico: 'Meropenem', Setor: 'CTI', inicio: '2026-10-01', fim: '2026-10-06', dias: 5, ids: ['PRE-1'], ultima: { ID_Prescricao: 'PRE-1', Dose: '1g', Indicacao: '' } };
+    /* Curso órfão: atendimento fora do censo → sem prontuário (sai da fila). */
+    const orfao = { Prontuario: '', Antibiotico: 'Piperacilina tazobactam', Setor: '', inicio: '2026-10-01', fim: '2026-10-06', dias: 8, ids: ['PRE-9'], ultima: { ID_Prescricao: 'PRE-9', Dose: '', Indicacao: '' } };
     const fx = {
       antibioticos: { prescricoes: [{ ID_Prescricao: 'PRE-1', Prontuario: '100', Antibiotico: 'Meropenem', DataInicio: '2026-10-01', Dose: '1g' }], avaliacoes: [] },
       pacientes: { pacientes: [{ Prontuario: '100', Nome: 'Fulano de Tal' }], internacoes: [{ Prontuario: '100', Atendimento: 'A1' }] },
@@ -5137,7 +5139,7 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       navegar() {}, abrirPaciente() {}, normalizarProntuario: imp.normalizarProntuario, normalizarTexto: leitura.normalizarTexto,
       hojeISO: () => '2026-10-06', agoraCurto: () => '2026-10-06 10:00', diasDesde: () => 5, comTrava: async (_l, fn) => fn(),
       detalharNaLinha: (tr, cartao) => tr.after(cartao), analisarDose: () => null,
-      cursosDeAntibiotico: () => [curso], alertasDeAntibioticos: () => [], DIAS_CURSO_PROLONGADO: 10,
+      cursosDeAntibiotico: () => [curso, orfao], alertasDeAntibioticos: () => [], DIAS_CURSO_PROLONGADO: 10,
       grafLinhas: () => elFalso('div'), grafBarras: () => elFalso('div'), chavePeriodo: () => '', montarCartaoPublicacaoRemota: () => {},
       publicacao: { restaurar: async () => null, escolher: async () => ({ name: 'x' }), gravar: async () => {}, handle: null },
       sincronizacaoGoogle: { configurada: async () => false, publicarNoDrive: async () => ({}) }
@@ -5159,6 +5161,9 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       await global.__montarATB(raiz);
       const linhaFila = achar(raiz, n => n.tag === 'tr' && n.ouvintes.click && /Meropenem/.test(texto(n)))[0];
       verificar('avaliação de ATB: curso pendente aparece na fila', !!linhaFila, linhaFila && texto(linhaFila));
+      const linhaOrfa = achar(raiz, n => n.tag === 'tr' && n.ouvintes.click && /Piperacilina/.test(texto(n)))[0];
+      verificar('avaliação de ATB: curso sem prontuário (atendimento fora do censo) fica fora da fila', !linhaOrfa);
+      verificar('avaliação de ATB: avisa quantos cursos sem prontuário ficaram de fora', /sem prontuário .*ficaram de fora/.test(texto(raiz)));
       linhaFila.ouvintes.click[0]({ currentTarget: linhaFila });
       const cartao = achar(raiz, n => n.tag === 'div' && String(n.attrs.class || '').includes('cartao-detalhe'))[0];
       verificar('avaliação de ATB: cartão mostra a cultura do paciente', !!cartao && /Klebsiella pneumoniae/.test(texto(cartao)), cartao && texto(cartao).slice(0, 120));

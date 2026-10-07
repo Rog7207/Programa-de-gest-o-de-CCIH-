@@ -43,8 +43,15 @@ async function montarAntibioticosNovo(conteudo) {
   });
 
   const cursos = cursosDeAntibiotico(prescricoes);
-  const ativos = cursos.filter(c => String(c.fim) >= hoje)
+  /* Prescrição vinda da "Análise de antibióticos (Tasy)" é importada por ATENDIMENTO e o
+     prontuário é resolvido pelo censo de internações. Atendimento fora do censo (ambulatório,
+     emergência, internação antiga não importada) fica sem prontuário — e sem nome/setor. Não dá
+     para avaliar na fila (não há paciente), então sai dela; o número fica à vista para o usuário
+     saber que existem e importar o censo/foto que os resolve. */
+  const temProntuario = c => String(c.Prontuario || '').trim();
+  const ativos = cursos.filter(c => String(c.fim) >= hoje && temProntuario(c))
     .sort((a, b) => b.dias - a.dias);
+  const ativosSemProntuario = cursos.filter(c => String(c.fim) >= hoje && !temProntuario(c)).length;
   const alertas = alertasDeAntibioticos({ antibioticos: banco, culturas: bancoCulturas }, hoje);
   /* Por chave, não por referência: alertasDeAntibioticos monta os próprios cursos. */
   const chaveCurso = c => normalizarProntuario(c.Prontuario) + '|' + normalizarTexto(c.Antibiotico) + '|' + c.inicio;
@@ -91,7 +98,8 @@ async function montarAntibioticosNovo(conteudo) {
     el('p', { class: 'texto-suave' },
       'Como na revisão de culturas: clique no curso, avalie embaixo da própria linha. '
       + `A avaliação vale pelo curso — se ele continuar correndo, volta à fila em ${DIAS_REVALIDAR_AVALIACAO} dias.`
-      + (foraDaRotina ? ` ${fmtInt(foraDaRotina)} curso(s) de antibióticos fora da rotina de avaliação não aparecem aqui (Configurações → Rotina).` : '')),
+      + (foraDaRotina ? ` ${fmtInt(foraDaRotina)} curso(s) de antibióticos fora da rotina de avaliação não aparecem aqui (Configurações → Rotina).` : '')
+      + (ativosSemProntuario ? ` ${fmtInt(ativosSemProntuario)} curso(s) ativo(s) sem prontuário (atendimento fora do censo de internações) ficaram de fora — importe o censo/foto dos internados para vinculá-los ao paciente.` : '')),
     areaFila));
 
   function desenharFila() {

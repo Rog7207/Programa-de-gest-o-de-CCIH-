@@ -140,6 +140,12 @@ tr.linha-detalhe .cartao-detalhe { margin: 8px 8px 12px 0; }
 .rotulo-descartar { display: flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; cursor: pointer; }
 .rotulo-descartar input { width: 16px; height: 16px; }
 .botao-investigar { padding: 4px 10px; font-size: 13px; white-space: nowrap; }
+/* Agregado de surto por bactéria MULTIRRESISTENTE: destaque na aba e no painel. */
+tr.linha-mdr td { background: #fdecea; }
+tr.linha-mdr:hover td { background: #fbddd8; }
+tr.linha-mdr td:first-child { border-left: 4px solid #b03a2e; }
+.linha-surto.surto-mdr { border-left: 4px solid #b03a2e; padding-left: 8px; }
+.selo-mdr { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; background: #b03a2e; color: #fff; font-size: 11px; font-weight: 700; vertical-align: middle; }
 /* Voltar: aparece só quando há tela anterior dentro do aplicativo. */
 .coluna-conteudo { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .botao-voltar {

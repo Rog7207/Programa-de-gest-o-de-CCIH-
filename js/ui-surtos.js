@@ -120,12 +120,13 @@ async function montarSurtos(conteudo) {
     } }, `Descartar antigos não avaliados (${fmtInt(antigos.length)})`);
   selSituacao.addEventListener('change', listar);
   conteudo.append(el('div', { class: 'cartao' },
-    el('p', { class: 'texto-suave' }, 'Suspeitas levantadas pelo painel: mesmo microrganismo com antibiograma '
-      + `semelhante, no mesmo setor ou após o mesmo procedimento cirúrgico, em ${SURTO_JANELA_DIAS} dias — `
+    el('p', { class: 'texto-suave' }, 'Suspeitas levantadas pelo painel: mesmo microrganismo com o MESMO perfil de '
+      + `resistência (antibiograma), no mesmo setor ou após o mesmo procedimento cirúrgico, em ${SURTO_JANELA_DIAS} dias — `
       + `${SURTO_MINIMO_PACIENTES} pacientes para germe esporádico ou clone resistente; germe endêmico no setor só acima `
-      + 'da própria linha de base dos 24 meses anteriores (o limiar aparece na tabela). Ocorrência contínua é um surto só, '
-      + 'que se estende. Estafilococo coagulase-negativo e identificações preliminares só entram depois de classificados como '
-      + 'infecção. Swabs de vigilância, pronto atendimento, emergência e ambulatórios não entram. '
+      + 'da própria linha de base dos 24 meses anteriores (o limiar aparece na tabela). Germe muito frequente (ex.: E. coli) '
+      + 'só vira suspeita quando há marcador de resistência. Agregados de bactéria multirresistente aparecem destacados (selo MDR). '
+      + 'Ocorrência contínua é um surto só, que se estende. Estafilococo coagulase-negativo e identificações preliminares só entram '
+      + 'depois de classificados como infecção. Swabs de vigilância, pronto atendimento, emergência e ambulatórios não entram. '
       + 'Marcar "não é surto" tira a suspeita do painel sem apagar o registro.'),
     el('div', { class: 'linha-campos' }, el('label', {}, 'Situação: ', selSituacao), botaoLote), msgLote), area);
 
@@ -138,10 +139,11 @@ async function montarSurtos(conteudo) {
           el('tbody', {}, visiveis.map(item => {
             const inv = item.investigacao;
             const nDocs = inv ? documentos.filter(d => d.ID_Surto === inv.ID_Surto).length : 0;
-            return el('tr', { class: 'linha-clicavel', onclick: e => abrirInvestigacao(item, e.currentTarget) },
+            return el('tr', { class: 'linha-clicavel' + (item.suspeita.Mecanismo ? ' linha-mdr' : ''), onclick: e => abrirInvestigacao(item, e.currentTarget) },
               el('td', {}, item.suspeita.Setor + (item.historica ? ' (encerrada)' : '')),
               el('td', {}, el('strong', {}, item.suspeita.Microrganismo),
-                item.suspeita.Mecanismo ? el('span', { class: 'aviso-erro-texto' }, ` · ${item.suspeita.Mecanismo}`) : null),
+                item.suspeita.Mecanismo ? el('span', { class: 'aviso-erro-texto' }, ` · ${item.suspeita.Mecanismo}`) : null,
+                item.suspeita.Mecanismo ? el('span', { class: 'selo-mdr' }, 'MDR') : null),
               el('td', {}, fmtInt(item.suspeita.Pacientes)),
               el('td', { class: 'texto-suave' }, item.suspeita.Limiar ? String(item.suspeita.Limiar) : '—'),
               el('td', {}, `${item.suspeita.Inicio} a ${item.suspeita.Fim}`),

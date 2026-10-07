@@ -382,9 +382,10 @@ async function montarPainel(conteudo) {
             navegar('painel', { historico: 'substituir' });
           } catch (e) { caixa.disabled = false; caixa.checked = false; alert(e.message); }
         });
-        return el('div', { class: 'alerta-item linha-surto' },
+        return el('div', { class: 'alerta-item linha-surto' + (s.Mecanismo ? ' surto-mdr' : '') },
           el('label', { class: 'rotulo-descartar', title: 'Desconsiderar — não é surto' },
             caixa, el('span', {}, 'não é surto')),
+          s.Mecanismo ? el('span', { class: 'selo-mdr' }, 'MDR') : null,
           /* Clicar na linha abre a INVESTIGAÇÃO daquele surto (pedido de 23/09/2026); as
              culturas filtradas ficam num link menor. */
           el('span', { class: 'linha-clicavel', style: 'flex:1', title: 'Abrir a investigação deste surto', onclick: () => {

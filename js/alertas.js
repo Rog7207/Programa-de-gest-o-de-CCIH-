@@ -211,9 +211,12 @@ function antibiogramasSemelhantes(a, b) {
 /* Maior subgrupo da janela cujos antibiogramas casam com o de alguma cultura-semente.
    Janela sem nenhum antibiograma comparável (fungos, germes sem painel, painéis muito
    curtos) mantém o comportamento antigo — a exigência só vale quando há o que comparar. */
-function maiorGrupoSemelhante(itens) {
+function maiorGrupoSemelhante(itens, exigirPerfil) {
   const sementes = itens.filter(it => it.perfil && it.perfil.size >= SURTO_MIN_ATB_COMUNS);
-  if (!sementes.length) return itens;
+  /* Sem semente comparável: mantém o agrupamento por espécie só quando NÃO há antibiograma
+     nenhum (fungo, painel ausente, dados antigos). Havendo antibiograma que não confirma o
+     mesmo perfil, não agrega — a regra pede o mesmo perfil de resistência (germe sensível). */
+  if (!sementes.length) return (exigirPerfil && itens.some(it => it.perfil)) ? [] : itens;
   let melhor = [];
   let melhorPacientes = 0;
   for (const semente of sementes) {
@@ -248,6 +251,12 @@ const SURTO_BASE_PERCENTIL = 0.9;
 const SURTO_BASE_MIN_JANELAS = 10;
 const SURTO_ANTIGO_DIAS = 180;
 const GERME_ESPERA_CLASSIFICACAO = /coagulase|^staphylococcus(spp?)?$|^cocogrampositivo|^bacilogramnegativo|naoidentificad|^levedura/;
+
+/* Germes MUITO FREQUENTES (ex.: E. coli): só suspeitam de surto quando há MARCADOR DE
+   RESISTÊNCIA (mecanismo declarado no laudo ou inferido do antibiograma). Sensíveis, são
+   flora comum e agregá-los por espécie seria ruído. Lista extensível e sobrescrevível por
+   opcoes.germesSoComResistencia (para virar configuração da CCIH depois). */
+const GERMES_SO_COM_RESISTENCIA_PADRAO = ['Escherichia coli'];
 
 /* Fenótipo de resistência normalizado: o laudo diz "KPC", "NDM", "ERC"; o antibiograma
    infere "Resistente a carbapenêmicos" — para o surto é o MESMO sinal (senão o clone se
@@ -315,6 +324,8 @@ function detectarSurtos(culturas, opcoes) {
     (cirurgiasPorPaciente[pront] = cirurgiasPorPaciente[pront] || []).push(cir);
   }
   const chaveMicro = m => normalizarTexto(m).replace(/spp?$/, '');
+  /* Germes muito frequentes (E. coli…) só suspeitam com marcador de resistência. */
+  const soComResistencia = (opcoes.germesSoComResistencia || GERMES_SO_COM_RESISTENCIA_PADRAO).map(chaveMicro);
   /* Descartes da CCIH: [setor normalizado|germe] → datas de corte. */
   const cortes = {};
   for (const inv of opcoes.investigacoes || []) {
@@ -345,6 +356,8 @@ function detectarSurtos(culturas, opcoes) {
     /* Fenótipo resistente forma grupo próprio (e nunca usa linha de base). */
     const mecanismo = fenotipoResistencia(String(c.MecanismoResistencia || '').trim()
       || inferirMecanismo(c.Microrganismo, sensibilidadePorCultura[c.ID_Cultura] || []));
+    /* E. coli e outros comuns SEM marcador de resistência não formam suspeita (ruído). */
+    if (!mecanismo && soComResistencia.includes(micro)) continue;
     const sufixo = mecanismo ? '|mdr:' + normalizarTexto(mecanismo) : '';
     if (c.Setor && !ehSetorPortaDeEntrada(c.Setor)) {
       juntar('setor|' + normalizarTexto(c.Setor) + '|' + micro + sufixo, c.Setor, 'setor', c, mecanismo);
@@ -366,7 +379,7 @@ function detectarSurtos(culturas, opcoes) {
     }
   }
 
-  const pacientesDe = lista => new Set(maiorGrupoSemelhante(lista).map(s => s.identidade)).size;
+  const pacientesDe = (lista, exigirPerfil) => new Set(maiorGrupoSemelhante(lista, exigirPerfil).map(s => s.identidade)).size;
   const alertas = [];
   for (const grupo of Object.values(grupos)) {
     const todos = grupo.itens.sort((a, b) => a.data.localeCompare(b.data));
@@ -377,7 +390,7 @@ function detectarSurtos(culturas, opcoes) {
       for (let i = 0; i < todos.length; i++) {
         const janela = [];
         for (let j = i; j < todos.length && diasEntre(todos[i].data, todos[j].data) <= janelaDias; j++) janela.push(todos[j]);
-        base.push({ data: todos[i].data, pacientes: pacientesDe(janela) });
+        base.push({ data: todos[i].data, pacientes: pacientesDe(janela, true) });
       }
     }
     const limiarEm = data => {
@@ -411,7 +424,7 @@ function detectarSurtos(culturas, opcoes) {
         for (; j < itens.length && diasEntre(itens[i].data, itens[j].data) <= janelaDias; j++) janela.push(itens[j]);
         /* Dentro da janela só conta o subgrupo de antibiograma semelhante: 3 pacientes com
            perfis discordantes são flora de hospital grande, não suspeita de clone. */
-        let semelhantes = maiorGrupoSemelhante(janela);
+        let semelhantes = maiorGrupoSemelhante(janela, !grupo.mdr);
         const limiar = limiarEm(itens[i].data);
         if (new Set(semelhantes.map(s => s.identidade)).size >= limiar) {
           /* Continuidade: enquanto o caso seguinte chega em até janelaDias do anterior, é o
@@ -419,7 +432,7 @@ function detectarSurtos(culturas, opcoes) {
           let fim = j;
           if (encadear) {
             while (fim < itens.length && diasEntre(itens[fim - 1].data, itens[fim].data) <= janelaDias) fim++;
-            if (fim > j) semelhantes = maiorGrupoSemelhante(itens.slice(i, fim));
+            if (fim > j) semelhantes = maiorGrupoSemelhante(itens.slice(i, fim), !grupo.mdr);
           }
           const pacientes = new Set(semelhantes.map(s => s.identidade));
           alertas.push({
@@ -659,7 +672,7 @@ function rotinaDaEquipe(profissionais, bancos, referencia, opcoes) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { detectarSurtos, ehSurtoAntigo, situacaoDaSuspeita, fenotipoResistencia, SURTO_ANTIGO_DIAS, SURTO_HISTORICO_DIAS, detectarMultirresistentes, inferirMecanismo, pendenciasIsolamento, agruparPendenciasIsolamento,
+  module.exports = { detectarSurtos, ehSurtoAntigo, situacaoDaSuspeita, fenotipoResistencia, GERMES_SO_COM_RESISTENCIA_PADRAO, SURTO_ANTIGO_DIAS, SURTO_HISTORICO_DIAS, detectarMultirresistentes, inferirMecanismo, pendenciasIsolamento, agruparPendenciasIsolamento,
     mesmaSuspeita, correlacionarSurto, resumoParaVisitaUTI, prepararVisitaUTI, leitoDaUTI, ehSetorDeUTI, iniciaisDe, isolamentosParaNotificar,
     ehSetorPortaDeEntrada, perfilAntibiograma, antibiogramasSemelhantes,
     rotinaDaEquipe, diasCorridos, diasUteis, dataDaUltimaCarga,

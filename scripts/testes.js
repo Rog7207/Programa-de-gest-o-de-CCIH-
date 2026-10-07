@@ -1230,11 +1230,12 @@ console.log('\n== 80c. Surtos em hospital grande: linha de base endêmica, clone
 {
   const al = require(path.join(__dirname, '..', 'js', 'alertas.js'));
   const cultura = (id, pront, data, extras) => ({ ID_Cultura: id, Prontuario: pront, DataColeta: data,
-    Setor: 'CTI', Material: 'Hemocultura', Microrganismo: 'Escherichia coli', StatusRevisao: 'avaliada', AvaliacaoCCIH: 'IRAS', ...extras });
+    Setor: 'CTI', Material: 'Hemocultura', Microrganismo: 'Enterococcus faecalis', StatusRevisao: 'avaliada', AvaliacaoCCIH: 'IRAS', ...extras });
   const dia = (base, n) => new Date(Date.parse(base + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
 
-  /* (1) E. coli endêmica no CTI: 2 anos com ~4 pacientes por quinzena. Uma quinzena com 4
-     não é surto (está na base); com 8 é. Sem história, 3 bastam. */
+  /* (1) Enterococcus endêmico no CTI: 2 anos com ~4 pacientes por quinzena. Uma quinzena com 4
+     não é surto (está na base); com 8 é. Sem história, 3 bastam. (Antes era E. coli, agora
+     usada só com marcador de resistência.) */
   const historia = [];
   let k = 0;
   for (let q = 0; q < 48; q++) for (let i = 0; i < 4; i++) historia.push(cultura('H' + (k++), 'H' + k, dia('2024-01-01', q * 14 + i * 3)));
@@ -1299,12 +1300,38 @@ console.log('\n== 80c. Surtos em hospital grande: linha de base endêmica, clone
   verificar('intervalo > 14 d separa: dois surtos', al.detectarSurtos(comBuraco).length === 2);
   /* Depois do descarte (encerrado no dia 10) vêm 4 casos: 3 em 14 dias reabrem a suspeita
      e o 4º, em até 14 d do anterior, estende — sem o corte, seriam todos o surto antigo. */
-  const descarte = [{ Setor: 'CTI', Microrganismo: 'Escherichia coli', Situacao: 'descartado', DataInicio: dia('2026-04-01', 0), DataFim: dia('2026-04-01', 4), DataEncerramento: dia('2026-04-01', 10) }];
+  const descarte = [{ Setor: 'CTI', Microrganismo: 'Enterococcus faecalis', Situacao: 'descartado', DataInicio: dia('2026-04-01', 0), DataFim: dia('2026-04-01', 4), DataEncerramento: dia('2026-04-01', 10) }];
   const depois = [0, 2, 4, 15, 20, 26, 37].map((d, i) => cultura('D' + i, 'D' + i, dia('2026-04-01', d)));
   verificar('sem descarte, a sequência inteira é um surto só', al.detectarSurtos(depois).length === 1);
   const cortado = al.detectarSurtos(depois, { investigacoes: descarte });
   verificar('descarte da CCIH corta a cadeia: o que vem depois é suspeita nova',
     cortado.length === 2 && cortado.some(s => s.Inicio === dia('2026-04-01', 15) && s.Pacientes === 4), JSON.stringify(cortado.map(s => [s.Inicio, s.Fim, s.Pacientes])));
+
+  /* (5) Germe MUITO FREQUENTE (E. coli) só suspeita com marcador de resistência (06/10/2026). */
+  const ecoli = (id, pr, d, extras) => cultura(id, pr, d, { Microrganismo: 'Escherichia coli', ...extras });
+  const trioEcoli = [ecoli('EC1', 'EC1', '2026-05-01'), ecoli('EC2', 'EC2', '2026-05-03'), ecoli('EC3', 'EC3', '2026-05-05')];
+  verificar('E. coli sensível (frequente, sem marcador) NÃO vira suspeita', al.detectarSurtos(trioEcoli).length === 0);
+  const sEcoliESBL = al.detectarSurtos(trioEcoli.map(c => ({ ...c, MecanismoResistencia: 'ESBL' })));
+  verificar('E. coli COM marcador (ESBL) vira suspeita e é MDR',
+    sEcoliESBL.length === 1 && sEcoliESBL[0].Pacientes === 3 && sEcoliESBL[0].Mecanismo === 'ESBL', JSON.stringify(sEcoliESBL));
+  const perfilEcoli = ['EC1', 'EC2', 'EC3'].flatMap(id => [{ ID_Cultura: id, Antibiotico: 'Ampicilina', Resultado: 'R' }, { ID_Cultura: id, Antibiotico: 'Gentamicina', Resultado: 'S' }, { ID_Cultura: id, Antibiotico: 'Ciprofloxacino', Resultado: 'S' }]);
+  verificar('germesSoComResistencia:[] reaceita E. coli sensível (com o mesmo perfil)',
+    al.detectarSurtos(trioEcoli, { germesSoComResistencia: [], sensibilidade: perfilEcoli }).length === 1);
+  verificar('Escherichia coli está na lista padrão de germes-só-com-resistência', al.GERMES_SO_COM_RESISTENCIA_PADRAO.includes('Escherichia coli'));
+
+  /* (6) Mesmo PERFIL DE RESISTÊNCIA obrigatório para germe sensível: perfis diferentes não agregam. */
+  const ks = (id, pr, d) => cultura(id, pr, d, { Microrganismo: 'Klebsiella pneumoniae' });
+  const trioKS = [ks('KS1', 'KS1', '2026-05-10'), ks('KS2', 'KS2', '2026-05-12'), ks('KS3', 'KS3', '2026-05-14')];
+  const perfisDif = [
+    { ID_Cultura: 'KS1', Antibiotico: 'Amicacina', Resultado: 'S' }, { ID_Cultura: 'KS1', Antibiotico: 'Ceftriaxona', Resultado: 'S' }, { ID_Cultura: 'KS1', Antibiotico: 'Ciprofloxacino', Resultado: 'S' },
+    { ID_Cultura: 'KS2', Antibiotico: 'Amicacina', Resultado: 'R' }, { ID_Cultura: 'KS2', Antibiotico: 'Ceftriaxona', Resultado: 'R' }, { ID_Cultura: 'KS2', Antibiotico: 'Ciprofloxacino', Resultado: 'R' },
+    { ID_Cultura: 'KS3', Antibiotico: 'Amicacina', Resultado: 'S' }, { ID_Cultura: 'KS3', Antibiotico: 'Ceftriaxona', Resultado: 'R' }, { ID_Cultura: 'KS3', Antibiotico: 'Ciprofloxacino', Resultado: 'S' }
+  ];
+  verificar('germe sensível com perfis de resistência DIFERENTES não agrega (mesmo setor/janela)',
+    al.detectarSurtos(trioKS, { sensibilidade: perfisDif }).length === 0);
+  const perfisIg = ['KS1', 'KS2', 'KS3'].flatMap(id => [{ ID_Cultura: id, Antibiotico: 'Amicacina', Resultado: 'S' }, { ID_Cultura: id, Antibiotico: 'Ceftriaxona', Resultado: 'R' }, { ID_Cultura: id, Antibiotico: 'Ciprofloxacino', Resultado: 'R' }]);
+  verificar('germe sensível com o MESMO perfil agrega', al.detectarSurtos(trioKS, { sensibilidade: perfisIg }).length === 1);
+  verificar('sem antibiograma nenhum (fungo/painel ausente), germe sensível ainda agrega', al.detectarSurtos(trioKS).length === 1);
 
   /* Situação "antigo não avaliado". */
   const velho = { Setor: 'CTI', Microrganismo: 'X', Inicio: '2025-01-01', Fim: '2025-01-10' };
@@ -4472,7 +4499,7 @@ console.log('\n== 80. Detecção de surtos: antibiograma semelhante, portas de e
 {
   const al = require(path.join(__dirname, '..', 'js', 'alertas.js'));
   const cultura = (id, pront, data, extras) => ({ ID_Cultura: id, Prontuario: pront, DataColeta: data,
-    Setor: 'CTI', Material: 'Hemocultura', Microrganismo: 'Escherichia coli',
+    Setor: 'CTI', Material: 'Hemocultura', Microrganismo: 'Klebsiella pneumoniae',
     StatusRevisao: 'avaliada', AvaliacaoCCIH: 'IRAS', ...extras });
   const painel = (id, resultados) => Object.entries(resultados)
     .map(([Antibiotico, Resultado]) => ({ ID_Cultura: id, Antibiotico, Resultado }));
@@ -4482,7 +4509,7 @@ console.log('\n== 80. Detecção de surtos: antibiograma semelhante, portas de e
   const discordantes = [
     ...painel('E1', { Amicacina: 'S', Ceftriaxona: 'S', Ciprofloxacino: 'S', Meropenem: 'S' }),
     ...painel('E2', { Amicacina: 'R', Ceftriaxona: 'R', Ciprofloxacino: 'S', Meropenem: 'S' }),
-    ...painel('E3', { Amicacina: 'S', Ceftriaxona: 'R', Ciprofloxacino: 'R', Meropenem: 'R' })
+    ...painel('E3', { Amicacina: 'S', Ceftriaxona: 'R', Ciprofloxacino: 'R', Meropenem: 'S' })
   ];
   verificar('antibiogramas discordantes não alertam',
     al.detectarSurtos(trio, { sensibilidade: discordantes }).length === 0);

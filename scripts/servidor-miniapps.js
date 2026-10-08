@@ -23,6 +23,22 @@ const LIMITE_CORPO = 256 * 1024; /* 256 KB por envio */
 
 fs.mkdirSync(PASTA_RECEBIDOS, { recursive: true });
 
+/* Segredo compartilhado: as rotas de DADOS (/api/enviar e /api/recebidos) só respondem com
+   ele — evita que qualquer um que descubra a URL (quando exposta por túnel) envie/leia.
+   Vem de SERVIDOR_SEGREDO; se não houver, é gerado e guardado em recebidos-servidor/.segredo
+   (gitignorado). NÃO é autenticação de usuário (isso é o CRM+senha), é a trava da porta. */
+let SEGREDO = String(process.env.SERVIDOR_SEGREDO || '').trim();
+const ARQ_SEGREDO = path.join(PASTA_RECEBIDOS, '.segredo');
+if (!SEGREDO) {
+  try { SEGREDO = fs.readFileSync(ARQ_SEGREDO, 'utf8').trim(); } catch (e) { /* ainda não existe */ }
+  if (!SEGREDO) { SEGREDO = crypto.randomBytes(18).toString('hex'); fs.writeFileSync(ARQ_SEGREDO, SEGREDO); }
+}
+function autorizado(req, url) {
+  const dado = String((req.headers['x-segredo'] || url.searchParams.get('segredo') || ''));
+  if (!dado || dado.length !== SEGREDO.length) return false;
+  try { return crypto.timingSafeEqual(Buffer.from(dado), Buffer.from(SEGREDO)); } catch (e) { return false; }
+}
+
 const TIPO_CONTEUDO = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
@@ -54,7 +70,8 @@ function servirArquivo(res, nome) {
   });
 }
 
-function paginaInicial() {
+function paginaInicial(segredoPrefill) {
+  const seg = String(segredoPrefill || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 80); /* sanitiza (anti-XSS) */
   const links = listarMiniapps().map(a => `<li><a href="/app/${a}">${a}</a></li>`).join('');
   return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -67,13 +84,15 @@ button{padding:9px 16px;border-radius:6px;border:1px solid #1257a8;background:#1
 <p class="suave">Roda nesta máquina, serve os miniapps e recebe os envios <strong>sem Google</strong>. Nenhum nome de paciente trafega. (Piloto: sem autenticação, só em localhost.)</p>
 <div class="cartao"><h2>Miniapps servidos (pasta miniapps/)</h2><ul>${links || '<li class="suave">nenhum .html em miniapps/</li>'}</ul></div>
 <div class="cartao"><h2>Teste de recepção</h2>
-<p class="suave">Envia um registro de exemplo de higiene — gravado no servidor (arquivo local), sem Google.</p>
+<p class="suave">Cole o <strong>segredo</strong> do servidor (aparece no console ao iniciar) e envie um registro de exemplo. As rotas de dados só respondem com o segredo.</p>
+<p><input id="seg" type="text" placeholder="segredo do servidor" value="${seg}" style="padding:7px;width:320px;max-width:100%;border:1px solid #bbb;border-radius:6px"></p>
 <button onclick="enviar()">Enviar registro de teste</button> <span id="res" class="suave"></span></div>
 <script>
 async function enviar(){
+  const seg=document.getElementById('seg').value.trim();
   const dados={Momento:'1. Antes de contato com o paciente',Profissional:'Médico',Tipo:'Higiene com álcool',TempoSeg:12,Observacoes:'teste do protótipo'};
   try{
-    const r=await fetch('/api/enviar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo:'higiene',dados})});
+    const r=await fetch('/api/enviar',{method:'POST',headers:{'Content-Type':'application/json','x-segredo':seg},body:JSON.stringify({tipo:'higiene',dados})});
     const j=await r.json();
     document.getElementById('res').textContent=j.ok?('✓ gravado — total de higiene: '+j.total+(j.novo?'':' (já existia)')):('erro: '+(j.erro||'?'));
   }catch(e){document.getElementById('res').textContent='falha: '+e.message;}
@@ -89,12 +108,13 @@ const servidor = http.createServer((req, res) => {
     res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' });
     res.end(); return;
   }
-  if (caminho === '/') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(paginaInicial()); return; }
+  if (caminho === '/') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(paginaInicial(url.searchParams.get('s'))); return; }
   if (caminho === '/api/ping') { return enviarJSON(res, 200, { ok: true, servidor: 'miniapps-ccih', hora: new Date().toISOString() }); }
 
   /* Recebe um envio: { tipo, dados } → grava uma linha JSON em recebidos-servidor/<tipo>.jsonl.
      Dedup simples por hash do conteúdo (mesma ideia do receptor do Apps Script). */
   if (caminho === '/api/enviar' && req.method === 'POST') {
+    if (!autorizado(req, url)) return enviarJSON(res, 401, { ok: false, erro: 'segredo inválido' });
     let corpo = '', excedeu = false;
     req.on('data', c => { corpo += c; if (corpo.length > LIMITE_CORPO) { excedeu = true; req.destroy(); } });
     req.on('end', () => {
@@ -113,6 +133,7 @@ const servidor = http.createServer((req, res) => {
 
   /* Leitura: o app da CCIH buscaria daqui (substitui a planilha pública). */
   if (caminho === '/api/recebidos' && req.method === 'GET') {
+    if (!autorizado(req, url)) return enviarJSON(res, 401, { ok: false, erro: 'segredo inválido' });
     const tipo = tipoSeguro(url.searchParams.get('tipo'));
     let registros = [];
     try { registros = fs.readFileSync(arqDe(tipo), 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)); } catch (e) { /* vazio */ }
@@ -130,4 +151,6 @@ servidor.listen(PORTA, () => {
   console.log('Servidor de miniapps (protótipo) em http://localhost:' + PORTA);
   console.log('  miniapps :', PASTA_MINIAPPS);
   console.log('  recebidos:', PASTA_RECEBIDOS);
+  console.log('  SEGREDO  :', SEGREDO, '  (use em x-segredo ou ?segredo= nas rotas de dados)');
+  console.log('  teste    : http://localhost:' + PORTA + '/?s=' + SEGREDO);
 });

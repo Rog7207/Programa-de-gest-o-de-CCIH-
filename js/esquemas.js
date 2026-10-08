@@ -121,7 +121,7 @@ const ESQUEMAS = {
       /* Passagem de setor (transferências): uma linha por estada em setor, com entrada e
          saída datadas. Dá pacientes-dia POR SETOR de verdade — o único que sabe ONDE o
          paciente ficou, não só por onde entrou. */
-      passagem_setor: ['ID_Passagem', 'Atendimento', 'Setor', 'EntradaSetor', 'SaidaSetor',
+      passagem_setor: ['ID_Passagem', 'Atendimento', 'Setor', 'Prontuario', 'Convenio', 'EntradaSetor', 'SaidaSetor',
         'CriadoPor', 'CriadoEm']
     }
   },

@@ -1210,6 +1210,32 @@ console.log('\n== 84b. Classificador ligado à importação, à dedup e ao vocab
   const naoImas = imp.lerImasOcorrencias([['Censo diário de Invasividade - NISS'], ['', 'Referência', 'Pacientes']]);
   verificar('IMAS: sem o título próprio, não reconhece (não colide com NISS/foto)', naoImas.reconhecido === false);
 
+  /* ---- Movimentação de pacientes / transferências (relatório 2536) ---- */
+  const matrizMov = [
+    ['HNSC - Movimentação de pacientes', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ['', '', 'Paciente', 'Atendimento', 'Prontuário', '', 'Dt entrada unidade', 'Dt saída unidade', '', 'Básica', 'Tipo acomodação', '', 'Convênio'],
+    ['', 'Agencia Transfusional', '', '', '', '', '', '', '', '', '', '', ''],
+    ['', '', 'Liete Levandoski da Silva', '1397284', '624342', '', '01/08/2026 14:09:40', '01/08/2026 17:02:08', '', '02', 'Setor sem acomodação', '', 'SUS - HNSC'],
+    ['', '', 'Abgail Correa da Silva', '1398462', '566176', '', '03/08/2026 12:34:49', '03/08/2026 15:00:45', '', '02', 'Setor sem acomodação', '', 'SUS - HNSC'],
+    ['', 'CTI - Dr. Joaquim David Ferreira Lima', '', '', '', '', '', '', '', '', '', '', ''],
+    ['', '', 'Martinho Jose Espindola', '1399737', '384209', '', '04/08/2026 14:18:31', '', '', '02', 'Leito', '', 'CASSI'],
+    ['', 'Impresso em:  07/10/2026 12:29:52', '', '', 'Página   1', '', '', 'M595487', '', '', '', 'CATE2536', '']
+  ];
+  const mov = imp.lerMovimentacaoPacientes(matrizMov);
+  verificar('2536: relatório de movimentação reconhecido', mov.reconhecido === true);
+  verificar('2536: 3 passagens lidas (pula título/cabeçalho/grupo/rodapé)', mov.linhas.length === 3, mov.linhas.length);
+  const m0 = mov.linhas[0];
+  verificar('2536: 1ª passagem com atendimento, prontuário, nome, setor do grupo e datas ISO',
+    m0.Atendimento === '1397284' && m0.Prontuario === '624342' && m0.NomePaciente === 'Liete Levandoski da Silva'
+    && m0.Setor === 'Agencia Transfusional' && m0.EntradaSetor === '2026-08-01 14:09:40' && m0.SaidaSetor === '2026-08-01 17:02:08', m0);
+  verificar('2536: a unidade (setor) vem da linha de grupo e muda ao longo do relatório',
+    mov.linhas[2].Setor === 'CTI - Dr. Joaquim David Ferreira Lima' && mov.linhas[2].Atendimento === '1399737', mov.linhas[2]);
+  verificar('2536: passagem sem data de saída fica com saída vazia (não quebra)', mov.linhas[2].SaidaSetor === '', mov.linhas[2].SaidaSetor);
+  verificar('2536: sem o título próprio, não reconhece (não colide com outros)',
+    imp.lerMovimentacaoPacientes([['Censo diário de Invasividade - NISS'], ['', 'Referência', 'Pacientes']]).reconhecido === false);
+  verificar('2536: aba passagem_setor tem Prontuario e Convenio no esquema',
+    esquemas.ESQUEMAS.denominadores.abas.passagem_setor.includes('Prontuario') && esquemas.ESQUEMAS.denominadores.abas.passagem_setor.includes('Convenio'));
+
   /* config.carregar garante que toda categoria exista no vocabulário, com código e corte. */
   global.VOCABULARIO_INICIAL = esquemas.VOCABULARIO_INICIAL;
   global.categoriasDeProcedimento = imp.categoriasDeProcedimento;

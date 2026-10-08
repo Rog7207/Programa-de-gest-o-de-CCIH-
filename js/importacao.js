@@ -1322,6 +1322,65 @@ function lerImasOcorrencias(matriz) {
   return { reconhecido: true, linhas: saida, problemas, ignoradasDescartadas };
 }
 
+/* ---- Movimentação de pacientes / transferências (relatório 2536 do Tasy) -------------
+   "HNSC - Movimentação de pacientes": texto tabulado paginado, AGRUPADO POR UNIDADE — uma
+   linha com o nome da unidade (setor) e, abaixo, uma linha por passagem: Paciente,
+   Atendimento, Prontuário, Dt entrada unidade, Dt saída unidade, Básica, Tipo acomodação,
+   Convênio. Diferente da foto 2396, ESTE traz atendimento + prontuário + nome juntos — é a
+   ponte que resolve o gap de identidade. Devolve passagens para a aba passagem_setor. */
+function lerMovimentacaoPacientes(matriz) {
+  const linhas = (matriz || []);
+  let reconhecido = false, cab = -1, col = null;
+  for (let i = 0; i < linhas.length; i++) {
+    const cels = (linhas[i] || []).map(c => String(c == null ? '' : c));
+    const junto = normalizarTexto(cels.join(' '));
+    if (junto.includes('movimentacaodepacientes')) reconhecido = true;
+    const norm = cels.map(c => normalizarTexto(c));
+    const achar = teste => { const j = norm.findIndex(teste); return j < 0 ? null : j; };
+    const iAtend = achar(n => n === 'atendimento');
+    const iEntrada = achar(n => n.includes('entradaunidade') || n.includes('dtentrada'));
+    if (iAtend != null && iEntrada != null && norm.includes('paciente')) {
+      cab = i;
+      col = {
+        paciente: achar(n => n === 'paciente'), atendimento: iAtend,
+        prontuario: achar(n => n.startsWith('prontuario')), entrada: iEntrada,
+        saida: achar(n => n.includes('saidaunidade') || n.includes('dtsaida')),
+        convenio: achar(n => n.includes('convenio'))
+      };
+      break;
+    }
+  }
+  if (!reconhecido || cab < 0) return { reconhecido: false, linhas: [], problemas: [] };
+  const val = (l, j) => j == null ? '' : String(l[j] == null ? '' : l[j]).trim();
+  const dataHora = v => {
+    const m = String(v).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{2}:\d{2}:\d{2}))?/);
+    return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}${m[4] ? ' ' + m[4] : ''}` : '';
+  };
+  const saida = [], problemas = [];
+  let setorAtual = '';
+  for (const bruta of linhas.slice(cab + 1)) {
+    const l = (bruta || []);
+    const junto = normalizarTexto(l.map(c => String(c == null ? '' : c)).join(' '));
+    if (!junto || junto.startsWith('impressoem') || junto.includes('pagina')
+      || junto.includes('movimentacaodepacientes') || junto.includes('dtentradaunidade')) continue;
+    const atend = val(l, col.atendimento).replace(/\D/g, '');
+    if (!atend) {
+      /* linha de grupo = nome da unidade (setor): a primeira célula não vazia. */
+      const texto = l.map(c => String(c == null ? '' : c).trim()).find(Boolean);
+      if (texto) setorAtual = texto;
+      continue;
+    }
+    const entrada = dataHora(val(l, col.entrada));
+    if (!entrada) { problemas.push('passagem sem data de entrada: ' + val(l, col.paciente) + ' / ' + atend); continue; }
+    saida.push({
+      Atendimento: atend, Prontuario: normalizarProntuario(val(l, col.prontuario)),
+      NomePaciente: val(l, col.paciente), Setor: setorAtual,
+      EntradaSetor: entrada, SaidaSetor: dataHora(val(l, col.saida)), Convenio: val(l, col.convenio)
+    });
+  }
+  return { reconhecido: true, linhas: saida, problemas };
+}
+
 /* ---- Evoluções do Tasy (foto operacional) --------------------------------------------
    Export diário das evoluções em texto livre. Não é histórico: por atendimento ficam só a
    ÚLTIMA evolução e a última MÉDICA (categoria E), texto aparado — contexto para revisar
@@ -4526,7 +4585,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome, resolverProntuarioPorNomeEData, NAO_ANTIMICROBIANO, pareceNomeTruncado,
     enriquecerCirurgia, classificarProcedimentoNHSN, NHSN_CATEGORIAS, categoriasDeProcedimento, categoriaDoProcedimento, CATEGORIA_SEM_CLASSIFICACAO, contaminacaoPresumida, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerImasOcorrencias, topografiaCanonicaImas, statusDaClassificacaoImas, lerEvolucoesTasy, filtrarEvolucoesRetidas, mesclarEvolucoes, sinaisDeInfeccaoNaEvolucao, extrairTemplateEvolucao, topografiaSugeridaPorSinais, EVOLUCAO_SILENCIO_DIAS, sinaisVitaisNaEvolucao, EVOLUCAO_UTI_HORAS, LIMITES_VITAIS, lerSinaisVitaisTasy, alteracoesDaMedida, mesclarSinaisVitais, SINAIS_VITAIS_RETENCAO_DIAS, internadosAgora, lerFotoInternados, aplicarFotoInternados, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerImasOcorrencias, topografiaCanonicaImas, statusDaClassificacaoImas, lerMovimentacaoPacientes, lerEvolucoesTasy, filtrarEvolucoesRetidas, mesclarEvolucoes, sinaisDeInfeccaoNaEvolucao, extrairTemplateEvolucao, topografiaSugeridaPorSinais, EVOLUCAO_SILENCIO_DIAS, sinaisVitaisNaEvolucao, EVOLUCAO_UTI_HORAS, LIMITES_VITAIS, lerSinaisVitaisTasy, alteracoesDaMedida, mesclarSinaisVitais, SINAIS_VITAIS_RETENCAO_DIAS, internadosAgora, lerFotoInternados, aplicarFotoInternados, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

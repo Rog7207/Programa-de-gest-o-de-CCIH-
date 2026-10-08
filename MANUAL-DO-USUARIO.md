@@ -125,6 +125,7 @@ remapear a cada vez) e a **auditoria de vocabulário** (junta termos quase iguai
 |---|---|---|
 | Culturas (laboratório) | exames, germes, antibiograma | planilha/PDF do laboratório |
 | Internações (censo) | entradas, altas, setores, nomes, telefones | Tasy |
+| Movimentação de pacientes (Tasy 2536) | passagens por unidade, com atendimento+prontuário+nome | Tasy |
 | Altas | fecha internações abertas | Tasy |
 | Cirurgias realizadas | procedimentos, profilaxia | relatório do centro cirúrgico |
 | Internados hoje (Tasy 2396) | setor e leito **atuais** de cada internação; passagem por setores | foto diária do Tasy — importada todo dia vira pacientes-dia por setor |

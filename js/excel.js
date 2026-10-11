@@ -3,6 +3,11 @@
 
 const TRAVA_EXPIRA_MIN = 30;
 
+/* Teto seguro de células por arquivo Excel. O escritor do SheetJS aloca o arquivo inteiro de
+   uma vez; medido nesta lib, ~2,5 M células ainda grava e ~3,6 M estoura com "Invalid array
+   length" (out-of-memory). Paramos antes, com margem, e com um erro que diz qual aba cresceu. */
+const LIMITE_CELULAS_ARQUIVO = 2200000;
+
 const bancoLocal = {
   async abrir() {
     return new Promise((resolve, reject) => {
@@ -213,6 +218,10 @@ async function lerBanco(nomeEsquema) {
 async function gravarBanco(nomeEsquema, abas) {
   const esquema = ESQUEMAS[nomeEsquema];
   const wb = XLSX.utils.book_new();
+  /* Primeiro só medimos (sem clonar): para cada aba, as colunas (esquema + extras que alguém
+     criou pelo Excel) e o nº de células. */
+  const preparadas = [];
+  let totalCelulas = 0;
   for (const nomeAba of Object.keys(esquema.abas)) {
     const doEsquema = esquema.abas[nomeAba];
     const objetos = abas[nomeAba] || [];
@@ -224,13 +233,29 @@ async function gravarBanco(nomeEsquema, abas) {
       }
     }
     const colunas = doEsquema.concat(extras);
+    preparadas.push({ nomeAba, colunas, objetos });
+    totalCelulas += objetos.length * colunas.length;
+  }
+  /* Guarda contra OOM: o escritor do SheetJS serializa o arquivo inteiro de uma vez e, perto
+     do teto, estoura com "Invalid array length" (um out-of-memory do navegador), travando a
+     importação sem dizer o porquê. Medimos ANTES de clonar/serializar; se passar do teto seguro,
+     paramos com um erro que diz QUAL aba está grande — alto volume é caso para o servidor/banco,
+     não para o Excel. */
+  if (totalCelulas > LIMITE_CELULAS_ARQUIVO) {
+    const maior = preparadas.slice().sort((a, b) => b.objetos.length * b.colunas.length - a.objetos.length * a.colunas.length)[0];
+    throw new Error(`Arquivo grande demais para o Excel (${esquema.arquivo}): `
+      + `${totalCelulas.toLocaleString('pt-BR')} células, acima do limite seguro de `
+      + `${LIMITE_CELULAS_ARQUIVO.toLocaleString('pt-BR')}. Maior aba: "${maior.nomeAba}" com `
+      + `${maior.objetos.length.toLocaleString('pt-BR')} linhas. Importe por período menor — `
+      + `volume alto a longo prazo é caso para o servidor/banco, não para o Excel.`);
+  }
+  for (const { nomeAba, colunas, objetos } of preparadas) {
     const limpos = objetos.map(o => {
       const limpo = {};
       colunas.forEach(c => { limpo[c] = o[c] == null ? '' : String(o[c]); });
       return limpo;
     });
-    const aba = XLSX.utils.json_to_sheet(limpos, { header: colunas });
-    XLSX.utils.book_append_sheet(wb, aba, nomeAba);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(limpos, { header: colunas }), nomeAba);
   }
   const extrasGuardadas = (_cacheBancos.get(nomeEsquema) || {}).abasExtras || {};
   for (const [nomeAba, linhas] of Object.entries(extrasGuardadas)) {
@@ -458,4 +483,9 @@ async function arquivarOriginal(arquivo) {
   const escrita = await fh.createWritable();
   await escrita.write(await arquivo.arrayBuffer());
   await escrita.close();
+}
+
+/* Exportado só para os testes em Node (o navegador usa tudo como global). */
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { gravarBanco, lerBanco, pasta, LIMITE_CELULAS_ARQUIVO };
 }

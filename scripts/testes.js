@@ -5258,6 +5258,37 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     }
   }
 
+  /* == 99. Guarda de volume na gravação do Excel (evita o OOM "Invalid array length") == */
+  {
+    console.log('\n== 99. Guarda de volume em gravarBanco (não deixa o Excel estourar) ==');
+    const antesESQ = global.ESQUEMAS;
+    global.ESQUEMAS = esquemas.ESQUEMAS;
+    const excel = require(path.join(__dirname, '..', 'js', 'excel.js'));
+    verificar('o limite seguro de células é um número de milhões', typeof excel.LIMITE_CELULAS_ARQUIVO === 'number' && excel.LIMITE_CELULAS_ARQUIVO > 1000000);
+    /* Acima do teto: passagem_setor tem 7 colunas; passamos linhas suficientes para cruzar o
+       limite. Deve parar com erro claro ANTES de serializar — sem OOM. */
+    const colsPassagem = esquemas.ESQUEMAS.denominadores.abas.passagem_setor.length;
+    const demais = Math.ceil(excel.LIMITE_CELULAS_ARQUIVO / colsPassagem) + 1000;
+    const gigante = Array.from({ length: demais }, () => ({ Atendimento: 'A1' }));
+    let erro = null;
+    try { await excel.gravarBanco('denominadores', { passagem_setor: gigante }); }
+    catch (e) { erro = e; }
+    verificar('gravar acima do teto lança erro claro (não "Invalid array length")',
+      !!erro && /grande demais/.test(erro.message) && /passagem_setor/.test(erro.message) && !/Invalid array length/.test(erro.message),
+      erro && erro.message);
+    /* Dentro do teto: não pode haver falso positivo. Mockamos a pasta para a gravação concluir. */
+    const pastaReal = { gravarArquivo: excel.pasta.gravarArquivo, handle: excel.pasta.handle };
+    excel.pasta.gravarArquivo = async () => {};
+    excel.pasta.handle = { getFileHandle: async () => ({ getFile: async () => ({ lastModified: 1, size: 1 }) }) };
+    let okPequeno = true, msgPeq = '';
+    try { await excel.gravarBanco('denominadores', { passagem_setor: [{ Atendimento: 'A1', Setor: 'CTI', EntradaSetor: '2026-10-01' }] }); }
+    catch (e) { okPequeno = false; msgPeq = e.message; }
+    verificar('gravar um volume normal não dispara o guarda', okPequeno, msgPeq);
+    excel.pasta.gravarArquivo = pastaReal.gravarArquivo;
+    excel.pasta.handle = pastaReal.handle;
+    global.ESQUEMAS = antesESQ;
+  }
+
   console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
   process.exit(falharam ? 1 : 0);
 })();

@@ -751,11 +751,18 @@ function telaCensoNISS(arquivo, leitura) {
    de fora: não são internação e inflariam o volume (estouravam a memória ao gravar). */
 async function telaMovimentacaoPacientes(arquivo, leitura) {
   const internacoes = leitura.linhas.filter(l => ehAcomodacaoInternacao(l.TipoAcomodacao));
+  /* Nome a partir de TODAS as passagens (inclusive ambulatório/exames) — um ambulatorial com
+     cultura importa para a origem da cultura e pode ter o nome em branco no cadastro. Mas só
+     CRIAMOS cadastro novo para quem teve passagem de INTERNAÇÃO (prontInternacao): completar
+     nome de quem já existe é barato (limitado ao cadastro), enquanto criar um registro para
+     cada ambulatorial de alguns meses despejava centenas de milhares de linhas no pacientes.xlsx
+     e estourava a memória do escritor do Excel ("Invalid array length"). */
   const nomePorPront = new Map();
   for (const l of leitura.linhas) {
     const pront = normalizarProntuario(l.Prontuario);
     if (pront && String(l.NomePaciente || '').trim() && !nomePorPront.has(pront)) nomePorPront.set(pront, l.NomePaciente);
   }
+  const prontInternacao = new Set(internacoes.map(l => normalizarProntuario(l.Prontuario)).filter(Boolean));
   const previa = el('p', { class: 'texto-suave' });
   const simular = async () => {
     try {
@@ -804,8 +811,9 @@ async function telaMovimentacaoPacientes(arquivo, leitura) {
             let nomes = 0;
             for (const [pront, nome] of nomePorPront) {
               const ex = atuais.get(pront);
-              if (!ex) { const n = { Prontuario: pront, Nome: nome, CriadoPor: app.usuario, CriadoEm: agora }; bPac.pacientes.push(n); atuais.set(pront, n); nomes++; }
-              else if (!String(ex.Nome || '').trim()) { ex.Nome = nome; nomes++; }
+              if (ex) { if (!String(ex.Nome || '').trim()) { ex.Nome = nome; nomes++; } }
+              /* Cria cadastro só para internados; ambulatorial só entra se já existir (acima). */
+              else if (prontInternacao.has(pront)) { const n = { Prontuario: pront, Nome: nome, CriadoPor: app.usuario, CriadoEm: agora }; bPac.pacientes.push(n); atuais.set(pront, n); nomes++; }
             }
             if (novos) await gravarBanco('denominadores', bDen);
             if (nomes) await gravarBanco('pacientes', bPac);

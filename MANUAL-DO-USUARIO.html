@@ -79,6 +79,7 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 <tr><td>Sinais vitais (Tasy 2411)</td><td>medidas por atendimento (para a visita à UTI)</td><td>Tasy</td></tr>
 <tr><td>IRAS do IMAS (Tasy 2485)</td><td>lista oficial de IRAS por classificação</td><td>Tasy</td></tr>
 <tr><td>Invasividade — NISS (Tasy 3066)</td><td>pacientes-dia e dispositivos-dia por setor</td><td>Tasy (um por setor)</td></tr>
+<tr><td>Notificações do SINAN (NINDINET)</td><td>agravo + datas, ligadas ao paciente (sem nome/CNS)</td><td>export .dbf do SINAN (CCIH/NHE)</td></tr>
 <tr><td>Higiene das mãos</td><td>observações dos 5 momentos</td><td>miniapp</td></tr>
 <tr><td>Protocolo de sepse</td><td>ficha dos enfermeiros</td><td>planilha própria</td></tr>
 <tr><td>Casos de IRAS</td><td>migração de outro sistema</td><td>eventual</td></tr>
@@ -198,7 +199,22 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 </ol>
 <p><strong>Sem duplicatas</strong>: o mesmo episódio costuma ser detectado por mais de um caminho (uma cultura revisada, o contato da pós-alta, uma planilha importada). O app reconhece o episódio — mesmo paciente, mesma topografia (contando siglas como ITU, PAV, IPCS e ISC) e datas até 14 dias entre si — e, em vez de abrir um caso novo, completa os campos vazios do existente. Duplicatas antigas aparecem no topo da aba Infecções com o botão <strong>Fundir duplicatas</strong>: fica o caso mais forte (decisão da segunda assinatura vale mais), e a fusão fica registrada nas observações.</p>
 <hr>
-<h2>9. Vigilância pós-alta (cirurgias)</h2>
+<h2>9. Notificáveis (doenças de notificação compulsória)</h2>
+<p>A aba <strong>Notificáveis</strong> complementa o Tasy e o SINAN: ela <strong>aponta</strong> internados que parecem ter um agravo de notificação compulsória e <strong>cruza</strong> com o que já foi notificado. Não é diagnóstico e <strong>não substitui a notificação</strong> — o app nunca notifica o SINAN sozinho; a CCIH decide, notifica no SINAN e registra aqui o que foi feito.</p>
+<p><strong>Como o app detecta</strong> (determinístico, nunca "adivinha"):</p>
+<ul>
+<li><strong>Por cultura</strong>: microrganismo notificável (tuberculose, meningococo, <em>H. influenzae</em> invasivo) e <strong>qualquer germe no líquor</strong> (sugere meningite).</li>
+<li><strong>Por evolução</strong>: a doença <strong>nomeada</strong> no texto (ex.: "tuberculose", "meningite", "COVID/SRAG"), com as <strong>negações tratadas</strong> ("tuberculose descartada" não conta).</li>
+</ul>
+<p><strong>As duas filas:</strong></p>
+<ol>
+<li><strong>A notificar</strong> — internado com sinal de agravo notificável <strong>sem registro no SINAN</strong>. Os de <strong>notificação imediata</strong> vêm marcados. O botão <strong>Marcar como notificado</strong> registra localmente (sai da fila) depois que você notificou no SINAN.</li>
+<li><strong>Isolamento indicado</strong> — agravo transmissível <strong>sem precaução ativa</strong>; leva para a aba Isolamentos.</li>
+</ol>
+<p><strong>Importar as notificações do SINAN</strong>: na aba Importar, solte o export <strong>NINDINET (.dbf)</strong>. O app liga cada notificação ao paciente pela identidade (nome + nascimento) e guarda <strong>só o prontuário, o agravo e as datas</strong> — nome, filiação, endereço e CNS <strong>não</strong> são gravados. Sem esse import, tudo aparece como "a notificar".</p>
+<p>A lista de agravos segue a LNC (Portaria GM/MS 420/2022) e é uma <strong>semente para a CCIH validar</strong> contra a Portaria vigente e a lista estadual/municipal.</p>
+<hr>
+<h2>10. Vigilância pós-alta (cirurgias)</h2>
 <p>A aba Pós-alta acompanha infecção de sítio cirúrgico depois da alta:</p>
 <ul>
 <li><strong>Triagem</strong>: cirurgias de 30 a 150 dias aparecem com checkbox — próteses/implantes e cesarianas já marcadas. Confirme para colocar <strong>sob vigilância</strong>.
@@ -212,7 +228,7 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 <li>Quem passa de 150 dias sem resposta é encerrado "sem contato".</li>
 </ul>
 <hr>
-<h2>10. As outras abas, em uma linha cada</h2>
+<h2>11. As outras abas, em uma linha cada</h2>
 <ul>
 <li><strong>Painel</strong> — alertas do dia (surtos, MDR 10 dias, antimicrobianos, suspeitas de IRAS, pendências), o cartão <strong>Rotina da equipe</strong> (ver seção 2) e gráficos rápidos.</li>
 <li><strong>Pacientes</strong> — cadastro, busca e unificação de registros provisórios do laboratório.</li>
@@ -224,7 +240,7 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 <li><strong>Configurações</strong> — usuário, equipe e funções, grupos de setores, rotina da instituição, vocabulários e distribuição dos miniapps (detalhado na seção 2).</li>
 </ul>
 <hr>
-<h2>11. Segurança e boas práticas</h2>
+<h2>12. Segurança e boas práticas</h2>
 <ul>
 <li><strong>Backup</strong> = copiar a pasta de dados inteira. Os scripts de manutenção também deixam cópias em <code>backups/</code> antes de qualquer mudança em massa.</li>
 <li><strong>Multiusuário</strong>: cada arquivo tem trava; se outra pessoa estiver gravando, o app pede para aguardar. Evite editar as planilhas no Excel com o app aberto.</li>

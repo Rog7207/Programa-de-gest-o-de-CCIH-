@@ -136,6 +136,7 @@ remapear a cada vez) e a **auditoria de vocabulário** (junta termos quase iguai
 | Sinais vitais (Tasy 2411) | medidas por atendimento (para a visita à UTI) | Tasy |
 | IRAS do IMAS (Tasy 2485) | lista oficial de IRAS por classificação | Tasy |
 | Invasividade — NISS (Tasy 3066) | pacientes-dia e dispositivos-dia por setor | Tasy (um por setor) |
+| Notificações do SINAN (NINDINET) | agravo + datas, ligadas ao paciente (sem nome/CNS) | export .dbf do SINAN (CCIH/NHE) |
 | Higiene das mãos | observações dos 5 momentos | miniapp |
 | Protocolo de sepse | ficha dos enfermeiros | planilha própria |
 | Casos de IRAS | migração de outro sistema | eventual |
@@ -484,7 +485,39 @@ e a fusão fica registrada nas observações.
 
 ---
 
-## 9. Vigilância pós-alta (cirurgias)
+## 9. Notificáveis (doenças de notificação compulsória)
+
+A aba **Notificáveis** complementa o Tasy e o SINAN: ela **aponta** internados que
+parecem ter um agravo de notificação compulsória e **cruza** com o que já foi notificado.
+Não é diagnóstico e **não substitui a notificação** — o app nunca notifica o SINAN sozinho;
+a CCIH decide, notifica no SINAN e registra aqui o que foi feito.
+
+**Como o app detecta** (determinístico, nunca "adivinha"):
+
+- **Por cultura**: microrganismo notificável (tuberculose, meningococo, *H. influenzae*
+  invasivo) e **qualquer germe no líquor** (sugere meningite).
+- **Por evolução**: a doença **nomeada** no texto (ex.: "tuberculose", "meningite",
+  "COVID/SRAG"), com as **negações tratadas** ("tuberculose descartada" não conta).
+
+**As duas filas:**
+
+1. **A notificar** — internado com sinal de agravo notificável **sem registro no SINAN**.
+   Os de **notificação imediata** vêm marcados. Botão **Marcar como notificado** registra
+   localmente (sai da fila) depois que você notificou no SINAN.
+2. **Isolamento indicado** — agravo transmissível **sem precaução ativa**; leva para a aba
+   Isolamentos.
+
+**Importar as notificações do SINAN**: na aba Importar, solte o export **NINDINET (.dbf)**.
+O app liga cada notificação ao paciente pela identidade (nome + nascimento) e guarda **só o
+prontuário, o agravo e as datas** — nome, filiação, endereço e CNS **não** são gravados. Sem
+esse import, tudo aparece como "a notificar" (o app não sabe o que já foi notificado).
+
+> A lista de agravos segue a LNC (Portaria GM/MS 420/2022) e é uma **semente para a CCIH
+> validar** contra a Portaria vigente e a lista estadual/municipal.
+
+---
+
+## 10. Vigilância pós-alta (cirurgias)
 
 A aba Pós-alta acompanha infecção de sítio cirúrgico depois da alta:
 
@@ -508,7 +541,7 @@ A aba Pós-alta acompanha infecção de sítio cirúrgico depois da alta:
 
 ---
 
-## 10. As outras abas, em uma linha cada
+## 11. As outras abas, em uma linha cada
 
 - **Painel** — alertas do dia (surtos, MDR 10 dias, antimicrobianos, suspeitas de IRAS,
   pendências), o cartão **Rotina da equipe** (ver seção 2) e gráficos rápidos.
@@ -540,7 +573,7 @@ A aba Pós-alta acompanha infecção de sítio cirúrgico depois da alta:
 
 ---
 
-## 11. Segurança e boas práticas
+## 12. Segurança e boas práticas
 
 - **Backup** = copiar a pasta de dados inteira. Os scripts de manutenção também deixam
   cópias em `backups/` antes de qualquer mudança em massa.

@@ -1241,6 +1241,19 @@ console.log('\n== 84b. Classificador ligado à importação, à dedup e ao vocab
   verificar('2536: das 3 passagens, só a com leito (CTI) é de internação',
     mov.linhas.filter(l => imp.ehAcomodacaoInternacao(l.TipoAcomodacao)).length === 1);
 
+  /* Pacientes-dia por passagem = censo de meia-noite (verificado contra o NISS 11/10/2026). */
+  const rel2536 = require(path.join(__dirname, '..', 'js', 'relatorios.js'));
+  const pd = rel2536.pacientesDiaDasPassagens({ denominadores: { passagem_setor: [
+    { Setor: 'CTI', EntradaSetor: '2026-07-01', SaidaSetor: '2026-07-04' }, /* presente 01,02,03 (alta 04 não conta) = 3 */
+    { Setor: 'CTI', EntradaSetor: '2026-07-02', SaidaSetor: '2026-07-02' }, /* mesmo dia = 0 */
+    { Setor: 'CTI', EntradaSetor: '2026-07-05', SaidaSetor: '' }            /* aberta: 05,06,07 até o fim = 3 */
+  ] } }, '2026-07-01', '2026-07-07', null);
+  verificar('pacientes-dia (noites): alta não conta, mesmo-dia=0, passagem aberta conta até o fim', pd && pd.dias === 6, pd);
+  const pdClip = rel2536.pacientesDiaDasPassagens({ denominadores: { passagem_setor: [
+    { Setor: 'CTI', EntradaSetor: '2026-06-20', SaidaSetor: '2026-07-03' }
+  ] } }, '2026-07-01', '2026-07-07', null);
+  verificar('pacientes-dia (noites): recorta ao período (entrada antes do início) — 01 e 02', pdClip && pdClip.dias === 2, pdClip);
+
   /* config.carregar garante que toda categoria exista no vocabulário, com código e corte. */
   global.VOCABULARIO_INICIAL = esquemas.VOCABULARIO_INICIAL;
   global.categoriasDeProcedimento = imp.categoriasDeProcedimento;
@@ -1483,11 +1496,11 @@ console.log('\n== 87. Foto dos internados (Tasy 2396): setor atual e passagem po
 
   /* Pacientes-dia por setor a partir das passagens (quando não há censo agregado). */
   const pd = rel.pacientesDiaDoCenso({ denominadores: { passagem_setor: [
-    { Atendimento: 'a', Setor: 'CTI', EntradaSetor: '2026-09-01', SaidaSetor: '2026-09-10' },   /* 10 dias */
-    { Atendimento: 'b', Setor: 'CTI', EntradaSetor: '2026-09-25', SaidaSetor: '' },             /* aberta: até o fim, 6 dias */
+    { Atendimento: 'a', Setor: 'CTI', EntradaSetor: '2026-09-01', SaidaSetor: '2026-09-10' },   /* noites: 01..09, alta 10 não conta = 9 */
+    { Atendimento: 'b', Setor: 'CTI', EntradaSetor: '2026-09-25', SaidaSetor: '' },             /* aberta: 25..30 até o fim = 6 */
     { Atendimento: 'c', Setor: 'Unidade 19', EntradaSetor: '2026-09-05', SaidaSetor: '2026-09-06' }
   ] } }, '2026-09-01', '2026-09-30', ['CTI']);
-  verificar('pacientes-dia do CTI pelas passagens = 16 (censo agregado ausente)', pd && pd.dias === 16 && pd.origem === 'passagens', pd);
+  verificar('pacientes-dia do CTI pelas passagens = 15 (noites; censo agregado ausente)', pd && pd.dias === 15 && pd.origem === 'passagens', pd);
 }
 
 console.log('\n== 88. Sinais de infecção na evolução (busca determinística) ==');

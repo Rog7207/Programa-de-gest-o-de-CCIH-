@@ -112,12 +112,16 @@ function pacientesDiaDasPassagens(bancos, inicio, fim, setoresEscopo) {
     if (!relEscopo(p.Setor, setoresEscopo)) continue;
     const e = Date.parse(String(p.EntradaSetor || '').slice(0, 10) + 'T00:00:00Z');
     const sTexto = String(p.SaidaSetor || '').slice(0, 10);
-    const s = sTexto ? Date.parse(sTexto + 'T00:00:00Z') : b;
-    if (!isFinite(e) || !isFinite(s)) continue;
-    const ini = Math.max(e, a), fimP = Math.min(s, b);
-    if (fimP < ini) continue;
-    const dias = Math.round((fimP - ini) / 86400000) + 1;
-    total += dias;
+    const saida = sTexto ? Date.parse(sTexto + 'T00:00:00Z') : null;
+    if (!isFinite(e)) continue;
+    /* Paciente-dia = censo de meia-noite: conta os dias de permanência, o dia da ALTA NÃO
+       conta (presente de entrada até a véspera da alta); passagem aberta (sem alta) conta até
+       o fim do período; estada no mesmo dia = 0. Convenção VERIFICADA contra o censo NISS em
+       11/10/2026 (CTI, 36 dias: NISS 928 × 2536 927; com "+1" dava 1083). */
+    const ini = Math.max(e, a);
+    const ultimoPresente = Math.min(saida != null ? saida - 86400000 : b, b);
+    if (ultimoPresente < ini) continue;
+    total += Math.round((ultimoPresente - ini) / 86400000) + 1;
     meses.add(String(inicio).slice(0, 7));
   }
   return total > 0 ? { dias: total, meses: meses.size, origem: 'passagens' } : null;

@@ -222,9 +222,79 @@ function detectarNotificaveis(bancos) {
   return [...porChave.values()];
 }
 
+/* ---- Leitor do export NINDINET do SINAN (.DBF) ----
+   O SheetJS lê o .dbf como tabela com os nomes de campo do SinanNet no cabeçalho. Mapeamos o
+   ID_AGRAVO (CID10 sem ponto) para o nome do agravo na LNC pelo prefixo mais longo. */
+const _CID_AGRAVO = LISTA_NOTIFICACAO_COMPULSORIA
+  .filter(a => a.cid)
+  .map(a => [a.cid.replace(/[^A-Za-z0-9]/g, '').toUpperCase(), a.nome])
+  .sort((x, y) => y[0].length - x[0].length);
+
+function agravoPorCID(cid) {
+  const c = String(cid || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  if (!c) return null;
+  for (const [pref, nome] of _CID_AGRAVO) if (c.startsWith(pref)) return agravoNaLista(nome);
+  return null;
+}
+
+/* Devolve { reconhecido, linhas, problemas }. Cada linha traz NomePaciente/Nascimento só para a
+   tela RESOLVER o prontuário na importação — a persistência (ui) não grava identificadores. */
+function lerNotificacoesSinan(matriz) {
+  const linhas = matriz || [];
+  let cab = -1, col = null;
+  for (let i = 0; i < Math.min(linhas.length, 5); i++) {
+    const norm = (linhas[i] || []).map(c => normalizarTexto(c));
+    const achar = teste => { const j = norm.findIndex(teste); return j < 0 ? null : j; };
+    const iNum = achar(n => n === 'nunotific');
+    const iAgravo = achar(n => n === 'idagravo');
+    const iNotif = achar(n => n === 'dtnotific');
+    if (iNum != null && iAgravo != null && iNotif != null) {
+      cab = i;
+      col = {
+        numero: iNum, agravo: iAgravo, notif: iNotif,
+        sintomas: achar(n => n === 'dtsinpri'), nasc: achar(n => n === 'dtnasc'),
+        sexo: achar(n => n === 'cssexo'), nome: achar(n => n === 'nmpacient'),
+        municipio: achar(n => n === 'idmunicip' || n === 'nmmunicip'),
+        unidade: achar(n => n === 'idunidade' || n === 'nmunidade'),
+        classif: achar(n => n === 'classifin'), evolucao: achar(n => n === 'evolucao'),
+        encerra: achar(n => n === 'dtencerra')
+      };
+      break;
+    }
+  }
+  if (cab < 0) return { reconhecido: false, linhas: [], problemas: [] };
+  const valor = (l, j) => j == null ? '' : String(l[j] == null ? '' : l[j]).trim();
+  const saida = [], problemas = [];
+  for (const bruta of linhas.slice(cab + 1)) {
+    const l = bruta || [];
+    const numero = valor(l, col.numero);
+    const cid = valor(l, col.agravo);
+    if (!numero && !cid) continue;
+    const info = agravoPorCID(cid);
+    saida.push({
+      NumeroSinan: numero,
+      CID: cid,
+      Agravo: info ? info.nome : (cid ? 'CID ' + cid : ''),
+      Prazo: info ? info.prazo : '',
+      NaLNC: !!info,
+      DataNotificacao: normalizarData(valor(l, col.notif)),
+      DataSintomas: normalizarData(valor(l, col.sintomas)),
+      Nascimento: normalizarData(valor(l, col.nasc)),
+      Sexo: valor(l, col.sexo),
+      NomePaciente: valor(l, col.nome),
+      Municipio: valor(l, col.municipio),
+      Unidade: valor(l, col.unidade),
+      Classificacao: valor(l, col.classif),
+      Evolucao: valor(l, col.evolucao)
+    });
+  }
+  return { reconhecido: true, linhas: saida, problemas };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     LISTA_NOTIFICACAO_COMPULSORIA, PRECAUCAO_POR_AGRAVO, PRECAUCAO_ROTULO,
-    AGRAVOS_POR_MICRORGANISMO, agravoNaLista, agravoDaCultura, notificaveisNaEvolucao, detectarNotificaveis
+    AGRAVOS_POR_MICRORGANISMO, agravoNaLista, agravoDaCultura, notificaveisNaEvolucao, detectarNotificaveis,
+    agravoPorCID, lerNotificacoesSinan
   };
 }

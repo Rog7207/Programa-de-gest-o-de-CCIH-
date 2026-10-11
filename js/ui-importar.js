@@ -338,6 +338,16 @@ async function processarArquivo(arquivo, codificacao, opcoesAba) {
       const pacote = analisarPacoteCSV(decodificarTexto(imp.buffer, 'auto').texto);
       if (pacote) { await ingerirMiniapp(pacote.tipo, pacote.abas, arquivo); return; }
     }
+    /* SINAN (.dbf): o SheetJS lê a tabela; os nomes de campo do SinanNet no cabeçalho
+       identificam o export NINDINET. */
+    if (/\.dbf$/i.test(arquivo.name) && !imp.forcarPlanilhaComum) {
+      const wbSin = XLSX.read(imp.buffer, { type: 'array' });
+      for (const n of wbSin.SheetNames) {
+        const matriz = XLSX.utils.sheet_to_json(wbSin.Sheets[n], { header: 1, raw: false, defval: '' });
+        const sinan = lerNotificacoesSinan(matriz);
+        if (sinan.reconhecido && sinan.linhas.length) { await telaNotificacoesSinan(arquivo, sinan); return; }
+      }
+    }
     /* Planilha de controle da CCIH costuma ter uma aba por mês: a escolha de aba (ou de
        juntar todas) fica guardada em imp.opcoesAba para sobreviver à troca de codificação
        e ao redesenho da tela. */
@@ -828,6 +838,77 @@ async function telaMovimentacaoPacientes(arquivo, leitura) {
           imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao gravar: ' + e.message));
         }
       } }, 'Importar passagens de internação'),
+      ' ',
+      el('button', { onclick: () => { imp.forcarPlanilhaComum = true; processarArquivo(arquivo, 'auto'); } },
+        'Não é isso — ler como planilha comum'))));
+}
+
+/* SINAN — export NINDINET (.dbf): notificações JÁ FEITAS pela CCIH/NHE, para cruzar com os
+   internados. Minimização LGPD: resolvemos o Prontuario pela identidade (nome + nascimento) e
+   gravamos SÓ o prontuário + agravo/datas — nome, mãe, endereço e CNS não entram no banco. */
+async function telaNotificacoesSinan(arquivo, leitura) {
+  const foraLNC = leitura.linhas.filter(n => !n.NaLNC).length;
+  const porPrazo = { imediata: 0, semanal: 0 };
+  leitura.linhas.forEach(n => { if (porPrazo[n.Prazo] != null) porPrazo[n.Prazo]++; });
+  const agravos = [...new Set(leitura.linhas.map(n => n.Agravo).filter(Boolean))].sort();
+  imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
+    el('h2', {}, 'Notificações do SINAN (NINDINET)'),
+    el('p', {}, `Reconheci ${arquivo.name}: ${fmtInt(leitura.linhas.length)} notificação(ões), `
+      + `${fmtInt(porPrazo.imediata)} imediata(s) e ${fmtInt(porPrazo.semanal)} semanal(is), em ${fmtInt(agravos.length)} agravo(s).`),
+    el('p', { class: 'texto-suave' }, 'Vou resolver o prontuário de cada uma pela identidade (nome + nascimento) e gravar '
+      + 'SÓ o prontuário, o agravo e as datas — nome, filiação, endereço e CNS NÃO são gravados. O app não envia nada ao SINAN; '
+      + 'guarda a notificação já feita para cruzar com os internados (notificado ✓ × pendente ⚠).'),
+    foraLNC ? el('p', { class: 'texto-suave' }, `⚠ ${fmtInt(foraLNC)} notificação(ões) com CID fora da lista semente — entram pelo CID; revise o vocabulário depois.`) : null,
+    el('details', {}, el('summary', {}, `${fmtInt(agravos.length)} agravo(s)`), el('p', { class: 'texto-suave' }, agravos.join(' · '))),
+    leitura.problemas.length ? el('details', {}, el('summary', {}, `${fmtInt(leitura.problemas.length)} linha(s) com problema`),
+      el('ul', {}, leitura.problemas.slice(0, 30).map(p => el('li', {}, p)))) : null,
+    el('div', { class: 'linha-botoes' },
+      el('button', { class: 'botao-primario', onclick: async () => {
+        imp.detalhes.replaceChildren(el('div', { class: 'cartao' }, el('p', {}, 'Gravando…')));
+        try {
+          const agora = agoraCurto();
+          const r = await comTrava(['sinan', 'pacientes'], async () => {
+            const bPac = await lerBanco('pacientes');
+            /* identidade (nome + nascimento) → prontuário. Nome só sozinho casa quando é único. */
+            const porNomeNasc = new Map(), porNome = new Map(), nomeDuplicado = new Set();
+            for (const p of (bPac.pacientes || [])) {
+              const nome = normalizarTexto(p.Nome), nasc = String(p.DataNascimento || '').slice(0, 10);
+              if (!nome) continue;
+              if (nasc) porNomeNasc.set(nome + '|' + nasc, p.Prontuario);
+              if (porNome.has(nome)) nomeDuplicado.add(nome); else porNome.set(nome, p.Prontuario);
+            }
+            const resolver = (nome, nasc) => {
+              const n = normalizarTexto(nome), d = String(nasc || '').slice(0, 10);
+              return porNomeNasc.get(n + '|' + d) || (!nomeDuplicado.has(n) ? porNome.get(n) : '') || '';
+            };
+            const bSin = await lerBanco('sinan').catch(() => ({}));
+            bSin.notificacoes = bSin.notificacoes || [];
+            const existentes = new Set(bSin.notificacoes.map(n => String(n.NumeroSinan)));
+            const gerar = proximoID(bSin.notificacoes, 'ID_Notificacao', 'SIN');
+            let novas = 0, identificadas = 0;
+            for (const n of leitura.linhas) {
+              if (n.NumeroSinan && existentes.has(String(n.NumeroSinan))) continue;
+              if (n.NumeroSinan) existentes.add(String(n.NumeroSinan));
+              const pront = normalizarProntuario(resolver(n.NomePaciente, n.Nascimento));
+              if (pront) identificadas++;
+              bSin.notificacoes.push({ ID_Notificacao: gerar(), NumeroSinan: n.NumeroSinan, Prontuario: pront,
+                Agravo: n.Agravo, CID: n.CID, Prazo: n.Prazo, DataNotificacao: n.DataNotificacao, DataSintomas: n.DataSintomas,
+                Municipio: n.Municipio, Unidade: n.Unidade, Classificacao: n.Classificacao, Evolucao: n.Evolucao,
+                Identificado: pront ? 'sim' : 'nao', NotificadoPor: '', CriadoPor: app.usuario, CriadoEm: agora });
+              novas++;
+            }
+            if (novas) await gravarBanco('sinan', bSin);
+            return { novas, identificadas };
+          });
+          await arquivarOriginal(arquivo);
+          imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
+            el('h2', {}, 'Importado'),
+            el('p', {}, `${fmtInt(r.novas)} notificação(ões) nova(s); ${fmtInt(r.identificadas)} ligada(s) a um paciente do cadastro.`),
+            el('p', { class: 'texto-suave' }, 'As não identificadas ficam contabilizadas pelo agravo, sem nome. O cruzamento com os internados aparece na aba Notificáveis.')));
+        } catch (e) {
+          imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao gravar: ' + e.message));
+        }
+      } }, 'Importar notificações'),
       ' ',
       el('button', { onclick: () => { imp.forcarPlanilhaComum = true; processarArquivo(arquivo, 'auto'); } },
         'Não é isso — ler como planilha comum'))));

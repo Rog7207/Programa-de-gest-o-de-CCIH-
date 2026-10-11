@@ -139,6 +139,18 @@ const ESQUEMAS = {
       decisoes: ['ID_Cultura', 'Prontuario', 'Decisao', 'Justificativa', 'CriadoPor', 'CriadoEm']
     }
   },
+  /* Notificações do SINAN (export NINDINET da própria CCIH/NHE). O app NÃO notifica o SINAN —
+     guarda a notificação já feita para CRUZAR com os internados (notificado ✓ × pendente ⚠).
+     Minimização LGPD: resolvemos o Prontuario pela identidade e NÃO gravamos nome, mãe, endereço
+     ou CNS; quando não resolve a um paciente conhecido, fica só o agravo/datas (Identificado=nao). */
+  sinan: {
+    arquivo: 'sinan.xlsx',
+    abas: {
+      notificacoes: ['ID_Notificacao', 'NumeroSinan', 'Prontuario', 'Agravo', 'CID', 'Prazo',
+        'DataNotificacao', 'DataSintomas', 'Municipio', 'Unidade', 'Classificacao', 'Evolucao',
+        'Identificado', 'NotificadoPor', 'CriadoPor', 'CriadoEm']
+    }
+  },
   config: {
     arquivo: 'config.xlsx',
     abas: {

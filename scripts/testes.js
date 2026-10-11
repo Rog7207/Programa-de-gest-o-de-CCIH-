@@ -5326,6 +5326,95 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       doP100.length === 1 && doP100[0].fonte === 'cultura', JSON.stringify(doP100));
     verificar('detectar: a meningite da evolução do outro paciente entra', achados.some(a => a.prontuario === '200' && /meningite/i.test(a.agravo)));
     verificar('detectar: TB marca precaução para aerossóis', doP100[0] && doP100[0].precaucao === 'aerossois', doP100[0] && doP100[0].precaucao);
+
+    /* Leitor do SINAN (NINDINET) */
+    global.normalizarData = imp.normalizarData;
+    verificar('CID A159 (sem ponto) → Tuberculose', (notif.agravoPorCID('A159') || {}).nome === 'Tuberculose', JSON.stringify(notif.agravoPorCID('A159')));
+    verificar('CID A390 → doença meningocócica', /meningoc/i.test((notif.agravoPorCID('A390') || {}).nome || ''), JSON.stringify(notif.agravoPorCID('A390')));
+    verificar('CID desconhecido → null', notif.agravoPorCID('Z999') === null);
+    const matrizSinan = [
+      ['NU_NOTIFIC', 'ID_AGRAVO', 'DT_NOTIFIC', 'DT_SIN_PRI', 'DT_NASC', 'CS_SEXO', 'NM_PACIENT', 'ID_MUNICIP', 'CLASSI_FIN'],
+      ['202600001', 'A159', '2026-10-05', '2026-09-28', '1980-01-02', 'M', 'FULANO DE TAL', '431490', '1'],
+      ['202600002', 'A509', '2026-10-06', '', '2026-09-30', 'F', 'CRIANCA X', '431490', '2'],
+      ['', '', '', '', '', '', '', '', '']
+    ];
+    const sinan = notif.lerNotificacoesSinan(matrizSinan);
+    verificar('SINAN: reconhece o export e lê 2 notificações (ignora linha vazia)', sinan.reconhecido && sinan.linhas.length === 2, JSON.stringify(sinan.linhas.map(n => n.NumeroSinan)));
+    verificar('SINAN: mapeia agravo e prazo (TB = semanal), e traz o nome só para resolver',
+      sinan.linhas[0].Agravo === 'Tuberculose' && sinan.linhas[0].Prazo === 'semanal' && sinan.linhas[0].NomePaciente === 'FULANO DE TAL',
+      JSON.stringify(sinan.linhas[0]));
+    verificar('SINAN: data normalizada', sinan.linhas[0].DataNotificacao === '2026-10-05', sinan.linhas[0].DataNotificacao);
+    delete global.normalizarData;
+  }
+
+  /* == 101. Fumaça da aba Notificáveis (DOM falso): filas e "marcar como notificado" == */
+  {
+    console.log('\n== 101. Fumaça da aba Notificáveis ==');
+    const mkNode = (tag, attrs) => {
+      const n = { tag, attrs: attrs || {}, kids: [], parent: null, style: {}, ouvintes: {}, value: '', textContent: '',
+        append(...k) { for (const x of k.flat(9)) if (x != null) { n.kids.push(x); if (typeof x === 'object') x.parent = n; } },
+        appendChild(x) { n.append(x); }, replaceChildren(...k) { n.kids = []; n.append(...k); },
+        addEventListener(ev, fn) { (n.ouvintes[ev] = n.ouvintes[ev] || []).push(fn); },
+        get children() { return n.kids.filter(x => typeof x === 'object'); } };
+      return n;
+    };
+    const elFalso = (tag, attrs, ...filhos) => { const n = mkNode(tag, attrs); for (const [k, v] of Object.entries(attrs || {})) if (k.startsWith('on')) n.addEventListener(k.slice(2), v); n.append(...filhos); return n; };
+    const texto = n => typeof n === 'string' ? n : (n && n.kids ? n.kids.map(texto).join(' ') : '');
+    const achar = (n, pred, saida = []) => { if (n && typeof n === 'object') { if (pred(n)) saida.push(n); (n.kids || []).forEach(k => achar(k, pred, saida)); } return saida; };
+    const notif = require(path.join(__dirname, '..', 'js', 'notificaveis.js'));
+    const fixture = {
+      culturas: { culturas: [
+        { Prontuario: '100', Microrganismo: 'Mycobacterium tuberculosis', Material: 'Escarro', DataColeta: '2026-10-01' },
+        { Prontuario: '300', Microrganismo: 'Mycobacterium tuberculosis', Material: 'Escarro', DataColeta: '2026-10-02' }
+      ] },
+      evolucoes: { evolucoes: [{ Prontuario: '200', Texto: 'Meningite bacteriana, líquor turvo.', DataEvolucao: '2026-10-03' }] },
+      pacientes: { pacientes: [{ Prontuario: '100', Nome: 'Paciente A' }, { Prontuario: '200', Nome: 'Paciente B' }, { Prontuario: '300', Nome: 'Paciente C' }],
+        internacoes: [{ Prontuario: '100', DataAlta: '', SetorAtual: 'CTI', Leito: '1' }, { Prontuario: '200', DataAlta: '', SetorAtual: 'Enfermaria' }, { Prontuario: '300', DataAlta: '', SetorAtual: 'Enfermaria' }] },
+      isolamentos: { precaucoes: [] },
+      sinan: { notificacoes: [{ Prontuario: '300', Agravo: 'Tuberculose' }] }
+    };
+    const chaves = ['el', 'fmtInt', 'lerBanco', 'gravarBanco', 'comTrava', 'navegar', 'abrirPaciente', 'normalizarProntuario', 'normalizarTexto',
+      'hojeISO', 'agoraCurto', 'proximoID', 'app', 'detectarNotificaveis', 'PRECAUCAO_ROTULO', 'textoEvolucaoNormalizado'];
+    const antes = {}; chaves.forEach(k => { antes[k] = global[k]; });
+    let gravado = null;
+    Object.assign(global, {
+      el: elFalso, fmtInt: n => String(n), app: { usuario: 'Dr. Teste' },
+      lerBanco: async n => JSON.parse(JSON.stringify(fixture[n] || {})),
+      gravarBanco: async (n, b) => { if (n === 'sinan') { gravado = b; fixture.sinan = JSON.parse(JSON.stringify(b)); } },
+      comTrava: async (_l, fn) => fn(), navegar() {}, abrirPaciente() {},
+      normalizarProntuario: imp.normalizarProntuario, normalizarTexto: leitura.normalizarTexto,
+      textoEvolucaoNormalizado: imp.textoEvolucaoNormalizado, proximoID: imp.proximoID,
+      hojeISO: () => '2026-10-11', agoraCurto: () => '2026-10-11 10:00',
+      detectarNotificaveis: notif.detectarNotificaveis, PRECAUCAO_ROTULO: notif.PRECAUCAO_ROTULO
+    });
+    try {
+      /* Seções anteriores vazaram `var lerBanco`/`el`/… no escopo deste IIFE (prefixo da 98),
+         que sombreariam os stubs globais dentro de montarNotificaveis. Fixamos as referências
+         aos stubs com `var` locais antes de avaliar o arquivo. */
+      const prefixo = 'var el=global.el,fmtInt=global.fmtInt,lerBanco=global.lerBanco,gravarBanco=global.gravarBanco,'
+        + 'comTrava=global.comTrava,navegar=global.navegar,abrirPaciente=global.abrirPaciente,'
+        + 'normalizarProntuario=global.normalizarProntuario,normalizarTexto=global.normalizarTexto,'
+        + 'hojeISO=global.hojeISO,agoraCurto=global.agoraCurto,proximoID=global.proximoID,app=global.app,'
+        + 'detectarNotificaveis=global.detectarNotificaveis,PRECAUCAO_ROTULO=global.PRECAUCAO_ROTULO;\n';
+      eval(prefixo + fs.readFileSync(path.join(__dirname, '..', 'js', 'ui-notificaveis.js'), 'utf-8') + '\nglobal.__montarNotif = montarNotificaveis;');
+      const raiz = mkNode('div');
+      await global.__montarNotif(raiz);
+      const td = texto(raiz);
+      verificar('Notificáveis: fila "A notificar" tem 2 (P100 TB e P200 meningite; P300 já notificado fica fora)', /A notificar \(2\)/.test(td), td.match(/A notificar \(\d+\)/));
+      verificar('Notificáveis: a fila cita Tuberculose e meningite', /Tuberculose/.test(td) && /meningoc/i.test(td));
+      verificar('Notificáveis: já notificados = 1', achar(raiz, n => n.tag === 'div' && texto(n) === '1').length >= 1 && /Já notificados/.test(td));
+      verificar('Notificáveis: isolamento indicado lista os 3 (sem precaução ativa)', /Isolamento indicado \(3\)/.test(td), td.match(/Isolamento indicado \(\d+\)/));
+      const botoesMarcar = achar(raiz, n => n.tag === 'button' && /Marcar como notificado/.test(texto(n)));
+      verificar('Notificáveis: há botão "Marcar como notificado"', botoesMarcar.length >= 1);
+      await botoesMarcar[0].ouvintes.click[0]({});
+      const nova = gravado && gravado.notificacoes.find(x => x.NumeroSinan === '' && x.NotificadoPor === 'Dr. Teste');
+      verificar('Notificáveis: marcar grava notificação local (sem nº SINAN, Identificado=sim)',
+        !!nova && nova.Identificado === 'sim' && !!nova.Prontuario, nova && JSON.stringify(nova));
+    } catch (e) {
+      verificar('aba Notificáveis monta e marca sem exceção', false, e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e.message);
+    } finally {
+      Object.assign(global, antes);
+    }
   }
 
   console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);

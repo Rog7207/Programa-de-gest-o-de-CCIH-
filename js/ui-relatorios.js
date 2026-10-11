@@ -131,7 +131,11 @@ async function montarRelatoriosPadrao(conteudo) {
   const selRelatorio = el('select', {}, RELATORIOS_PADRAO.map(([chave, rotulo]) =>
     el('option', { value: chave }, rotulo)));
   const grupos = config.gruposDeSetores();
-  const setores = (config.vocabulario.setores || []).slice().sort();
+  /* Opções de setor vêm dos DADOS em uso (setoresEmUso), não do vocabulário acumulado —
+     que carrega setores administrativos e lixo de importação e mostrava setores "antigos". */
+  const bancosParaSetores = {};
+  await Promise.all(BANCOS_RELATORIOS.map(async n => { try { bancosParaSetores[n] = await lerBanco(n); } catch (e) { bancosParaSetores[n] = {}; } }));
+  const setores = setoresEmUso(bancosParaSetores);
   const selEscopo = el('select', {},
     el('option', { value: '' }, 'hospital inteiro'),
     [...grupos.keys()].map(g => el('option', { value: 'g:' + g }, `grupo: ${g}`)),

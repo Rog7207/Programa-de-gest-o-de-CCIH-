@@ -1254,6 +1254,21 @@ console.log('\n== 84b. Classificador ligado à importação, à dedup e ao vocab
   ] } }, '2026-07-01', '2026-07-07', null);
   verificar('pacientes-dia (noites): recorta ao período (entrada antes do início) — 01 e 02', pdClip && pdClip.dias === 2, pdClip);
 
+  /* setoresEmUso: opções de setor saem dos DADOS, não do vocabulário poluído */
+  {
+    const bancos = {
+      culturas: { culturas: [{ Setor: 'CTI' }, { Setor: 'Emergência' }, { Setor: '' }, { Setor: 'CTI' }] },
+      iras: { casos: [{ Setor: 'Unidade 05' }] },
+      higiene_maos: { observacoes: [{ Setor: 'Emergência' }] },
+      sepse: { casos: [{ Setor: 'Centro Cirúrgico' }] }
+    };
+    const s = rel2536.setoresEmUso(bancos);
+    verificar('setoresEmUso: distintos, sem vazios, ordenados, de várias fontes',
+      JSON.stringify(s) === JSON.stringify(['Centro Cirúrgico', 'CTI', 'Emergência', 'Unidade 05']), JSON.stringify(s));
+    verificar('setoresEmUso: ignora lixo que só está no vocabulário (não entra sem estar nos dados)',
+      !rel2536.setoresEmUso({ culturas: { culturas: [{ Setor: 'CTI' }] } }).includes('Impresso em: 08/10/2026'));
+  }
+
   /* config.carregar garante que toda categoria exista no vocabulário, com código e corte. */
   global.VOCABULARIO_INICIAL = esquemas.VOCABULARIO_INICIAL;
   global.categoriasDeProcedimento = imp.categoriasDeProcedimento;

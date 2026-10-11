@@ -1237,10 +1237,36 @@ const RELATORIOS_PADRAO = [
 const BANCOS_RELATORIOS = ['iras', 'culturas', 'higiene_maos', 'antibioticos', 'isolamentos', 'denominadores',
   'sepse', 'cirurgias', 'pacientes', 'uti'];
 
+/* Onde os relatórios padrão de fato filtram por setor. O seletor de escopo tira as opções
+   DAQUI (setores em uso nos dados), não do vocabulário acumulado — que junta setor
+   administrativo e lixo de importação ("Impresso em:", "Setor", números) e não reflete os
+   setores reais. NÃO inclui internacoes.SetorAtual de propósito: lá o setor é o de ENTRADA
+   (62% caem em "Emergência"), não onde o paciente esteve. */
+const CAMPOS_SETOR_RELATORIOS = [
+  ['iras', 'casos', 'Setor'],
+  ['culturas', 'culturas', 'Setor'],
+  ['higiene_maos', 'observacoes', 'Setor'],
+  ['antibioticos', 'prescricoes', 'Setor'],
+  ['isolamentos', 'precaucoes', 'Setor'],
+  ['sepse', 'casos', 'Setor'],
+  ['denominadores', 'passagem_setor', 'Setor'],
+  ['denominadores', 'censo_setor', 'Setor']
+];
+
+/* Setores distintos que aparecem nos dados dos relatórios, ordenados. */
+function setoresEmUso(bancos) {
+  const s = new Set();
+  for (const [b, aba, campo] of CAMPOS_SETOR_RELATORIOS) {
+    const linhas = (bancos && bancos[b] && bancos[b][aba]) || [];
+    for (const l of linhas) { const v = String(l[campo] == null ? '' : l[campo]).trim(); if (v) s.add(v); }
+  }
+  return [...s].sort((a, b) => a.localeCompare(b, 'pt'));
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { relatorioIRAS, casosParaRelatorio, pacientesDiaDoCenso, pacientesDiaDasPassagens, relatorioMicrobiologico, relatorioHigiene,
     relatorioAntibioticos, relatorioIsolamentos, relatorioSepse, relatorioPosAlta,
-    relatorioResumoExecutivo, RELATORIOS_PADRAO, BANCOS_RELATORIOS, pacientesDia, pacientesDiaDoCenso,
+    relatorioResumoExecutivo, RELATORIOS_PADRAO, BANCOS_RELATORIOS, setoresEmUso, pacientesDia, pacientesDiaDoCenso,
     relMediana, relDiasEntre, mesAnteriorIntervalo,
     diasDeDispositivo, taxasPorDispositivo, grupoDoDispositivo, grupoDispositivoDaIRAS, indicadoresReuniao,
     perfilMicrobiologico, cruzarIRAScomCulturas, culturasDaIRAS, melhorCulturaDaIRAS, indiceCulturasPorProntuario,

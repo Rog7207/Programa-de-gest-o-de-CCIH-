@@ -1345,7 +1345,7 @@ function lerMovimentacaoPacientes(matriz) {
         paciente: achar(n => n === 'paciente'), atendimento: iAtend,
         prontuario: achar(n => n.startsWith('prontuario')), entrada: iEntrada,
         saida: achar(n => n.includes('saidaunidade') || n.includes('dtsaida')),
-        convenio: achar(n => n.includes('convenio'))
+        acomodacao: achar(n => n.includes('acomodacao')), convenio: achar(n => n.includes('convenio'))
       };
       break;
     }
@@ -1375,10 +1375,19 @@ function lerMovimentacaoPacientes(matriz) {
     saida.push({
       Atendimento: atend, Prontuario: normalizarProntuario(val(l, col.prontuario)),
       NomePaciente: val(l, col.paciente), Setor: setorAtual,
-      EntradaSetor: entrada, SaidaSetor: dataHora(val(l, col.saida)), Convenio: val(l, col.convenio)
+      EntradaSetor: entrada, SaidaSetor: dataHora(val(l, col.saida)),
+      TipoAcomodacao: val(l, col.acomodacao), Convenio: val(l, col.convenio)
     });
   }
   return { reconhecido: true, linhas: saida, problemas };
+}
+
+/* Passagem que conta PACIENTES-DIA: "Setor sem acomodação" = sem leito (apoio, ambulatório,
+   triagem, exames) e NÃO conta; qualquer leito (Enfermaria, UTI, Apartamento, Isolamento,
+   Berçário, Suíte…) é internação e conta. */
+function ehAcomodacaoInternacao(tipo) {
+  const t = normalizarTexto(tipo);
+  return !!t && t !== 'setorsemacomodacao';
 }
 
 /* ---- Evoluções do Tasy (foto operacional) --------------------------------------------
@@ -4585,7 +4594,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome, resolverProntuarioPorNomeEData, NAO_ANTIMICROBIANO, pareceNomeTruncado,
     enriquecerCirurgia, classificarProcedimentoNHSN, NHSN_CATEGORIAS, categoriasDeProcedimento, categoriaDoProcedimento, CATEGORIA_SEM_CLASSIFICACAO, contaminacaoPresumida, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerImasOcorrencias, topografiaCanonicaImas, statusDaClassificacaoImas, lerMovimentacaoPacientes, lerEvolucoesTasy, filtrarEvolucoesRetidas, mesclarEvolucoes, sinaisDeInfeccaoNaEvolucao, extrairTemplateEvolucao, topografiaSugeridaPorSinais, EVOLUCAO_SILENCIO_DIAS, sinaisVitaisNaEvolucao, EVOLUCAO_UTI_HORAS, LIMITES_VITAIS, lerSinaisVitaisTasy, alteracoesDaMedida, mesclarSinaisVitais, SINAIS_VITAIS_RETENCAO_DIAS, internadosAgora, lerFotoInternados, aplicarFotoInternados, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerImasOcorrencias, topografiaCanonicaImas, statusDaClassificacaoImas, lerMovimentacaoPacientes, ehAcomodacaoInternacao, lerEvolucoesTasy, filtrarEvolucoesRetidas, mesclarEvolucoes, sinaisDeInfeccaoNaEvolucao, extrairTemplateEvolucao, topografiaSugeridaPorSinais, EVOLUCAO_SILENCIO_DIAS, sinaisVitaisNaEvolucao, EVOLUCAO_UTI_HORAS, LIMITES_VITAIS, lerSinaisVitaisTasy, alteracoesDaMedida, mesclarSinaisVitais, SINAIS_VITAIS_RETENCAO_DIAS, internadosAgora, lerFotoInternados, aplicarFotoInternados, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

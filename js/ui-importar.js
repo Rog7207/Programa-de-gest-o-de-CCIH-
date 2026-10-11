@@ -744,15 +744,13 @@ function telaCensoNISS(arquivo, leitura) {
       } }, 'Não é isso — ler como planilha comum'))));
 }
 
-/* Movimentação de pacientes (2536): passagens por unidade, COM atendimento+prontuário+nome.
-   Este relatório é ENORME (dezenas de milhares de passagens por arquivo, a maioria em unidades
-   de apoio) — guardar cada passagem estoura a memória do navegador ao gravar o Excel ("Invalid
-   array length"). Por isso o papel dele aqui é a IDENTIDADE: completa os NOMES no cadastro por
-   prontuário (limitado ao nº de pacientes). A passagem por setores continua vindo da foto 2396/
-   censo NISS. Resolver os antibióticos órfãos pelo mapa atendimento→prontuário é o próximo
-   passo — por ser dado de alto volume, candidato ao servidor/banco, não ao Excel. */
+/* Movimentação de pacientes (2536): passagens por unidade (atendimento+prontuário+nome+
+   tipo de acomodação). Grava as passagens de INTERNAÇÃO (com leito) na passagem por setores
+   — base dos pacientes-dia por setor quando o censo NISS não cobre — e completa os nomes no
+   cadastro. As passagens "Setor sem acomodação" (apoio, ambulatório, triagem, exames) ficam
+   de fora: não são internação e inflariam o volume (estouravam a memória ao gravar). */
 async function telaMovimentacaoPacientes(arquivo, leitura) {
-  /* Dedup por prontuário já aqui: um nome por paciente, não por passagem. */
+  const internacoes = leitura.linhas.filter(l => ehAcomodacaoInternacao(l.TipoAcomodacao));
   const nomePorPront = new Map();
   for (const l of leitura.linhas) {
     const pront = normalizarProntuario(l.Prontuario);
@@ -761,26 +759,24 @@ async function telaMovimentacaoPacientes(arquivo, leitura) {
   const previa = el('p', { class: 'texto-suave' });
   const simular = async () => {
     try {
-      const bPac = await lerBanco('pacientes');
-      const atuais = new Map((bPac.pacientes || []).map(p => [normalizarProntuario(p.Prontuario), p]));
-      let novos = 0, completa = 0;
-      for (const pront of nomePorPront.keys()) {
-        const ex = atuais.get(pront);
-        if (!ex) novos++; else if (!String(ex.Nome || '').trim()) completa++;
-      }
-      previa.textContent = `Prévia: ${fmtInt(novos)} paciente(s) novo(s) e ${fmtInt(completa)} nome(s) a completar.`;
+      const bDen = await lerBanco('denominadores').catch(() => ({ passagem_setor: [] }));
+      const existentes = new Set((bDen.passagem_setor || []).map(p => p.Atendimento + '|' + normalizarTexto(p.Setor) + '|' + p.EntradaSetor));
+      let novos = 0;
+      for (const l of internacoes) if (!existentes.has(l.Atendimento + '|' + normalizarTexto(l.Setor) + '|' + l.EntradaSetor)) novos++;
+      previa.textContent = `Prévia: ${fmtInt(novos)} passagem(ns) de internação nova(s).`;
     } catch (e) { previa.textContent = 'Erro ao ler o banco: ' + e.message; }
   };
   simular();
-  const atendimentos = new Set(leitura.linhas.map(l => l.Atendimento)).size;
-  const datas = leitura.linhas.map(l => String(l.EntradaSetor).slice(0, 10)).filter(Boolean).sort();
+  const setores = [...new Set(internacoes.map(l => l.Setor))].sort();
+  const datas = internacoes.map(l => String(l.EntradaSetor).slice(0, 10)).filter(Boolean).sort();
   imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
-    el('h2', {}, 'Movimentação de pacientes (identidade)'),
-    el('p', {}, `Reconheci ${arquivo.name}: ${fmtInt(leitura.linhas.length)} passagem(ns), `
-      + `${fmtInt(atendimentos)} atendimento(s), ${fmtInt(nomePorPront.size)} paciente(s) distinto(s), de ${datas[0] || '—'} a ${datas[datas.length - 1] || '—'}.`),
-    el('p', { class: 'texto-suave' }, 'Deste relatório o app aproveita a IDENTIDADE (atendimento↔prontuário↔nome): completa os '
-      + 'NOMES no cadastro por prontuário. As passagens em si NÃO são gravadas — o volume estoura a memória do navegador '
-      + 'ao gravar o Excel; a passagem por setores vem da foto 2396/censo.'),
+    el('h2', {}, 'Movimentação de pacientes (passagem por setores)'),
+    el('p', {}, `Reconheci ${arquivo.name}: ${fmtInt(leitura.linhas.length)} passagem(ns) no total; `
+      + `${fmtInt(internacoes.length)} de INTERNAÇÃO (com leito), em ${fmtInt(setores.length)} setor(es), de ${datas[0] || '—'} a ${datas[datas.length - 1] || '—'}.`),
+    el('p', { class: 'texto-suave' }, 'Grava as passagens de INTERNAÇÃO (com leito) na passagem por setores — base dos pacientes-dia '
+      + 'por setor quando o censo NISS não cobre — e completa os nomes no cadastro. As passagens em "Setor sem '
+      + 'acomodação" (apoio, ambulatório, triagem, exames) ficam de fora: não são internação e inflariam o volume.'),
+    el('details', {}, el('summary', {}, `${fmtInt(setores.length)} setor(es) de internação`), el('p', { class: 'texto-suave' }, setores.join(' · '))),
     previa,
     leitura.problemas.length ? el('details', {}, el('summary', {}, `${fmtInt(leitura.problemas.length)} linha(s) com problema`),
       el('ul', {}, leitura.problemas.slice(0, 30).map(p => el('li', {}, p)))) : null,
@@ -789,27 +785,41 @@ async function telaMovimentacaoPacientes(arquivo, leitura) {
         imp.detalhes.replaceChildren(el('div', { class: 'cartao' }, el('p', {}, 'Gravando…')));
         try {
           const agora = agoraCurto();
-          const r = await comTrava(['pacientes'], async () => {
+          const r = await comTrava(['denominadores', 'pacientes'], async () => {
+            const bDen = await lerBanco('denominadores').catch(() => ({}));
+            bDen.passagem_setor = bDen.passagem_setor || [];
+            const existentes = new Set(bDen.passagem_setor.map(p => p.Atendimento + '|' + normalizarTexto(p.Setor) + '|' + p.EntradaSetor));
+            const gerar = proximoID(bDen.passagem_setor, 'ID_Passagem', 'PSS');
+            let novos = 0;
+            for (const l of internacoes) {
+              const chave = l.Atendimento + '|' + normalizarTexto(l.Setor) + '|' + l.EntradaSetor;
+              if (existentes.has(chave)) continue;
+              existentes.add(chave);
+              bDen.passagem_setor.push({ ID_Passagem: gerar(), Atendimento: l.Atendimento, Setor: l.Setor,
+                EntradaSetor: l.EntradaSetor, SaidaSetor: l.SaidaSetor, CriadoPor: app.usuario, CriadoEm: agora });
+              novos++;
+            }
             const bPac = await lerBanco('pacientes');
             const atuais = new Map((bPac.pacientes || []).map(p => [normalizarProntuario(p.Prontuario), p]));
-            let novos = 0, completa = 0;
+            let nomes = 0;
             for (const [pront, nome] of nomePorPront) {
               const ex = atuais.get(pront);
-              if (!ex) { const n = { Prontuario: pront, Nome: nome, CriadoPor: app.usuario, CriadoEm: agora }; bPac.pacientes.push(n); atuais.set(pront, n); novos++; }
-              else if (!String(ex.Nome || '').trim()) { ex.Nome = nome; completa++; }
+              if (!ex) { const n = { Prontuario: pront, Nome: nome, CriadoPor: app.usuario, CriadoEm: agora }; bPac.pacientes.push(n); atuais.set(pront, n); nomes++; }
+              else if (!String(ex.Nome || '').trim()) { ex.Nome = nome; nomes++; }
             }
-            if (novos || completa) await gravarBanco('pacientes', bPac);
-            return { novos, completa };
+            if (novos) await gravarBanco('denominadores', bDen);
+            if (nomes) await gravarBanco('pacientes', bPac);
+            return { novos, nomes };
           });
           await arquivarOriginal(arquivo);
           imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
             el('h2', {}, 'Importado'),
-            el('p', {}, `${fmtInt(r.novos)} paciente(s) novo(s) e ${fmtInt(r.completa)} nome(s) completados no cadastro.`),
-            el('p', { class: 'texto-suave' }, 'Próximo passo: usar o mapa atendimento→prontuário para resolver os antibióticos que entraram só por atendimento (dado de alto volume — candidato ao servidor/banco).')));
+            el('p', {}, `${fmtInt(r.novos)} passagem(ns) de internação nova(s); ${fmtInt(r.nomes)} nome(s) completados.`),
+            el('p', { class: 'texto-suave' }, 'As taxas por setor passam a usar estes pacientes-dia quando o censo NISS não cobrir o período.')));
         } catch (e) {
           imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao gravar: ' + e.message));
         }
-      } }, 'Completar nomes no cadastro'),
+      } }, 'Importar passagens de internação'),
       ' ',
       el('button', { onclick: () => { imp.forcarPlanilhaComum = true; processarArquivo(arquivo, 'auto'); } },
         'Não é isso — ler como planilha comum'))));

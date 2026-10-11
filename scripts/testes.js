@@ -1233,6 +1233,13 @@ console.log('\n== 84b. Classificador ligado à importação, à dedup e ao vocab
   verificar('2536: passagem sem data de saída fica com saída vazia (não quebra)', mov.linhas[2].SaidaSetor === '', mov.linhas[2].SaidaSetor);
   verificar('2536: sem o título próprio, não reconhece (não colide com outros)',
     imp.lerMovimentacaoPacientes([['Censo diário de Invasividade - NISS'], ['', 'Referência', 'Pacientes']]).reconhecido === false);
+  verificar('2536: captura o Tipo de acomodação (leito vs sem acomodação)',
+    m0.TipoAcomodacao === 'Setor sem acomodação' && mov.linhas[2].TipoAcomodacao === 'Leito', [m0.TipoAcomodacao, mov.linhas[2].TipoAcomodacao]);
+  verificar('2536: internação = com leito; "Setor sem acomodação" não conta pacientes-dia',
+    imp.ehAcomodacaoInternacao('Enfermaria') === true && imp.ehAcomodacaoInternacao('UTI Adulto') === true
+    && imp.ehAcomodacaoInternacao('Setor sem acomodação') === false && imp.ehAcomodacaoInternacao('') === false);
+  verificar('2536: das 3 passagens, só a com leito (CTI) é de internação',
+    mov.linhas.filter(l => imp.ehAcomodacaoInternacao(l.TipoAcomodacao)).length === 1);
 
   /* config.carregar garante que toda categoria exista no vocabulário, com código e corte. */
   global.VOCABULARIO_INICIAL = esquemas.VOCABULARIO_INICIAL;

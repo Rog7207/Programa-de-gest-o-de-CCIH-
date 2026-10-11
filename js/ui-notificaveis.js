@@ -80,6 +80,10 @@ async function montarNotificaveis(container) {
       a.cid ? el('span', { class: 'texto-suave' }, '  ' + a.cid) : null),
     el('p', { class: 'texto-suave' }, rotuloPaciente(a.prontuario)),
     el('p', { class: 'texto-suave' }, `Sinal: ${fonteRotulo(a)}${a.data ? ' · ' + a.data : ''}${a.detalhe ? ' · ' + a.detalhe : ''}`),
+    /* Evolução inteira recolhida: o trecho acima identifica; aqui dá para ler o contexto e
+       descartar erro de detecção (ex.: "vacina meningocócica" não é doença meningocócica). */
+    a.textoCompleto ? el('details', {}, el('summary', {}, 'Ver evolução completa'),
+      el('p', { class: 'texto-suave', style: 'white-space:pre-wrap' }, a.textoCompleto)) : null,
     comIsolamento && a.precaucao ? el('p', {}, '🛡 ', el('strong', {}, PRECAUCAO_ROTULO[a.precaucao] || a.precaucao), ' indicada') : null,
     el('div', { class: 'linha-botoes' },
       comIsolamento

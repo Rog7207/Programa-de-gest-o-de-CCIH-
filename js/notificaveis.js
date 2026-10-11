@@ -138,6 +138,11 @@ const _KW_DOENCAS = 'tuberculose|meningite|coqueluche|sarampo|rubeola|dengue|chi
 const _NEG_ANTES = '(?:sem|nega|negou|negand[oa]|descartad[oa]|afastad[oa]|exclu[ií]d[oa]|ausencia de|nao (?:ha|tem|apresenta)|improvavel)\\s+(?:sinais? de |suspeita de |quadro de |hipotese de )?';
 const _NEG_DEPOIS = '\\s+(?:foi |esta |estao |)?(?:descartad[oa]|afastad[oa]|negativ[oa]|exclu[ií]d[oa]|improvavel)';
 const _RE_NEGACAO = new RegExp('(?:' + _NEG_ANTES + '(' + _KW_DOENCAS + '))|((?:' + _KW_DOENCAS + '))' + _NEG_DEPOIS, 'g');
+/* Contexto de VACINA/imunização não é suspeita de doença ("tomou vacina meningocócica",
+   "vacinação contra sarampo em dia"). Inclui as formas morfológicas que os termos de detecção
+   casam (meningococica, pneumococica…); a doença mencionada nesse contexto é zerada. */
+const _KW_VACINAVEIS = 'meningococ\\w*|meningit\\w*|sarampo|rubeola|varicela|catapora|coqueluche|pertussis|difteria|tetano|febre amarela|influenza|hepatite [abcde]|hepatite|hpv|haemophilus|pneumococ\\w*|covid';
+const _RE_VACINA = new RegExp('(?:vacina\\w*|imuniza\\w*|dose\\w*)\\s+(?:de |contra |para |anti-?|da |do |a )?(?:\\w+\\s+){0,2}(' + _KW_VACINAVEIS + ')|(' + _KW_VACINAVEIS + ')\\s+(?:\\w+\\s+){0,2}(?:vacina\\w*|imuniza\\w*|pos-?vacinal)', 'g');
 const TERMOS_NOTIFICAVEIS = [
   ['Tuberculose', /\btuberculose\b|\btbc?\b|baar positiv|baciloscopia positiv|\bbk\s*\+|teste rapido molecular.*detectad|geneexpert.*detectad/, true],
   ['Doença meningocócica e outras meningites', /meningite|meningococcemia|meningococcica|liquor (turvo|purulento|com pleocitose)/, true],
@@ -176,6 +181,8 @@ function notificaveisNaEvolucao(texto) {
   let m;
   _RE_NEGACAO.lastIndex = 0;
   while ((m = _RE_NEGACAO.exec(t))) { const d = m[1] || m[2]; if (d) descartadas.add(d); }
+  _RE_VACINA.lastIndex = 0;
+  while ((m = _RE_VACINA.exec(t))) { const d = m[1] || m[2]; if (d) descartadas.add(d); }
   for (const d of descartadas) t = t.replace(new RegExp('\\b' + d.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'g'), ' [negado] ');
   const achados = [];
   const vistos = new Set();
@@ -199,25 +206,25 @@ function detectarNotificaveis(bancos) {
   const evolucoes = (bancos && bancos.evolucoes) || [];
   const porChave = new Map();
   const forcaDe = f => (f === 'cultura' ? 3 : f === 'evolucao_forte' ? 2 : 1);
-  const registrar = (prontuario, agravoNome, fonte, data, detalhe) => {
+  const registrar = (prontuario, agravoNome, fonte, data, detalhe, textoCompleto) => {
     const pront = normalizarProntuario(prontuario);
     if (!pront || !agravoNome) return;
     const info = agravoNaLista(agravoNome);
     const chave = pront + '|' + normalizarTexto(agravoNome);
     const ante = porChave.get(chave);
     const novo = { prontuario: pront, agravo: agravoNome, cid: info ? info.cid : '', prazo: info ? info.prazo : '',
-      precaucao: PRECAUCAO_POR_AGRAVO[agravoNome] || '', fonte, data: data || '', detalhe: detalhe || '' };
+      precaucao: PRECAUCAO_POR_AGRAVO[agravoNome] || '', fonte, data: data || '', detalhe: detalhe || '', textoCompleto: textoCompleto || '' };
     if (!ante || forcaDe(fonte) > forcaDe(ante.fonte) || (forcaDe(fonte) === forcaDe(ante.fonte) && String(data || '') > String(ante.data || ''))) {
       porChave.set(chave, novo);
     }
   };
   for (const c of culturas) {
     const info = agravoDaCultura(c);
-    if (info) registrar(c.Prontuario, info.nome, 'cultura', c.DataColeta || c.DataResultado, c.Microrganismo || c.Material);
+    if (info) registrar(c.Prontuario, info.nome, 'cultura', c.DataColeta || c.DataResultado, c.Microrganismo || c.Material, '');
   }
   for (const e of evolucoes) {
     const r = notificaveisNaEvolucao(e.Texto);
-    for (const a of r.achados) registrar(e.Prontuario, a.agravo, a.forte ? 'evolucao_forte' : 'evolucao_fraca', e.DataEvolucao, a.trecho);
+    for (const a of r.achados) registrar(e.Prontuario, a.agravo, a.forte ? 'evolucao_forte' : 'evolucao_fraca', e.DataEvolucao, a.trecho, e.Texto);
   }
   return [...porChave.values()];
 }

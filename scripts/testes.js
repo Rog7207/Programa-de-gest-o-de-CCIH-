@@ -5313,6 +5313,10 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     verificar('tuberculose descartada (negação) não é detectada', !evoNeg.achados.some(a => a.agravo === 'Tuberculose'), evoNeg.resumo);
     const evoCovid = notif.notificaveisNaEvolucao('Quadro de SRAG, PCR para SARS-CoV-2 detectável. COVID-19.');
     verificar('SRAG/COVID é detectada na evolução', evoCovid.achados.some(a => /COVID/.test(a.agravo)), evoCovid.resumo);
+    verificar('contexto de vacina não vira suspeita (vacina meningocócica)', !notif.notificaveisNaEvolucao('Paciente tomou vacina meningocócica ontem.').achados.length);
+    verificar('contexto de vacina não vira suspeita (vacinação contra sarampo)', !notif.notificaveisNaEvolucao('Vacinação contra sarampo em dia.').achados.length);
+    verificar('mas doença real ainda é detectada apesar de mencionar vacina',
+      notif.notificaveisNaEvolucao('Recebeu vacina; hoje com meningite confirmada.').achados.some(a => /meningoc/i.test(a.agravo)));
 
     const achados = notif.detectarNotificaveis({
       culturas: [{ Prontuario: '100', Microrganismo: 'Mycobacterium tuberculosis', Material: 'Escarro', DataColeta: '2026-10-01' }],
@@ -5404,6 +5408,8 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       verificar('Notificáveis: a fila cita Tuberculose e meningite', /Tuberculose/.test(td) && /meningoc/i.test(td));
       verificar('Notificáveis: já notificados = 1', achar(raiz, n => n.tag === 'div' && texto(n) === '1').length >= 1 && /Já notificados/.test(td));
       verificar('Notificáveis: isolamento indicado lista os 3 (sem precaução ativa)', /Isolamento indicado \(3\)/.test(td), td.match(/Isolamento indicado \(\d+\)/));
+      const evoDet = achar(raiz, n => n.tag === 'details' && /Ver evolução completa/.test(texto(n)));
+      verificar('Notificáveis: achado de evolução mostra a evolução completa expansível', evoDet.length >= 1 && /líquor turvo/.test(texto(evoDet[0])), evoDet[0] && texto(evoDet[0]).slice(0, 120));
       const botoesMarcar = achar(raiz, n => n.tag === 'button' && /Marcar como notificado/.test(texto(n)));
       verificar('Notificáveis: há botão "Marcar como notificado"', botoesMarcar.length >= 1);
       await botoesMarcar[0].ouvintes.click[0]({});

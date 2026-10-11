@@ -4587,6 +4587,7 @@ function normalizarDispositivo(valor) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    textoEvolucaoNormalizado,
     normalizarData, normalizarProntuario, normalizarValorAntibiograma,
     sugerirMapeamento, normalizarLinhas, validar, deduplicar, chaveNaturalDe, proximoID,
     analisarPDFCulturas, ehPseudoProntuario, sugerirUnificacoes, sugerirUnificacoesPorInternacao, paresAtendimentoProntuario, corrigirProntuarioAtendimento, sugerirUnificacoesVocabulario, auditarVocabulario, distanciaEdicao,

@@ -5289,6 +5289,45 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     global.ESQUEMAS = antesESQ;
   }
 
+  /* == 100. Radar de notificáveis: detecção por cultura e por evolução (11/10/2026) == */
+  {
+    console.log('\n== 100. Radar de doenças de notificação compulsória ==');
+    global.textoEvolucaoNormalizado = imp.textoEvolucaoNormalizado;
+    const notif = require(path.join(__dirname, '..', 'js', 'notificaveis.js'));
+
+    verificar('a LNC tem agravos imediatos e semanais',
+      notif.LISTA_NOTIFICACAO_COMPULSORIA.some(a => a.prazo === 'imediata') && notif.LISTA_NOTIFICACAO_COMPULSORIA.some(a => a.prazo === 'semanal'));
+
+    const tb = notif.agravoDaCultura({ Microrganismo: 'Mycobacterium tuberculosis', Material: 'Escarro' });
+    verificar('cultura de M. tuberculosis sugere Tuberculose', tb && tb.nome === 'Tuberculose', tb && tb.nome);
+    const mening = notif.agravoDaCultura({ Microrganismo: 'Streptococcus pneumoniae', Material: 'Líquor' });
+    verificar('qualquer germe no líquor sugere meningite', mening && /meningite/i.test(mening.nome), mening && mening.nome);
+    const neisseria = notif.agravoDaCultura({ Microrganismo: 'Neisseria meningitidis', Material: 'Hemocultura' });
+    verificar('N. meningitidis no sangue sugere doença meningocócica', neisseria && /meningoc/i.test(neisseria.nome), neisseria && neisseria.nome);
+    verificar('cultura comum (E. coli na urina) NÃO vira notificável', notif.agravoDaCultura({ Microrganismo: 'Escherichia coli', Material: 'Urocultura' }) === null);
+    verificar('líquor sem crescimento não dispara meningite', notif.agravoDaCultura({ Microrganismo: '', Resultado: 'Sem crescimento', Material: 'Líquor' }) === null);
+
+    const evoTB = notif.notificaveisNaEvolucao('Paciente com tuberculose pulmonar confirmada, BAAR positivo, em isolamento respiratório.');
+    verificar('evolução que nomeia tuberculose é detectada', evoTB.achados.some(a => a.agravo === 'Tuberculose'), evoTB.resumo);
+    const evoNeg = notif.notificaveisNaEvolucao('Investigado tuberculose; baciloscopia negativa, tuberculose descartada. Segue em observação.');
+    verificar('tuberculose descartada (negação) não é detectada', !evoNeg.achados.some(a => a.agravo === 'Tuberculose'), evoNeg.resumo);
+    const evoCovid = notif.notificaveisNaEvolucao('Quadro de SRAG, PCR para SARS-CoV-2 detectável. COVID-19.');
+    verificar('SRAG/COVID é detectada na evolução', evoCovid.achados.some(a => /COVID/.test(a.agravo)), evoCovid.resumo);
+
+    const achados = notif.detectarNotificaveis({
+      culturas: [{ Prontuario: '100', Microrganismo: 'Mycobacterium tuberculosis', Material: 'Escarro', DataColeta: '2026-10-01' }],
+      evolucoes: [
+        { Prontuario: '100', Texto: 'Suspeita de tuberculose, aguarda BAAR.', DataEvolucao: '2026-10-02' },
+        { Prontuario: '200', Texto: 'Meningite bacteriana, líquor turvo.', DataEvolucao: '2026-10-03' }
+      ]
+    });
+    const doP100 = achados.filter(a => a.prontuario === '100');
+    verificar('detectar: um só achado por (paciente, agravo), com a cultura vencendo a evolução',
+      doP100.length === 1 && doP100[0].fonte === 'cultura', JSON.stringify(doP100));
+    verificar('detectar: a meningite da evolução do outro paciente entra', achados.some(a => a.prontuario === '200' && /meningite/i.test(a.agravo)));
+    verificar('detectar: TB marca precaução para aerossóis', doP100[0] && doP100[0].precaucao === 'aerossois', doP100[0] && doP100[0].precaucao);
+  }
+
   console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
   process.exit(falharam ? 1 : 0);
 })();

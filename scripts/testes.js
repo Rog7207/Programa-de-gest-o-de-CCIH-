@@ -5349,6 +5349,25 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       JSON.stringify(sinan.linhas[0]));
     verificar('SINAN: data normalizada', sinan.linhas[0].DataNotificacao === '2026-10-05', sinan.linhas[0].DataNotificacao);
     delete global.normalizarData;
+
+    /* Cruzamento por EPISÓDIO: mesma internação; se ambulatorial, ±30 dias */
+    const hoje = '2026-10-31';
+    const tb0 = { agravo: 'Tuberculose', data: '2026-10-03' };
+    verificar('episódio: notificação da MESMA internação suprime',
+      notif.episodioJaNotificado(tb0, [{ DataInternacao: '2026-10-01', DataAlta: '' }], [{ Agravo: 'Tuberculose', DataNotificacao: '2026-10-05' }], hoje));
+    const tbB = { agravo: 'Tuberculose', data: '2026-10-20' };
+    const duasInt = [{ DataInternacao: '2026-05-01', DataAlta: '2026-05-10' }, { DataInternacao: '2026-10-15', DataAlta: '' }];
+    verificar('episódio: notificação de internação ANTERIOR não suprime (novo episódio reaparece)',
+      !notif.episodioJaNotificado(tbB, duasInt, [{ Agravo: 'Tuberculose', DataNotificacao: '2026-05-05' }], hoje));
+    verificar('episódio: notificação da internação atual suprime',
+      notif.episodioJaNotificado(tbB, duasInt, [{ Agravo: 'Tuberculose', DataNotificacao: '2026-10-18' }], hoje));
+    const amb = { agravo: 'Tuberculose', data: '2026-09-01' };
+    verificar('episódio ambulatorial: notificação em ≤30 dias suprime',
+      notif.episodioJaNotificado(amb, [], [{ Agravo: 'Tuberculose', DataNotificacao: '2026-09-20' }], hoje));
+    verificar('episódio ambulatorial: notificação > 30 dias não suprime',
+      !notif.episodioJaNotificado(amb, [], [{ Agravo: 'Tuberculose', DataNotificacao: '2026-07-01' }], hoje));
+    verificar('episódio: agravo diferente nunca suprime',
+      !notif.episodioJaNotificado(tb0, [{ DataInternacao: '2026-10-01', DataAlta: '' }], [{ Agravo: 'Sarampo', DataNotificacao: '2026-10-05' }], hoje));
   }
 
   /* == 101. Fumaça da aba Notificáveis (DOM falso): filas e "marcar como notificado" == */
@@ -5389,7 +5408,8 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       normalizarProntuario: imp.normalizarProntuario, normalizarTexto: leitura.normalizarTexto,
       textoEvolucaoNormalizado: imp.textoEvolucaoNormalizado, proximoID: imp.proximoID,
       hojeISO: () => '2026-10-11', agoraCurto: () => '2026-10-11 10:00',
-      detectarNotificaveis: notif.detectarNotificaveis, PRECAUCAO_ROTULO: notif.PRECAUCAO_ROTULO
+      detectarNotificaveis: notif.detectarNotificaveis, PRECAUCAO_ROTULO: notif.PRECAUCAO_ROTULO,
+      episodioJaNotificado: notif.episodioJaNotificado
     });
     try {
       /* Seções anteriores vazaram `var lerBanco`/`el`/… no escopo deste IIFE (prefixo da 98),
@@ -5399,7 +5419,8 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
         + 'comTrava=global.comTrava,navegar=global.navegar,abrirPaciente=global.abrirPaciente,'
         + 'normalizarProntuario=global.normalizarProntuario,normalizarTexto=global.normalizarTexto,'
         + 'hojeISO=global.hojeISO,agoraCurto=global.agoraCurto,proximoID=global.proximoID,app=global.app,'
-        + 'detectarNotificaveis=global.detectarNotificaveis,PRECAUCAO_ROTULO=global.PRECAUCAO_ROTULO;\n';
+        + 'detectarNotificaveis=global.detectarNotificaveis,PRECAUCAO_ROTULO=global.PRECAUCAO_ROTULO,'
+        + 'episodioJaNotificado=global.episodioJaNotificado;\n';
       eval(prefixo + fs.readFileSync(path.join(__dirname, '..', 'js', 'ui-notificaveis.js'), 'utf-8') + '\nglobal.__montarNotif = montarNotificaveis;');
       const raiz = mkNode('div');
       await global.__montarNotif(raiz);

@@ -32,17 +32,27 @@ async function montarNotificaveis(container) {
   }
   const precaucaoAtiva = _precaucaoAtivaDe(isolamentosB.precaucoes);
 
-  /* Notificado no SINAN: por (prontuário | agravo). */
-  const notificado = new Set();
+  /* Internações e notificações do SINAN agrupadas por paciente — para o cruzamento por EPISÓDIO
+     (mesma internação; se ambulatorial, ±30 dias), que evita renotificar o mesmo episódio. */
+  const internacoesPorPront = new Map();
+  for (const i of (pacientesB.internacoes || [])) {
+    const p = normalizarProntuario(i.Prontuario);
+    if (!internacoesPorPront.has(p)) internacoesPorPront.set(p, []);
+    internacoesPorPront.get(p).push(i);
+  }
+  const notifPorPront = new Map();
   for (const n of (sinanB.notificacoes || [])) {
-    const pront = normalizarProntuario(n.Prontuario);
-    if (pront && n.Agravo) notificado.add(pront + '|' + normalizarTexto(n.Agravo));
+    const p = normalizarProntuario(n.Prontuario);
+    if (!p) continue;
+    if (!notifPorPront.has(p)) notifPorPront.set(p, []);
+    notifPorPront.get(p).push(n);
   }
 
+  const hoje = hojeISO();
   const achados = detectarNotificaveis({ culturas: culturasB.culturas, evolucoes: evolucoesB.evolucoes })
     .filter(a => internado.has(a.prontuario));
 
-  const aNotificar = achados.filter(a => !notificado.has(a.prontuario + '|' + normalizarTexto(a.agravo)));
+  const aNotificar = achados.filter(a => !episodioJaNotificado(a, internacoesPorPront.get(a.prontuario) || [], notifPorPront.get(a.prontuario) || [], hoje));
   const jaNotificados = achados.length - aNotificar.length;
   const isolamentoIndicado = achados.filter(a => a.precaucao && !precaucaoAtiva.has(a.prontuario));
 

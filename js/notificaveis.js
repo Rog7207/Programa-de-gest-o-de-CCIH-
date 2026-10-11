@@ -298,10 +298,50 @@ function lerNotificacoesSinan(matriz) {
   return { reconhecido: true, linhas: saida, problemas };
 }
 
+/* ---- Cruzamento com o SINAN: evita renotificar o MESMO episódio ----
+   Regra (decisão do usuário, 11/10/2026): se o sinal foi detectado DENTRO de uma internação,
+   só conta como "já notificado" uma notificação da MESMA internação; se foi ambulatorial (fora
+   de internação), vale uma janela de ±30 dias ao redor da data do sinal. Assim um episódio NOVO
+   (nova internação, ou recidiva ambulatorial depois do prazo) volta a ser sinalizado. */
+const JANELA_AMBULATORIAL_DIAS = 30;
+
+function _addDiasISO(iso, n) {
+  const d = new Date(String(iso).slice(0, 10) + 'T00:00:00Z');
+  if (isNaN(d.getTime())) return String(iso).slice(0, 10);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/* Janela {inicio, fim} do episódio de um sinal, dada a lista de internações DO PACIENTE. */
+function janelaDoEpisodio(dataSinal, internacoesDoPaciente, hoje) {
+  const d = String(dataSinal || '').slice(0, 10);
+  for (const i of (internacoesDoPaciente || [])) {
+    const ini = String(i.DataInternacao || '').slice(0, 10);
+    const alta = String(i.DataAlta || '').slice(0, 10);
+    if (ini && d && ini <= d && (!alta || d <= alta)) return { inicio: ini, fim: alta || String(hoje || '').slice(0, 10) || d };
+  }
+  if (d) return { inicio: _addDiasISO(d, -JANELA_AMBULATORIAL_DIAS), fim: _addDiasISO(d, JANELA_AMBULATORIAL_DIAS) };
+  return null;
+}
+
+/* Um achado já foi notificado? Mesmo agravo + notificação dentro da janela do episódio. */
+function episodioJaNotificado(achado, internacoesDoPaciente, notificacoesDoPaciente, hoje) {
+  const janela = janelaDoEpisodio(achado.data, internacoesDoPaciente, hoje);
+  const agr = normalizarTexto(achado.agravo);
+  for (const n of (notificacoesDoPaciente || [])) {
+    if (normalizarTexto(n.Agravo) !== agr) continue;
+    if (!janela) return true;                                  /* sinal sem data: qualquer notificação do agravo suprime */
+    const dn = String(n.DataNotificacao || '').slice(0, 10);
+    if (!dn) return true;                                      /* notificação sem data: conservador, suprime */
+    if (dn >= janela.inicio && dn <= janela.fim) return true;
+  }
+  return false;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     LISTA_NOTIFICACAO_COMPULSORIA, PRECAUCAO_POR_AGRAVO, PRECAUCAO_ROTULO,
     AGRAVOS_POR_MICRORGANISMO, agravoNaLista, agravoDaCultura, notificaveisNaEvolucao, detectarNotificaveis,
-    agravoPorCID, lerNotificacoesSinan
+    agravoPorCID, lerNotificacoesSinan, janelaDoEpisodio, episodioJaNotificado, JANELA_AMBULATORIAL_DIAS
   };
 }

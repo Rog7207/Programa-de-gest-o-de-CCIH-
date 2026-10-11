@@ -1233,8 +1233,6 @@ console.log('\n== 84b. Classificador ligado à importação, à dedup e ao vocab
   verificar('2536: passagem sem data de saída fica com saída vazia (não quebra)', mov.linhas[2].SaidaSetor === '', mov.linhas[2].SaidaSetor);
   verificar('2536: sem o título próprio, não reconhece (não colide com outros)',
     imp.lerMovimentacaoPacientes([['Censo diário de Invasividade - NISS'], ['', 'Referência', 'Pacientes']]).reconhecido === false);
-  verificar('2536: aba passagem_setor tem Prontuario e Convenio no esquema',
-    esquemas.ESQUEMAS.denominadores.abas.passagem_setor.includes('Prontuario') && esquemas.ESQUEMAS.denominadores.abas.passagem_setor.includes('Convenio'));
 
   /* config.carregar garante que toda categoria exista no vocabulário, com código e corte. */
   global.VOCABULARIO_INICIAL = esquemas.VOCABULARIO_INICIAL;

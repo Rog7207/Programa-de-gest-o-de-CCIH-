@@ -3718,8 +3718,19 @@ function analisarPDFCulturas(linhasTexto) {
     if (!paciente || !cultura) { cultura = null; return; }
     const resultado = cultura.resultado.replace(/\s+/g, ' ').trim();
     let micro = '', mecanismo = '', classe = 'negativa';
-    const m = /~([^~]+)~/.exec(resultado);
-    if (m) { micro = m[1].trim(); classe = 'positiva'; }
+    /* O laboratório itálica (tildes ~ ~) só o binômio latino; qualificadores que NÃO são
+       epíteto de espécie ficam FORA das tildes: "~Staphylococcus~ coagulase negativo",
+       "~Enterococcus~ sp.", "~Streptococcus~ do grupo B". Pegar só o conteúdo entre tildes
+       deixava o nome em nível de GÊNERO (SCN virava "Staphylococcus" → alias → S. aureus;
+       "Enterococcus sp." virava "Enterococcus" → E. faecalis). Incluímos o qualificador logo
+       após a tilde de fechamento. */
+    const m = /~([^~]+)~\s*([\s\S]*)/.exec(resultado);
+    if (m) {
+      micro = m[1].trim();
+      const qual = /^((?:coagulase\s+negativ[oa])|(?:sp{1,2}\.?)|(?:subsp\.?\s+\S+)|(?:(?:do\s+)?grupo\s+[\wà-ú]+)|(?:n[ãa]o\s+fermentador\w*))/i.exec(m[2].trim());
+      if (qual) micro = (micro + ' ' + qual[1]).replace(/\s+/g, ' ').trim();
+      classe = 'positiva';
+    }
     else if (/resistentes? aos? carbapen/i.test(resultado) && !/^n[aã]o houve/i.test(resultado)) {
       classe = 'positiva';
       mecanismo = 'Resistente a carbapenêmicos';

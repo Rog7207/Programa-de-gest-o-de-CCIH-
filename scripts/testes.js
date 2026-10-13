@@ -380,6 +380,27 @@ console.log('\n== 13. Leitor do PDF do laboratório ==');
   verificar('vigilância positiva → mecanismo carbapenêmicos', c2[idx('Mecanismo')] === 'Resistente a carbapenêmicos', c2[idx('Mecanismo')]);
   verificar('MRSA vira S. aureus + mecanismo', c3[idx('Microorganismo')] === 'Staphylococcus aureus' && c3[idx('Mecanismo')] === 'MRSA', c3[idx('Microorganismo')] + '/' + c3[idx('Mecanismo')]);
   verificar('telefone capturado', c1[idx('Telefone')] === '999185191', c1[idx('Telefone')]);
+
+  /* Qualificador FORA das tildes (bug 12/10/2026): o laboratório itálica só o binômio latino.
+     O parser deve incluir "coagulase negativo"/"sp." que vêm após a tilde de fechamento. */
+  const fxQual = [
+    'O.S.: 100-1  Data: 20/09/2026   Paciente: Carlos Souza',
+    'Sexo: Masculino  Idade: 60 anos   Data nasc.: 10/10/1965   Unidade coleta: H UTI (HNSC)',
+    'Procedimento: HEMO - HEMOCULTURA',
+    'Material:      Sangue       Data coleta: 20/09/2026 10:00:00',
+    'Grupo: Staphylococcus     Resultado:   ~Staphylococcus~ coagulase negativo',
+    'Procedimento: URO - UROCULTURA',
+    'Material:      Urina amostra isolada       Data coleta: 20/09/2026 11:00:00',
+    'Grupo: CGP     Resultado:   ~Enterococcus~ sp.',
+    'Procedimento: HEMO2 - HEMOCULTURA',
+    'Material:      Sangue       Data coleta: 20/09/2026 12:00:00',
+    'Grupo: Staphylococcus     Resultado:   ~Staphylococcus aureus~'
+  ];
+  const aq = imp.analisarPDFCulturas(fxQual);
+  const mi = aq[0].indexOf('Microorganismo');
+  verificar('SCN: captura "coagulase negativo" (não só o gênero)', aq[1][mi] === 'Staphylococcus coagulase negativo', aq[1][mi]);
+  verificar('Enterococcus sp.: mantém o "sp." (não vira gênero puro)', aq[2][mi] === 'Enterococcus sp.', aq[2][mi]);
+  verificar('binômio completo entre tildes segue intacto (S. aureus)', aq[3][mi] === 'Staphylococcus aureus', aq[3][mi]);
 }
 
 console.log('\n== 14. Unificação de pacientes ==');

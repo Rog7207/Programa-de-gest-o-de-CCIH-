@@ -475,6 +475,11 @@ válidas do paciente em ±14 dias** (a cultura escolhida fica vinculada ao caso)
    HNSC), **só a infecção digitada conta nos relatórios** — antes dela, a confirmada vale.
    É o que impede os dois sistemas de divergirem.
 
+Importar a **lista oficial do IMAS (2485)** também concilia: como ela é a lista de IRAS do
+Tasy, os casos confirmados aqui que aparecem nela são marcados **digitado** e **saem da fila
+de digitação** (há um visto, ligado por padrão, para isso). E cada item da fila tem **Excluir**
+(reversível) — para tirar à mão um caso que não vai ser digitado, com **Reabrir** depois.
+
 **Sem duplicatas**: o mesmo episódio costuma ser detectado por mais de um caminho (uma
 cultura revisada, o contato da pós-alta, uma planilha importada). O app reconhece o
 episódio — mesmo paciente, mesma topografia (contando siglas como ITU, PAV, IPCS e ISC)
@@ -499,18 +504,27 @@ a CCIH decide, notifica no SINAN e registra aqui o que foi feito.
 - **Por evolução**: a doença **nomeada** no texto (ex.: "tuberculose", "meningite",
   "COVID/SRAG"), com as **negações tratadas** ("tuberculose descartada" não conta).
 
-**As duas filas:**
+**Para cada suspeita (lista "A avaliar"), três ações:**
 
-1. **A notificar** — internado com sinal de agravo notificável **sem registro no SINAN**.
-   Os de **notificação imediata** vêm marcados. Botão **Marcar como notificado** registra
-   localmente (sai da fila) depois que você notificou no SINAN.
-2. **Isolamento indicado** — agravo transmissível **sem precaução ativa**; leva para a aba
-   Isolamentos.
+1. **Notificar** — você notifica no SINAN e marca aqui; o caso vai para a **lista de
+   digitação de notificáveis** (separada das IH).
+2. **Incluir observação** — um campo de texto para registrar ações (ex.: "coletado exame X,
+   aguarda resultado"). Vira um **log datado e assinado**, visível para o **próximo que
+   checar** e na **ficha do paciente**. A suspeita continua na fila.
+3. **Não é de notificação** — descarta (sai da fila). Tudo é **reversível**: descartados e
+   excluídos ficam numa seção recolhida, com **Reabrir**.
+
+Os agravos de **notificação imediata** vêm marcados. A aba também mostra **Isolamento
+indicado** (agravo transmissível sem precaução ativa) e leva para a aba Isolamentos.
+
+**Lista "Para digitação"**: cada item tem **Excluir manualmente** (reversível). Ao importar
+o SINAN, os que já foram notificados **saem sozinhos** (dedup por episódio — mesma internação,
+ou ±30 dias no ambulatório; assim um episódio novo do mesmo agravo volta a aparecer).
 
 **Importar as notificações do SINAN**: na aba Importar, solte o export **NINDINET (.dbf)**.
 O app liga cada notificação ao paciente pela identidade (nome + nascimento) e guarda **só o
 prontuário, o agravo e as datas** — nome, filiação, endereço e CNS **não** são gravados. Sem
-esse import, tudo aparece como "a notificar" (o app não sabe o que já foi notificado).
+esse import, tudo aparece como "a avaliar" (o app não sabe o que já foi notificado).
 
 > A lista de agravos segue a LNC (Portaria GM/MS 420/2022) e é uma **semente para a CCIH
 > validar** contra a Portaria vigente e a lista estadual/municipal.

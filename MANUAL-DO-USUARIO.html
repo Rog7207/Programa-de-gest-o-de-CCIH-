@@ -196,6 +196,7 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 <li>Digite as infecções no prontuário (Tasy).</li>
 <li>Importe o export de IRAS do Tasy (aba Importar, tipo <strong>"IRAS digitadas no Tasy"</strong>). A conciliação casa cada linha com o caso daqui (mesmo paciente, data em até 7 dias, mesma topografia) e o marca como <strong>digitado</strong>; o que existe só no Tasy entra aqui já como digitado, para revisão; e se o Tasy tiver <strong>duas linhas para o mesmo episódio</strong>, o app avisa e não deixa entrar a segunda — corrija no Tasy. Reimportar o mesmo export não duplica nada.</li>
 <li>A partir da <strong>data de início da conciliação</strong> (Configurações → Rotina; 01/07/2026 no HNSC), <strong>só a infecção digitada conta nos relatórios</strong> — antes dela, a confirmada vale. É o que impede os dois sistemas de divergirem.</li>
+<li>Importar a <strong>lista oficial do IMAS (2485)</strong> também concilia: os casos confirmados aqui que aparecem nela são marcados <strong>digitado</strong> e saem da fila (visto ligado por padrão). Cada item da fila tem <strong>Excluir</strong> (reversível, com <strong>Reabrir</strong>).</li>
 </ol>
 <p><strong>Sem duplicatas</strong>: o mesmo episódio costuma ser detectado por mais de um caminho (uma cultura revisada, o contato da pós-alta, uma planilha importada). O app reconhece o episódio — mesmo paciente, mesma topografia (contando siglas como ITU, PAV, IPCS e ISC) e datas até 14 dias entre si — e, em vez de abrir um caso novo, completa os campos vazios do existente. Duplicatas antigas aparecem no topo da aba Infecções com o botão <strong>Fundir duplicatas</strong>: fica o caso mais forte (decisão da segunda assinatura vale mais), e a fusão fica registrada nas observações.</p>
 <hr>
@@ -206,12 +207,14 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 <li><strong>Por cultura</strong>: microrganismo notificável (tuberculose, meningococo, <em>H. influenzae</em> invasivo) e <strong>qualquer germe no líquor</strong> (sugere meningite).</li>
 <li><strong>Por evolução</strong>: a doença <strong>nomeada</strong> no texto (ex.: "tuberculose", "meningite", "COVID/SRAG"), com as <strong>negações tratadas</strong> ("tuberculose descartada" não conta).</li>
 </ul>
-<p><strong>As duas filas:</strong></p>
+<p><strong>Para cada suspeita (lista "A avaliar"), três ações:</strong></p>
 <ol>
-<li><strong>A notificar</strong> — internado com sinal de agravo notificável <strong>sem registro no SINAN</strong>. Os de <strong>notificação imediata</strong> vêm marcados. O botão <strong>Marcar como notificado</strong> registra localmente (sai da fila) depois que você notificou no SINAN.</li>
-<li><strong>Isolamento indicado</strong> — agravo transmissível <strong>sem precaução ativa</strong>; leva para a aba Isolamentos.</li>
+<li><strong>Notificar</strong> — você notifica no SINAN e marca aqui; o caso vai para a <strong>lista de digitação de notificáveis</strong> (separada das IH).</li>
+<li><strong>Incluir observação</strong> — campo de texto para registrar ações (ex.: "coletado exame X, aguarda resultado"). Vira um <strong>log datado e assinado</strong>, visível para o próximo que checar e na <strong>ficha do paciente</strong>. A suspeita continua na fila.</li>
+<li><strong>Não é de notificação</strong> — descarta (sai da fila). Tudo é <strong>reversível</strong>: descartados e excluídos ficam numa seção recolhida, com <strong>Reabrir</strong>.</li>
 </ol>
-<p><strong>Importar as notificações do SINAN</strong>: na aba Importar, solte o export <strong>NINDINET (.dbf)</strong>. O app liga cada notificação ao paciente pela identidade (nome + nascimento) e guarda <strong>só o prontuário, o agravo e as datas</strong> — nome, filiação, endereço e CNS <strong>não</strong> são gravados. Sem esse import, tudo aparece como "a notificar".</p>
+<p>Os agravos de <strong>notificação imediata</strong> vêm marcados. A aba também mostra <strong>Isolamento indicado</strong> (agravo transmissível sem precaução ativa). A lista <strong>Para digitação</strong> tem <strong>Excluir manualmente</strong> (reversível); ao importar o SINAN, os já notificados saem sozinhos (dedup por episódio: mesma internação, ou ±30 dias no ambulatório).</p>
+<p><strong>Importar as notificações do SINAN</strong>: na aba Importar, solte o export <strong>NINDINET (.dbf)</strong>. O app liga cada notificação ao paciente pela identidade (nome + nascimento) e guarda <strong>só o prontuário, o agravo e as datas</strong> — nome, filiação, endereço e CNS <strong>não</strong> são gravados. Sem esse import, tudo aparece como "a avaliar".</p>
 <p>A lista de agravos segue a LNC (Portaria GM/MS 420/2022) e é uma <strong>semente para a CCIH validar</strong> contra a Portaria vigente e a lista estadual/municipal.</p>
 <hr>
 <h2>10. Vigilância pós-alta (cirurgias)</h2>

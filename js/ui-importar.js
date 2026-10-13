@@ -921,11 +921,15 @@ async function telaNotificacoesSinan(arquivo, leitura) {
    o status da classificação (Confirmada → confirmado). */
 function telaImasOcorrencias(arquivo, leitura) {
   const campoCriterio = el('input', { type: 'text', value: 'Notificação IMAS', style: 'width:220px' });
+  /* O IMAS é a lista OFICIAL de IRAS do Tasy: um caso confirmado aqui que aparece nela já foi
+     digitado no Tasy. Por padrão, conciliamos — marcamos esses como "digitado" para saírem da
+     fila de digitação (aba Infecções), como pedido. */
+  const campoConciliar = el('input', { type: 'checkbox', checked: '' });
   const previa = el('p', { class: 'texto-suave' });
   const candidatosDe = (casos, pacientes) => {
     const identidadeDe = identidadePorNome(pacientes);
     const gerar = proximoID(casos, 'ID_IRAS', 'IRA');
-    let novos = 0, vinculados = 0;
+    let novos = 0, vinculados = 0, digitados = 0;
     for (const o of leitura.linhas) {
       const pront = normalizarProntuario(o.Prontuario) || (o.Atendimento ? 'AT-' + o.Atendimento : '');
       if (!pront) continue;
@@ -935,8 +939,14 @@ function telaImasOcorrencias(arquivo, leitura) {
         StatusInvestigacao: o.StatusInvestigacao, NotificadoANVISA: '', CriadoPor: app.usuario, CriadoEm: agoraCurto()
       }, gerar, identidadeDe);
       if (r.novo) novos++; else vinculados++;
+      /* Conciliação: caso que já existe aqui e está CONFIRMADO (aguardando digitação) e aparece
+         no IMAS → digitado, e sai da fila. Não mexe em descartado nem em quem já é digitado. */
+      if (campoConciliar.checked && r.caso && !r.novo && normalizarTexto(r.caso.StatusInvestigacao) === 'confirmado') {
+        r.caso.StatusInvestigacao = 'digitado'; r.caso.DigitadoPor = app.usuario; r.caso.DigitadoEm = hojeISO();
+        digitados++;
+      }
     }
-    return { novos, vinculados };
+    return { novos, vinculados, digitados };
   };
   const simular = async () => {
     try {
@@ -944,10 +954,12 @@ function telaImasOcorrencias(arquivo, leitura) {
       const copia = JSON.parse(JSON.stringify(bIras.casos || []));
       const r = candidatosDe(copia, bPac.pacientes || []);
       previa.textContent = `Prévia: ${fmtInt(r.novos)} caso(s) novo(s) e ${fmtInt(r.vinculados)} que já existem aqui (não duplicam)`
+        + (r.digitados ? `; ${fmtInt(r.digitados)} confirmado(s) marcado(s) como digitado(s)` : '')
         + (leitura.ignoradasDescartadas ? `; ${fmtInt(leitura.ignoradasDescartadas)} descartada(s) no IMAS, ignorada(s)` : '') + '.';
     } catch (e) { previa.textContent = 'Erro ao ler o banco: ' + e.message; }
   };
   campoCriterio.addEventListener('change', simular);
+  campoConciliar.addEventListener('change', simular);
   simular();
   const setores = [...new Set(leitura.linhas.map(l => l.Setor))].sort();
   imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
@@ -956,6 +968,7 @@ function telaImasOcorrencias(arquivo, leitura) {
     el('p', { class: 'texto-suave' }, 'Entram como casos de IRAS (topografia e, nas ISC, o procedimento). O que já existe aqui não duplica, '
       + 'e o status de um caso que já está no app não é alterado — serve para conferir e completar. O texto abaixo vai ao critério diagnóstico de cada caso.'),
     el('div', { class: 'linha-campos' }, el('label', {}, 'Critério diagnóstico: ', campoCriterio)),
+    el('label', { style: 'display:block;margin:.3em 0' }, campoConciliar, ' Marcar como digitados os casos confirmados que aparecem no IMAS (saem da fila de digitação)'),
     previa,
     leitura.problemas.length ? el('details', {},
       el('summary', {}, `${fmtInt(leitura.problemas.length)} linha(s) com problema`),
@@ -986,7 +999,8 @@ function telaImasOcorrencias(arquivo, leitura) {
           await arquivarOriginal(arquivo);
           imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
             el('h2', {}, 'Importado'),
-            el('p', {}, `${fmtInt(resumo.novos)} caso(s) novo(s); ${fmtInt(resumo.vinculados)} já existiam (completados sem duplicar).`),
+            el('p', {}, `${fmtInt(resumo.novos)} caso(s) novo(s); ${fmtInt(resumo.vinculados)} já existiam (completados sem duplicar)`
+              + (resumo.digitados ? `; ${fmtInt(resumo.digitados)} confirmado(s) marcado(s) como digitado(s)` : '') + '.'),
             el('p', { class: 'texto-suave' }, 'Confira na aba Infecções. Casos confirmados no IMAS entram como confirmados; suspeitos vão para a fila de confirmação.')));
         } catch (e) {
           imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao gravar: ' + e.message));

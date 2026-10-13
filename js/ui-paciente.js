@@ -41,7 +41,7 @@ async function montarPaciente(conteudo) {
   let bancos;
   try {
     const nomes = ['pacientes', 'culturas', 'antibioticos', 'cirurgias', 'dispositivos',
-      'uti', 'iras', 'isolamentos', 'sepse', 'evolucoes'];
+      'uti', 'iras', 'isolamentos', 'sepse', 'evolucoes', 'sinan'];
     const lidos = await Promise.all(nomes.map(n => lerBanco(n).catch(() => ({}))));
     bancos = {};
     nomes.forEach((n, i) => { bancos[n] = lidos[i]; });
@@ -157,6 +157,16 @@ async function montarPaciente(conteudo) {
     datasDeObito.add(data);
     juntar(data, 'obito', 'Óbito',
       [o.Setor, o.Medico, o.Idade ? o.Idade + ' anos' : ''].filter(Boolean).join(' · '));
+  });
+  /* Agravos de notificação compulsória (aba Notificáveis): a decisão da CCIH e o LOG de
+     observações entram na linha do tempo do paciente. */
+  const ROTULO_STATUS_NOTIF = { suspeita: 'suspeita', a_digitar: 'a notificar/digitar', digitado: 'notificado ✓', descartado: 'não é de notificação', excluido: 'excluído da digitação' };
+  ((bancos.sinan && bancos.sinan.casos) || []).forEach(c => {
+    if (normalizarProntuario(c.Prontuario) !== alvo) return;
+    const status = ROTULO_STATUS_NOTIF[String(c.Status || '').trim().toLowerCase()] || c.Status || '';
+    const obs = String(c.Observacoes || '').trim();
+    juntar(c.DataSinal || c.EpisodioInicio, 'notificavel', 'Agravo notificável: ' + (c.Agravo || ''),
+      [status, c.CID, obs ? 'Observações:\n' + obs : ''].filter(Boolean).join(' · '));
   });
   culturas.forEach(c => {
     const sens = sensPorCultura.get(c.ID_Cultura) || [];

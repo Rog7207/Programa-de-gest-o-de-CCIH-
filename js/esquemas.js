@@ -100,7 +100,7 @@ const ESQUEMAS = {
       /* Ciclo (CCIH do HNSC, 22/09/2026): em investigação → confirmado → DIGITADO no Tasy.
          ID_Tasy é o id da linha no export do Tasy (conciliação sem duplicar na reentrada);
          FichaEm é quando a ficha de notificação foi impressa. */
-      casos: ['ID_IRAS', 'Prontuario', 'DataInfeccao', 'Topografia', 'CriterioDiagnostico', 'Setor', 'DispositivoAssociado', 'Microrganismo', 'AgenteOriginal', 'ID_CulturaAgente', 'Desfecho', 'StatusInvestigacao', 'NotificadoANVISA', 'Observacoes', 'ConfirmadoPor', 'ConfirmadoEm', 'ID_Tasy', 'DigitadoPor', 'DigitadoEm', 'FichaEm', 'CriadoPor', 'CriadoEm'],
+      casos: ['ID_IRAS', 'Prontuario', 'DataInfeccao', 'Topografia', 'CriterioDiagnostico', 'Setor', 'DispositivoAssociado', 'Microrganismo', 'AgenteOriginal', 'ID_CulturaAgente', 'Desfecho', 'StatusInvestigacao', 'NotificadoANVISA', 'Observacoes', 'ConfirmadoPor', 'ConfirmadoEm', 'ID_Tasy', 'DigitadoPor', 'DigitadoEm', 'FichaEm', 'ForaDigitacaoPor', 'ForaDigitacaoEm', 'CriadoPor', 'CriadoEm'],
       /* Fichas de notificação impressas: o arquivo fica em fichas/ dentro da pasta de dados
          (registro do que foi usado na digitação); Casos = IDs separados por ';'. */
       fichas: ['ID_Ficha', 'Arquivo', 'Casos', 'CriadoPor', 'CriadoEm']

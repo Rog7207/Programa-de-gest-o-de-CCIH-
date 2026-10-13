@@ -203,12 +203,24 @@ async function montarInfeccoes(conteudo) {
       msg));
   }
   desenharEvolucoes();
+  /* Tira/devolve um caso da fila de digitação à mão (reversível — só marca a flag). */
+  const mudarForaDigitacao = async (idIras, excluir) => {
+    try {
+      await comTrava(['iras'], async () => {
+        const b = await lerBanco('iras'); const c = (b.casos || []).find(x => x.ID_IRAS === idIras);
+        if (c) { if (excluir) { c.ForaDigitacaoPor = app.usuario; c.ForaDigitacaoEm = hojeISO(); } else { c.ForaDigitacaoPor = ''; c.ForaDigitacaoEm = ''; } await gravarBanco('iras', b); }
+      });
+      navegar('iras');
+    } catch (e) { alert('Não foi possível salvar: ' + e.message); }
+  };
   function desenharDigitacao() {
     const desde = config.conciliacaoDesde || '';
-    const aguardando = casos.filter(k => k.StatusInvestigacao === 'confirmado' && String(k.DataInfeccao || '').slice(0, 10) >= desde)
+    const noPrazo = k => k.StatusInvestigacao === 'confirmado' && String(k.DataInfeccao || '').slice(0, 10) >= desde;
+    const aguardando = casos.filter(k => noPrazo(k) && !String(k.ForaDigitacaoEm || '').trim())
       .sort((a, b) => String(a.DataInfeccao).localeCompare(String(b.DataInfeccao)));
+    const excluidos = casos.filter(k => noPrazo(k) && String(k.ForaDigitacaoEm || '').trim());
     const digitadas = casos.filter(k => k.StatusInvestigacao === 'digitado').length;
-    if (!aguardando.length && !digitadas) { areaDigitacao.replaceChildren(); return; }
+    if (!aguardando.length && !digitadas && !excluidos.length) { areaDigitacao.replaceChildren(); return; }
     const caixas = aguardando.map(() => el('input', { type: 'checkbox', checked: '' }));
     const msg = el('p', { class: 'aviso-erro-texto' });
     const imprimir = async () => {
@@ -250,13 +262,20 @@ async function montarInfeccoes(conteudo) {
         + '(aba Importar, tipo "IRAS digitadas no Tasy") — a conciliação marca cada caso como digitado. '
         + 'Casos com ficha já impressa mostram a data.'),
       aguardando.length ? el('table', { class: 'tabela' },
-        el('thead', {}, el('tr', {}, el('th', {}), ['Data', 'Paciente', 'Topografia', 'Setor', 'Agente', 'Ficha impressa'].map(c => el('th', {}, c)))),
+        el('thead', {}, el('tr', {}, el('th', {}), ['Data', 'Paciente', 'Topografia', 'Setor', 'Agente', 'Ficha impressa', ''].map(c => el('th', {}, c)))),
         el('tbody', {}, aguardando.map((k, i) => el('tr', {},
           el('td', {}, caixas[i]),
           ...[k.DataInfeccao, nomes.get(normalizarProntuario(k.Prontuario)) || k.Prontuario, k.Topografia, k.Setor, k.Microrganismo, k.FichaEm]
-            .map(v => el('td', {}, String(v || ''))))))) : null,
+            .map(v => el('td', {}, String(v || ''))),
+          el('td', {}, el('button', { class: 'botao-secundario', title: 'Tirar da fila de digitação (reversível)', onclick: () => mudarForaDigitacao(k.ID_IRAS, true) }, 'Excluir')))))) : null,
       aguardando.length ? el('div', { class: 'linha-botoes' },
         el('button', { class: 'botao-primario', onclick: imprimir }, 'Imprimir fichas selecionadas')) : null,
+      excluidos.length ? el('details', { style: 'margin-top:.6em' },
+        el('summary', {}, `Excluídos da digitação (${fmtInt(excluidos.length)}) — reversível`),
+        el('table', { class: 'tabela' }, el('tbody', {}, excluidos.map(k => el('tr', {},
+          el('td', {}, String(k.DataInfeccao || '')), el('td', {}, nomes.get(normalizarProntuario(k.Prontuario)) || k.Prontuario),
+          el('td', {}, String(k.Topografia || '')),
+          el('td', {}, el('button', { class: 'botao-secundario', onclick: () => mudarForaDigitacao(k.ID_IRAS, false) }, 'Reabrir'))))))) : null,
       msg));
   }
   desenharDigitacao();

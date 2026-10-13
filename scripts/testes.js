@@ -5404,6 +5404,13 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       !notif.episodioJaNotificado(amb, [], [{ Agravo: 'Tuberculose', DataNotificacao: '2026-07-01' }], hoje));
     verificar('episódio: agravo diferente nunca suprime',
       !notif.episodioJaNotificado(tb0, [{ DataInternacao: '2026-10-01', DataAlta: '' }], [{ Agravo: 'Sarampo', DataNotificacao: '2026-10-05' }], hoje));
+
+    /* Decisões por suspeita (casos): chave e log de observação */
+    verificar('chaveCasoNotif junta prontuário+agravo+episódio', notif.chaveCasoNotif('100', 'Tuberculose', '2026-10-01') === '100|tuberculose|2026-10-01');
+    const log1 = notif.anexarObservacao('', 'coletado BAAR', 'Dr. X', '2026-10-11 10:00');
+    const log2 = notif.anexarObservacao(log1, 'resultado positivo', 'Dr. Y', '2026-10-12 09:00');
+    verificar('anexarObservacao acumula (log datado/assinado, não sobrescreve)',
+      /coletado BAAR/.test(log2) && /resultado positivo/.test(log2) && /Dr\. X/.test(log2) && /Dr\. Y/.test(log2) && log2.split('\n').length === 2, log2);
   }
 
   /* == 101. Fumaça da aba Notificáveis (DOM falso): filas e "marcar como notificado" == */
@@ -5430,51 +5437,67 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       pacientes: { pacientes: [{ Prontuario: '100', Nome: 'Paciente A' }, { Prontuario: '200', Nome: 'Paciente B' }, { Prontuario: '300', Nome: 'Paciente C' }],
         internacoes: [{ Prontuario: '100', DataAlta: '', SetorAtual: 'CTI', Leito: '1' }, { Prontuario: '200', DataAlta: '', SetorAtual: 'Enfermaria' }, { Prontuario: '300', DataAlta: '', SetorAtual: 'Enfermaria' }] },
       isolamentos: { precaucoes: [] },
-      sinan: { notificacoes: [{ Prontuario: '300', Agravo: 'Tuberculose' }] }
+      /* um caso a_digitar para P300 (tem notificação no SINAN) → a dedup deve marcá-lo digitado */
+      sinan: { notificacoes: [{ Prontuario: '300', Agravo: 'Tuberculose' }],
+        casos: [{ ID_Caso: 'CSN-1', Prontuario: '300', Agravo: 'Tuberculose', DataSinal: '2026-10-02', EpisodioInicio: '', Status: 'a_digitar' }] }
     };
     const chaves = ['el', 'fmtInt', 'lerBanco', 'gravarBanco', 'comTrava', 'navegar', 'abrirPaciente', 'normalizarProntuario', 'normalizarTexto',
-      'hojeISO', 'agoraCurto', 'proximoID', 'app', 'detectarNotificaveis', 'PRECAUCAO_ROTULO', 'textoEvolucaoNormalizado'];
+      'hojeISO', 'agoraCurto', 'proximoID', 'app', 'detectarNotificaveis', 'PRECAUCAO_ROTULO', 'textoEvolucaoNormalizado',
+      'episodioJaNotificado', 'indexarCasosNotif', 'inicioDoEpisodio', 'chaveCasoNotif', 'anexarObservacao'];
     const antes = {}; chaves.forEach(k => { antes[k] = global[k]; });
     let gravado = null;
     Object.assign(global, {
       el: elFalso, fmtInt: n => String(n), app: { usuario: 'Dr. Teste' },
       lerBanco: async n => JSON.parse(JSON.stringify(fixture[n] || {})),
-      gravarBanco: async (n, b) => { if (n === 'sinan') { gravado = b; fixture.sinan = JSON.parse(JSON.stringify(b)); } },
+      gravarBanco: async (n, b) => { if (n === 'sinan') { gravado = JSON.parse(JSON.stringify(b)); fixture.sinan = JSON.parse(JSON.stringify(b)); } },
       comTrava: async (_l, fn) => fn(), navegar() {}, abrirPaciente() {},
       normalizarProntuario: imp.normalizarProntuario, normalizarTexto: leitura.normalizarTexto,
       textoEvolucaoNormalizado: imp.textoEvolucaoNormalizado, proximoID: imp.proximoID,
       hojeISO: () => '2026-10-11', agoraCurto: () => '2026-10-11 10:00',
       detectarNotificaveis: notif.detectarNotificaveis, PRECAUCAO_ROTULO: notif.PRECAUCAO_ROTULO,
-      episodioJaNotificado: notif.episodioJaNotificado
+      episodioJaNotificado: notif.episodioJaNotificado, indexarCasosNotif: notif.indexarCasosNotif,
+      inicioDoEpisodio: notif.inicioDoEpisodio, chaveCasoNotif: notif.chaveCasoNotif, anexarObservacao: notif.anexarObservacao
     });
     try {
-      /* Seções anteriores vazaram `var lerBanco`/`el`/… no escopo deste IIFE (prefixo da 98),
-         que sombreariam os stubs globais dentro de montarNotificaveis. Fixamos as referências
-         aos stubs com `var` locais antes de avaliar o arquivo. */
       const prefixo = 'var el=global.el,fmtInt=global.fmtInt,lerBanco=global.lerBanco,gravarBanco=global.gravarBanco,'
         + 'comTrava=global.comTrava,navegar=global.navegar,abrirPaciente=global.abrirPaciente,'
         + 'normalizarProntuario=global.normalizarProntuario,normalizarTexto=global.normalizarTexto,'
         + 'hojeISO=global.hojeISO,agoraCurto=global.agoraCurto,proximoID=global.proximoID,app=global.app,'
         + 'detectarNotificaveis=global.detectarNotificaveis,PRECAUCAO_ROTULO=global.PRECAUCAO_ROTULO,'
-        + 'episodioJaNotificado=global.episodioJaNotificado;\n';
+        + 'episodioJaNotificado=global.episodioJaNotificado,indexarCasosNotif=global.indexarCasosNotif,'
+        + 'inicioDoEpisodio=global.inicioDoEpisodio,chaveCasoNotif=global.chaveCasoNotif,anexarObservacao=global.anexarObservacao;\n';
       eval(prefixo + fs.readFileSync(path.join(__dirname, '..', 'js', 'ui-notificaveis.js'), 'utf-8') + '\nglobal.__montarNotif = montarNotificaveis;');
       const raiz = mkNode('div');
       await global.__montarNotif(raiz);
-      const td = texto(raiz);
-      verificar('Notificáveis: fila "A notificar" tem 2 (P100 TB e P200 meningite; P300 já notificado fica fora)', /A notificar \(2\)/.test(td), td.match(/A notificar \(\d+\)/));
-      verificar('Notificáveis: a fila cita Tuberculose e meningite', /Tuberculose/.test(td) && /meningoc/i.test(td));
-      verificar('Notificáveis: já notificados = 1', achar(raiz, n => n.tag === 'div' && texto(n) === '1').length >= 1 && /Já notificados/.test(td));
-      verificar('Notificáveis: isolamento indicado lista os 3 (sem precaução ativa)', /Isolamento indicado \(3\)/.test(td), td.match(/Isolamento indicado \(\d+\)/));
+      let td = texto(raiz);
+      verificar('Notificáveis: "A avaliar" tem 2 (P100 TB e P200 meningite; P300 já notificado fica fora)', /A avaliar \(2\)/.test(td), td.match(/A avaliar \(\d+\)/));
+      verificar('Notificáveis: dedup do SINAN marcou o caso a_digitar de P300 como digitado', gravado && gravado.casos.find(c => c.ID_Caso === 'CSN-1').Status === 'digitado');
+      verificar('Notificáveis: "Para digitação" começa em 0 (o a_digitar virou digitado)', /Para digitação no SINAN \(0\)/.test(td), td.match(/Para digitação no SINAN \(\d+\)/));
       const evoDet = achar(raiz, n => n.tag === 'details' && /Ver evolução completa/.test(texto(n)));
-      verificar('Notificáveis: achado de evolução mostra a evolução completa expansível', evoDet.length >= 1 && /líquor turvo/.test(texto(evoDet[0])), evoDet[0] && texto(evoDet[0]).slice(0, 120));
-      const botoesMarcar = achar(raiz, n => n.tag === 'button' && /Marcar como notificado/.test(texto(n)));
-      verificar('Notificáveis: há botão "Marcar como notificado"', botoesMarcar.length >= 1);
-      await botoesMarcar[0].ouvintes.click[0]({});
-      const nova = gravado && gravado.notificacoes.find(x => x.NumeroSinan === '' && x.NotificadoPor === 'Dr. Teste');
-      verificar('Notificáveis: marcar grava notificação local (sem nº SINAN, Identificado=sim)',
-        !!nova && nova.Identificado === 'sim' && !!nova.Prontuario, nova && JSON.stringify(nova));
+      verificar('Notificáveis: achado de evolução mostra a evolução completa expansível', evoDet.length >= 1 && /líquor turvo/.test(texto(evoDet[0])));
+      /* Notificar uma suspeita → vai para a digitação */
+      const btnNotificar = achar(raiz, n => n.tag === 'button' && texto(n) === 'Notificar');
+      verificar('Notificáveis: cada suspeita tem o botão Notificar', btnNotificar.length === 2);
+      await btnNotificar[0].ouvintes.click[0]({});
+      td = texto(raiz);
+      verificar('Notificáveis: após Notificar, "Para digitação" = 1 e "A avaliar" = 1', /Para digitação no SINAN \(1\)/.test(td) && /A avaliar \(1\)/.test(td), td.match(/A avaliar \(\d+\)/) + ' ' + td.match(/Para digitação no SINAN \(\d+\)/));
+      verificar('Notificáveis: gravou um caso a_digitar novo', gravado.casos.some(c => c.Status === 'a_digitar' && c.ID_Caso !== 'CSN-1'));
+      /* Incluir observação na suspeita restante */
+      const area = achar(raiz, n => n.tag === 'textarea')[0]; area.value = 'coletado exame X, aguarda resultado';
+      const btnObs = achar(raiz, n => n.tag === 'button' && /Incluir observação/.test(texto(n)))[0];
+      await btnObs.ouvintes.click[0]({});
+      verificar('Notificáveis: observação entra no log (datada/assinada)', gravado.casos.some(c => /coletado exame X/.test(c.Observacoes || '') && /Dr\. Teste/.test(c.Observacoes || '')));
+      /* Excluir manualmente da lista de digitação */
+      const btnExcluir = achar(raiz, n => n.tag === 'button' && /Excluir manualmente/.test(texto(n)))[0];
+      verificar('Notificáveis: lista de digitação tem "Excluir manualmente"', !!btnExcluir);
+      await btnExcluir.ouvintes.click[0]({});
+      verificar('Notificáveis: excluir manual marca excluido (reversível) e esvazia a digitação', gravado.casos.some(c => c.Status === 'excluido') && /Para digitação no SINAN \(0\)/.test(texto(raiz)));
+      /* Descartar: "não é de notificação" */
+      const btnDescartar = achar(raiz, n => n.tag === 'button' && /Não é de notificação/.test(texto(n)))[0];
+      await btnDescartar.ouvintes.click[0]({});
+      verificar('Notificáveis: "não é de notificação" marca descartado', gravado.casos.some(c => c.Status === 'descartado'));
     } catch (e) {
-      verificar('aba Notificáveis monta e marca sem exceção', false, e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e.message);
+      verificar('aba Notificáveis monta e opera sem exceção', false, e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e.message);
     } finally {
       Object.assign(global, antes);
     }

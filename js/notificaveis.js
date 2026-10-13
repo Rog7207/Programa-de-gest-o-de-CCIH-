@@ -338,10 +338,35 @@ function episodioJaNotificado(achado, internacoesDoPaciente, notificacoesDoPacie
   return false;
 }
 
+/* ---- Decisões da CCIH por suspeita (aba sinan.casos) ----
+   Chave estável de um caso = paciente + agravo + início do episódio. O episódio vem da
+   janelaDoEpisodio (mesma internação, ou janela ambulatorial): assim a decisão acompanha o
+   episódio e um episódio NOVO do mesmo agravo nasce como suspeita de novo. */
+function inicioDoEpisodio(dataSinal, internacoesDoPaciente, hoje) {
+  const j = janelaDoEpisodio(dataSinal, internacoesDoPaciente, hoje);
+  return j ? j.inicio : '';
+}
+function chaveCasoNotif(prontuario, agravo, episodioInicio) {
+  return normalizarProntuario(prontuario) + '|' + normalizarTexto(agravo) + '|' + String(episodioInicio || '');
+}
+/* Index dos casos gravados por chave (último vence, caso haja repetição). */
+function indexarCasosNotif(casos) {
+  const m = new Map();
+  for (const c of (casos || [])) m.set(chaveCasoNotif(c.Prontuario, c.Agravo, c.EpisodioInicio), c);
+  return m;
+}
+/* Acrescenta uma entrada datada e assinada ao LOG de observações (não sobrescreve). */
+function anexarObservacao(textoAtual, nota, autor, agora) {
+  const linha = '[' + String(agora || '').trim() + (autor ? ' · ' + autor : '') + '] ' + String(nota || '').trim();
+  const base = String(textoAtual || '').trim();
+  return (base ? base + '\n' : '') + linha;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     LISTA_NOTIFICACAO_COMPULSORIA, PRECAUCAO_POR_AGRAVO, PRECAUCAO_ROTULO,
     AGRAVOS_POR_MICRORGANISMO, agravoNaLista, agravoDaCultura, notificaveisNaEvolucao, detectarNotificaveis,
-    agravoPorCID, lerNotificacoesSinan, janelaDoEpisodio, episodioJaNotificado, JANELA_AMBULATORIAL_DIAS
+    agravoPorCID, lerNotificacoesSinan, janelaDoEpisodio, episodioJaNotificado, JANELA_AMBULATORIAL_DIAS,
+    inicioDoEpisodio, chaveCasoNotif, indexarCasosNotif, anexarObservacao
   };
 }

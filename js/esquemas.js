@@ -148,7 +148,15 @@ const ESQUEMAS = {
     abas: {
       notificacoes: ['ID_Notificacao', 'NumeroSinan', 'Prontuario', 'Agravo', 'CID', 'Prazo',
         'DataNotificacao', 'DataSintomas', 'Municipio', 'Unidade', 'Classificacao', 'Evolucao',
-        'Identificado', 'NotificadoPor', 'CriadoPor', 'CriadoEm']
+        'Identificado', 'NotificadoPor', 'CriadoPor', 'CriadoEm'],
+      /* Decisão da CCIH sobre cada suspeita de agravo notificável (aba Notificáveis). Uma linha
+         por (paciente + agravo + episódio). Status: descartado (não é de notificação) / a_digitar
+         (notificar — vai para a lista de digitação) / digitado (conciliado com o SINAN importado) /
+         excluido (tirado da lista à mão). Observacoes é um LOG datado e assinado de ações. Tudo
+         reversível — nada é apagado. */
+      casos: ['ID_Caso', 'Prontuario', 'Agravo', 'CID', 'Prazo', 'EpisodioInicio', 'Fonte', 'DataSinal',
+        'Status', 'Observacoes', 'NumeroSinan', 'NotificarPor', 'NotificarEm', 'DigitadoPor', 'DigitadoEm',
+        'DescartadoPor', 'DescartadoEm', 'ExcluidoPor', 'ExcluidoEm', 'CriadoPor', 'CriadoEm', 'AtualizadoPor', 'AtualizadoEm']
     }
   },
   config: {

@@ -394,13 +394,27 @@ console.log('\n== 13. Leitor do PDF do laboratório ==');
     'Grupo: CGP     Resultado:   ~Enterococcus~ sp.',
     'Procedimento: HEMO2 - HEMOCULTURA',
     'Material:      Sangue       Data coleta: 20/09/2026 12:00:00',
-    'Grupo: Staphylococcus     Resultado:   ~Staphylococcus aureus~'
+    'Grupo: Staphylococcus     Resultado:   ~Staphylococcus aureus~',
+    'Procedimento: SGB - PESQUISA DE SGB',
+    'Material:      Swab vaginal       Data coleta: 20/09/2026 13:00:00',
+    'Grupo: Streptococcus     Resultado:   Ausência de crescimento de ~Streptococcus~ do grupo b/',
+    '~Streptococcus agalactiae~ na amostra analisada.',
+    'Procedimento: SGB2 - PESQUISA DE SGB',
+    'Material:      Swab vaginal       Data coleta: 20/09/2026 14:00:00',
+    'Grupo: Streptococcus     Resultado:   Crescimento de ~Streptococcus~ do grupo b/~Streptococcus',
+    'agalactiae~ na amostra analisada.',
+    'Procedimento: HEMO3 - HEMOCULTURA',
+    'Material:      Sangue       Data coleta: 20/09/2026 15:00:00',
+    'Grupo: CGP     Resultado:   Coco Gram Positivo sugestivo de ~Staphylococcus~ sp.'
   ];
   const aq = imp.analisarPDFCulturas(fxQual);
-  const mi = aq[0].indexOf('Microorganismo');
+  const mi = aq[0].indexOf('Microorganismo'), ri = aq[0].indexOf('Resultado');
   verificar('SCN: captura "coagulase negativo" (não só o gênero)', aq[1][mi] === 'Staphylococcus coagulase negativo', aq[1][mi]);
   verificar('Enterococcus sp.: mantém o "sp." (não vira gênero puro)', aq[2][mi] === 'Enterococcus sp.', aq[2][mi]);
   verificar('binômio completo entre tildes segue intacto (S. aureus)', aq[3][mi] === 'Staphylococcus aureus', aq[3][mi]);
+  verificar('SGB "Ausência de crescimento" é NEGATIVA mesmo com organismo em itálico', aq[4][ri] === 'negativa' && aq[4][mi] === '', aq[4][ri] + '/' + aq[4][mi]);
+  verificar('SGB positivo vira S. agalactiae (grupo B), não "Streptococcus spp"', aq[5][ri] === 'positiva' && aq[5][mi] === 'Streptococcus agalactiae (grupo B)', aq[5][mi]);
+  verificar('"sugestivo de ~Staphylococcus~ sp." fica como preliminar (Coco Gram Positivo), não aureus', aq[6][mi] === 'Coco Gram Positivo', aq[6][mi]);
 }
 
 console.log('\n== 14. Unificação de pacientes ==');

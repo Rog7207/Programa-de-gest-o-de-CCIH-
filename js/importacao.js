@@ -3725,7 +3725,18 @@ function analisarPDFCulturas(linhasTexto) {
        "Enterococcus sp." virava "Enterococcus" → E. faecalis). Incluímos o qualificador logo
        após a tilde de fechamento. */
     const m = /~([^~]+)~\s*([\s\S]*)/.exec(resultado);
-    if (m) {
+    /* NEGATIVO vem antes de qualquer tilde: "Ausência de crescimento de ~Streptococcus~ do
+       grupo b" (pesquisa de SGB negativa) tem organismo em itálico mas NÃO cresceu — a tilde
+       não pode vencer o "ausência". */
+    const negativo = /^(ausencia|aus[eê]ncia) de crescimento|^n[aã]o houve crescimento|^negativ/i.test(resultado);
+    if (negativo) { classe = 'negativa'; micro = ''; }
+    /* Pesquisa de SGB positiva: "Crescimento de ~Streptococcus~ do grupo b/~Streptococcus
+       agalactiae~" — é S. agalactiae, não "Streptococcus spp". */
+    else if (/streptococcus.*(do )?grupo b\b|agalactiae/i.test(resultado)) { classe = 'positiva'; micro = 'Streptococcus agalactiae (grupo B)'; }
+    /* Resultado PRELIMINAR ("Coco Gram Positivo sugestivo de ~Staphylococcus~ sp.") não é
+       identificação: fica como o preliminar, não como a espécie sugerida. */
+    else if (/sugestivo de/i.test(resultado)) { classe = 'positiva'; micro = resultado.replace(/~/g, '').replace(/\s*sugestivo de.*$/i, '').trim() || resultado.replace(/~/g, ''); }
+    else if (m) {
       micro = m[1].trim();
       const qual = /^((?:coagulase\s+negativ[oa])|(?:sp{1,2}\.?)|(?:subsp\.?\s+\S+)|(?:(?:do\s+)?grupo\s+[\wà-ú]+)|(?:n[ãa]o\s+fermentador\w*))/i.exec(m[2].trim());
       if (qual) micro = (micro + ' ' + qual[1]).replace(/\s+/g, ' ').trim();

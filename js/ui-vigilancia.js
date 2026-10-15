@@ -282,9 +282,13 @@ async function montarVigilancia(conteudo) {
           } catch (e) { alert(e.message); }
         } }, aposEnvio ? '💬 abrir contato' : '💬 enviar WhatsApp');
     }
-    /* Sem telefone utilizável: campo para registrar na hora. */
-    const campoTel = el('input', { type: 'text', placeholder: 'DDD + número', style: 'width:130px' });
-    return el('span', {}, campoTel, ' ',
+    /* Sem telefone utilizável: campo para registrar na hora. Se existe um número mas em
+       formato inválido (sem DDD, dígito a mais), ele vem PREENCHIDO e sinalizado — antes
+       parecia que não havia telefone nenhum, e a enfermeira só precisa completar. */
+    const campoTel = el('input', { type: 'text', placeholder: 'DDD + número', style: 'width:130px', value: telefone || '' });
+    return el('span', {},
+      telefone ? el('span', { class: 'texto-suave', title: 'Número gravado não serve para WhatsApp (sem DDD ou com dígitos a mais): corrija e salve' }, '⚠ formato inválido ') : null,
+      campoTel, ' ',
       el('button', { class: 'botao-secundario', onclick: async () => {
         try {
           if (!telefoneWhatsApp(campoTel.value)) { alert('Número inválido — use DDD + número.'); return; }

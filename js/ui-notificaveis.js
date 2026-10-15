@@ -4,6 +4,35 @@
    uma observação (log de ações). Ao importar o SINAN, a dedup marca os digitados e eles saem da
    lista. Tudo reversível. */
 
+/* ---- Corpus de treinamento (evolucoes.xlsx / aba corpus) ----
+   Toda decisão da CCIH sobre um sinal achado numa EVOLUÇÃO é guardada com o texto: suspeita de
+   IRAS aberta / confirmada / descartada, agravo notificável notificado / descartado, "não é
+   infecção". Usado pelas abas Infecções e Notificáveis. Fica só na pasta de dados. */
+async function registrarCorpusSinal(dados) {
+  try {
+    await comTrava(['evolucoes'], async () => {
+      const b = await lerBanco('evolucoes').catch(() => ({})); b.corpus = b.corpus || [];
+      const gerar = proximoID(b.corpus, 'ID_Corpus', 'CRP');
+      b.corpus.push({ ID_Corpus: gerar(), Tipo: dados.Tipo || '', Decisao: dados.Decisao || '', Sinais: dados.Sinais || '',
+        Trecho: String(dados.Trecho || '').slice(0, 900), TextoEvolucao: dados.TextoEvolucao || '', ID_Evolucao: dados.ID_Evolucao || '',
+        ID_Caso: dados.ID_Caso || '', Prontuario: dados.Prontuario || '', DataEvolucao: String(dados.DataEvolucao || '').slice(0, 10),
+        Setor: dados.Setor || '', DecididoPor: app.usuario, DecididoEm: agoraCurto(), AtualizadoPor: '', AtualizadoEm: '' });
+      await gravarBanco('evolucoes', b);
+    });
+  } catch (e) { console.warn('corpus: não gravou', e); }
+}
+/* A decisão final de um caso (confirmado/descartado) atualiza as linhas do corpus ligadas a ele. */
+async function atualizarCorpusDecisao(idCaso, decisao) {
+  if (!idCaso) return;
+  try {
+    await comTrava(['evolucoes'], async () => {
+      const b = await lerBanco('evolucoes').catch(() => ({})); let mudou = false;
+      for (const l of (b.corpus || [])) if (l.ID_Caso === idCaso && l.Decisao !== decisao) { l.Decisao = decisao; l.AtualizadoPor = app.usuario; l.AtualizadoEm = agoraCurto(); mudou = true; }
+      if (mudou) await gravarBanco('evolucoes', b);
+    });
+  } catch (e) { console.warn('corpus: não atualizou', e); }
+}
+
 function _precaucaoAtivaDe(precaucoes) {
   const ativos = new Set();
   for (const p of (precaucoes || [])) {
@@ -92,8 +121,9 @@ async function montarNotificaveis(container) {
   };
 
   /* Cria/atualiza o caso da suspeita e grava. mutador recebe o registro. */
-  const salvarCaso = async (a, mutador) => {
+  const salvarCaso = async (a, mutador, decisaoCorpus) => {
     try {
+      let idCaso = '';
       await comTrava(['sinan'], async () => {
         const b = await lerBanco('sinan').catch(() => ({})); b.casos = b.casos || [];
         const idx = indexarCasosNotif(b.casos);
@@ -107,10 +137,46 @@ async function montarNotificaveis(container) {
         }
         mutador(c);
         c.AtualizadoPor = app.usuario; c.AtualizadoEm = agoraCurto();
+        idCaso = c.ID_Caso;
         await gravarBanco('sinan', b);
       });
+      /* Corpus: só quando o sinal veio de EVOLUÇÃO e houve decisão (notificar / não é de notificação). */
+      if (decisaoCorpus && /^evolucao/.test(String(a.fonte || '')) && a.textoCompleto) {
+        await registrarCorpusSinal({ Tipo: 'notificavel', Decisao: decisaoCorpus, Sinais: a.agravo, Trecho: a.detalhe,
+          TextoEvolucao: a.textoCompleto, ID_Caso: idCaso, Prontuario: a.prontuario, DataEvolucao: a.data, Setor: (internado.get(a.prontuario) || {}).setor || '' });
+      }
       await montarNotificaveis(container);
     } catch (e) { alert('Não foi possível salvar: ' + e.message); }
+  };
+
+  /* Impressão para digitação no SINAN: uma folha com os casos "a_digitar", guardada em fichas/. */
+  const imprimirParaSinan = async () => {
+    if (!paraDigitar.length) return;
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+    const br = d => String(d || '').slice(0, 10).split('-').reverse().join('/');
+    const linhas = paraDigitar.map(c => {
+      const pront = normalizarProntuario(c.Prontuario); const loc = internado.get(pront) || {};
+      return `<tr><td>${esc(pront)}</td><td>${esc(nomePorPront.get(pront) || '')}</td><td><strong>${esc(c.Agravo)}</strong>${c.CID ? ' · ' + esc(c.CID) : ''}</td>`
+        + `<td>${esc(c.Prazo)}</td><td>${esc(br(c.DataSinal))}</td><td>${esc(loc.setor || '')}</td><td>${esc(br(c.NotificarEm))} · ${esc(c.NotificarPor)}</td>`
+        + `<td class="obs">${esc(c.Observacoes || '')}</td></tr>`;
+    }).join('');
+    const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Notificáveis para digitação no SINAN</title><style>
+body{font-family:Arial,sans-serif;font-size:12px;margin:18px}h1{font-size:16px;margin:0 0 4px}p{margin:0 0 10px;color:#444}
+table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:4px 6px;vertical-align:top;text-align:left}th{background:#eee}
+td.obs{white-space:pre-wrap;font-size:11px}@media print{@page{size:landscape;margin:12mm}}</style></head><body>
+<h1>Agravos de notificação compulsória — para digitação no SINAN</h1>
+<p>Gerado por ${esc(app.usuario)} em ${esc(agoraCurto())} · ${paraDigitar.length} caso(s). Depois de digitar, importe o NINDINET: os casos saem da lista sozinhos.</p>
+<table><thead><tr><th>Prontuário</th><th>Paciente</th><th>Agravo</th><th>Prazo</th><th>Data do sinal</th><th>Setor</th><th>Decisão</th><th>Observações</th></tr></thead><tbody>${linhas}</tbody></table>
+<p style="margin-top:18px">Digitado no SINAN em ____/____/______ por ____________________________</p></body></html>`;
+    try {
+      const nomeArquivo = `${agoraCurto().replace(/[: ]/g, '-')}_notificaveis-sinan.html`;
+      const dir = await pasta.subpasta('fichas');
+      const fh = await dir.getFileHandle(nomeArquivo, { create: true });
+      const w = await fh.createWritable(); await w.write(html); await w.close();
+    } catch (e) { /* sem pasta (ex.: teste) segue só com a impressão */ }
+    const janela = window.open('', '_blank');
+    if (!janela) { alert('O navegador bloqueou a janela de impressão — libere pop-ups.'); return; }
+    janela.document.write(html); janela.document.close(); janela.focus(); janela.print();
   };
   /* Mutação de um caso JÁ existente (listas de digitação/encerrados), por ID. */
   const mudarCasoPorId = async (idCaso, mutador) => {
@@ -140,11 +206,11 @@ async function montarNotificaveis(container) {
         el('p', { class: 'texto-suave', style: 'white-space:pre-wrap' }, logAtual)) : null,
       campoObs,
       el('div', { class: 'linha-botoes' },
-        el('button', { class: 'botao-primario', onclick: () => salvarCaso(a, c => { c.Status = 'a_digitar'; c.NotificarPor = app.usuario; c.NotificarEm = hojeISO(); }) }, 'Notificar'),
+        el('button', { class: 'botao-primario', onclick: () => salvarCaso(a, c => { c.Status = 'a_digitar'; c.NotificarPor = app.usuario; c.NotificarEm = hojeISO(); }, 'notificar') }, 'Notificar'),
         ' ',
         el('button', { onclick: () => { const t = String(campoObs.value || '').trim(); if (!t) { campoObs.focus(); return; } return salvarCaso(a, c => { c.Observacoes = anexarObservacao(c.Observacoes, t, app.usuario, agoraCurto()); }); } }, 'Incluir observação'),
         ' ',
-        el('button', { onclick: () => salvarCaso(a, c => { c.Status = 'descartado'; c.DescartadoPor = app.usuario; c.DescartadoEm = hojeISO(); }) }, 'Não é de notificação'),
+        el('button', { onclick: () => salvarCaso(a, c => { c.Status = 'descartado'; c.DescartadoPor = app.usuario; c.DescartadoEm = hojeISO(); }, 'descartado') }, 'Não é de notificação'),
         ' ',
         el('button', { onclick: () => abrirPaciente(a.prontuario) }, 'Abrir ficha')));
   };
@@ -193,6 +259,8 @@ async function montarNotificaveis(container) {
 
     el('h2', {}, `Para digitação no SINAN (${fmtInt(paraDigitar.length)})`),
     el('p', { class: 'texto-suave' }, 'Lista separada das IH. Ao importar o NINDINET, os que já foram notificados saem daqui sozinhos.'),
+    paraDigitar.length ? el('div', { class: 'linha-botoes' },
+      el('button', { class: 'botao-primario', onclick: imprimirParaSinan }, 'Imprimir lista para o SINAN')) : null,
     paraDigitar.length ? el('div', {}, paraDigitar.map(linhaDigitacao))
       : el('p', { class: 'texto-suave' }, 'Nada aguardando digitação.'),
 

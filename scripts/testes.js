@@ -5463,7 +5463,7 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     Object.assign(global, {
       el: elFalso, fmtInt: n => String(n), app: { usuario: 'Dr. Teste' },
       lerBanco: async n => JSON.parse(JSON.stringify(fixture[n] || {})),
-      gravarBanco: async (n, b) => { if (n === 'sinan') { gravado = JSON.parse(JSON.stringify(b)); fixture.sinan = JSON.parse(JSON.stringify(b)); } },
+      gravarBanco: async (n, b) => { if (n === 'sinan') { gravado = JSON.parse(JSON.stringify(b)); fixture.sinan = JSON.parse(JSON.stringify(b)); } if (n === 'evolucoes') { fixture.evolucoes = JSON.parse(JSON.stringify(b)); } },
       comTrava: async (_l, fn) => fn(), navegar() {}, abrirPaciente() {},
       normalizarProntuario: imp.normalizarProntuario, normalizarTexto: leitura.normalizarTexto,
       textoEvolucaoNormalizado: imp.textoEvolucaoNormalizado, proximoID: imp.proximoID,
@@ -5496,6 +5496,9 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       td = texto(raiz);
       verificar('Notificáveis: após Notificar, "Para digitação" = 1 e "A avaliar" = 1', /Para digitação no SINAN \(1\)/.test(td) && /A avaliar \(1\)/.test(td), td.match(/A avaliar \(\d+\)/) + ' ' + td.match(/Para digitação no SINAN \(\d+\)/));
       verificar('Notificáveis: gravou um caso a_digitar novo', gravado.casos.some(c => c.Status === 'a_digitar' && c.ID_Caso !== 'CSN-1'));
+      /* a suspeita notificada veio de EVOLUÇÃO (P200, meningite) → entra no corpus com o texto */
+      const corpus = (fixture.evolucoes.corpus || []);
+      verificar('corpus: decisão "notificar" sobre sinal de evolução grava texto + decisão', corpus.some(l => l.Tipo === 'notificavel' && l.Decisao === 'notificar' && /líquor turvo/.test(l.TextoEvolucao) && l.DecididoPor === 'Dr. Teste'), JSON.stringify(corpus).slice(0, 200));
       /* Incluir observação na suspeita restante */
       const area = achar(raiz, n => n.tag === 'textarea')[0]; area.value = 'coletado exame X, aguarda resultado';
       const btnObs = achar(raiz, n => n.tag === 'button' && /Incluir observação/.test(texto(n)))[0];

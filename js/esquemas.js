@@ -80,7 +80,14 @@ const ESQUEMAS = {
       evolucoes: ['ID_Evolucao', 'Atendimento', 'Prontuario', 'Setor', 'Categoria', 'DataEvolucao', 'Autor', 'Texto', 'SinaisInfeccao', 'CriadoPor', 'CriadoEm'],
       /* Sinais vitais estruturados (relatório 2411 do Tasy): uma linha por medida, foto dos
          últimos 7 dias. */
-      sinais_vitais: ['ID_SinalVital', 'Atendimento', 'Prontuario', 'Setor', 'DataMedida', 'PAS', 'PAD', 'PAM', 'FC', 'FR', 'Temp', 'SatO2', 'Peso', 'CriadoPor', 'CriadoEm']
+      sinais_vitais: ['ID_SinalVital', 'Atendimento', 'Prontuario', 'Setor', 'DataMedida', 'PAS', 'PAD', 'PAM', 'FC', 'FR', 'Temp', 'SatO2', 'Peso', 'CriadoPor', 'CriadoEm'],
+      /* CORPUS de treinamento (pedido de 15/10/2026): cada vez que a CCIH decide sobre um
+         sinal achado numa evolução (suspeita de IRAS aberta/confirmada/descartada; agravo
+         notificável notificado/descartado), guardamos a decisão + o texto da evolução. É a
+         matéria-prima para um classificador futuro. Fica SÓ na pasta de dados; para sair
+         daqui precisa ser anonimizado (texto pode conter nomes). */
+      corpus: ['ID_Corpus', 'Tipo', 'Decisao', 'Sinais', 'Trecho', 'TextoEvolucao', 'ID_Evolucao', 'ID_Caso',
+        'Prontuario', 'DataEvolucao', 'Setor', 'DecididoPor', 'DecididoEm', 'AtualizadoPor', 'AtualizadoEm']
     }
   },
   higiene_maos: {
@@ -225,6 +232,7 @@ const VOCAB_APLICACAO = {
     ['isolamentos', 'precaucoes', 'Setor'], ['uti', 'visitas', 'Setor'], ['uti', 'avaliacoes_atb', 'Setor'],
     ['evolucoes', 'evolucoes', 'Setor'],
     ['evolucoes', 'sinais_vitais', 'Setor'],
+    ['evolucoes', 'corpus', 'Setor'],
     ['higiene_maos', 'observacoes', 'Setor'], ['higiene_maos', 'consumo_alcool', 'Setor'],
     ['surtos', 'investigacoes', 'Setor'],
     ['denominadores', 'censo_setor', 'Setor'], ['denominadores', 'dispositivos_dia', 'Setor'],

@@ -95,8 +95,16 @@ async function montarPaciente(conteudo) {
 
   /* ---- cabeçalho ---- */
   conteudo.append(el('h1', {}, cadastro.Nome || 'Paciente ' + alvo));
+  /* Cabeçalho: o PRONTUÁRIO primeiro; os outros números da mesma pessoa (série 8000xxxx,
+     pseudo-registros de laudo antigo) são "outros números", não atendimentos. Os atendimentos
+     de verdade são os das internações (um por entrada), com a data de cada um. */
+  const outrosNumeros = numeros.filter(n => n !== alvo);
+  const atendimentosReais = internacoes.filter(i => String(i.Atendimento || '').trim())
+    .map(i => `${i.Atendimento} (${String(i.DataInternacao || '').slice(0, 10).split('-').reverse().join('/')})`);
   const identificacao = [
-    numeros.length > 1 ? `${numeros.length} atendimentos: ${numeros.join(' · ')}` : `Prontuário ${alvo}`,
+    `Prontuário ${alvo}`,
+    outrosNumeros.length ? `outros números: ${outrosNumeros.join(' · ')}` : '',
+    atendimentosReais.length ? `atendimento${atendimentosReais.length > 1 ? 's' : ''}: ${atendimentosReais.join(' · ')}` : '',
     cadastro.Sexo, cadastro.DataNascimento ? 'nascimento ' + cadastro.DataNascimento : '',
     cadastro.Telefone ? 'telefone ' + cadastro.Telefone : ''
   ].filter(Boolean).join(' · ');

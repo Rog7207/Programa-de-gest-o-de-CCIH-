@@ -160,8 +160,20 @@ async function montarInfeccoes(conteudo) {
         return isFinite(d) && isFinite(dk) && Math.abs(d - dk) / 86400000 <= EVOLUCAO_SILENCIO_DIAS;
       });
     };
-    const semCaso = evolucoes.filter(e => normalizarProntuario(e.Prontuario) && !temCasoRecente(e))
+    /* Evolução que a CCIH já disse "não é infecção" (corpus) não volta à lista. */
+    const chaveEvo = e => String(e.ID_Evolucao || '') || (normalizarProntuario(e.Prontuario) + '|' + String(e.DataEvolucao || '').slice(0, 10));
+    const descartadasNoCorpus = new Set((bancoEvolucoes.corpus || []).filter(l => l.Tipo === 'iras' && l.Decisao === 'descartado')
+      .map(l => String(l.ID_Evolucao || '') || (normalizarProntuario(l.Prontuario) + '|' + String(l.DataEvolucao || '').slice(0, 10))));
+    const semCaso = evolucoes.filter(e => normalizarProntuario(e.Prontuario) && !temCasoRecente(e) && !descartadasNoCorpus.has(chaveEvo(e)))
       .sort((a, b) => String(b.DataEvolucao).localeCompare(String(a.DataEvolucao)));
+    const corpusDe = (e, r, decisao, idCaso) => (typeof registrarCorpusSinal === 'function')
+      ? registrarCorpusSinal({ Tipo: 'iras', Decisao: decisao, Sinais: r ? r.resumo : e.SinaisInfeccao, Trecho: r ? r.sinais.map(s => `${s.rotulo}: ${s.trecho}`).join(' | ') : '',
+        TextoEvolucao: e.Texto, ID_Evolucao: e.ID_Evolucao, ID_Caso: idCaso || '', Prontuario: e.Prontuario, DataEvolucao: e.DataEvolucao, Setor: e.Setor })
+      : Promise.resolve();
+    const naoEInfeccao = async e => {
+      try { await corpusDe(e, sinaisDeInfeccaoNaEvolucao(e.Texto), 'descartado', ''); navegar('iras', { historico: 'substituir' }); }
+      catch (err) { msg.textContent = err.message; }
+    };
     if (!semCaso.length) { areaEvolucoes.replaceChildren(); return; }
     const diaInternacao = e => { const s = internacaoNaColeta(e.Prontuario, e.DataEvolucao, internacoes); return s && s.situacao === 'internado' ? s.diaDaInternacao : null; };
     const msg = el('p', { class: 'aviso-erro-texto' });
@@ -171,9 +183,10 @@ async function montarInfeccoes(conteudo) {
         const template = extrairTemplateEvolucao(e.Texto);
         const disp = template.dispositivos.map(d => d.nome).find(n => /cvc|picc/.test(n.toLowerCase())) ? 'CVC'
           : template.dispositivos.some(d => /vm|tot|ventil/.test(d.nome.toLowerCase())) ? 'VM' : '';
+        let idCasoAberto = '';
         await comTrava(['iras'], async () => {
           const atual = await lerBanco('iras');
-          registrarCasoIras(atual.casos, {
+          const reg = registrarCasoIras(atual.casos, {
             Prontuario: e.Prontuario, DataInfeccao: String(e.DataEvolucao || '').slice(0, 10),
             Topografia: topografiaSugeridaPorSinais(r), CriterioDiagnostico: 'Termos na evolução: ' + r.resumo,
             Setor: e.Setor || '', DispositivoAssociado: disp, Microrganismo: '', Desfecho: '',
@@ -181,8 +194,10 @@ async function montarInfeccoes(conteudo) {
             Observacoes: acrescentarObservacao('', 'Evolução', r.sinais.map(s => `${s.rotulo}: ${s.trecho}`).join(' | ').slice(0, 900), app.usuario, agoraCurto()),
             CriadoPor: app.usuario, CriadoEm: agoraCurto()
           }, () => proximoIDLista(atual.casos, 'ID_IRAS', 'IRA'), identidadeDe);
+          idCasoAberto = reg && reg.caso ? reg.caso.ID_IRAS : '';
           await gravarBanco('iras', atual);
         });
+        await corpusDe(e, r, 'suspeita_aberta', idCasoAberto);
         navegar('iras', { historico: 'substituir' });
       } catch (err) { msg.textContent = err.message; }
     };
@@ -198,7 +213,8 @@ async function montarInfeccoes(conteudo) {
           el('td', {}, e.Setor || ''),
           el('td', {}, diaInternacao(e) ? `${diaInternacao(e)}º` : '—'),
           el('td', {}, e.SinaisInfeccao),
-          el('td', {}, el('button', { class: 'botao-secundario', onclick: () => abrir(e) }, 'Abrir suspeita')))))),
+          el('td', {}, el('button', { class: 'botao-secundario', onclick: () => abrir(e) }, 'Abrir suspeita'), ' ',
+            el('button', { class: 'botao-secundario', title: 'Registra no corpus que estes termos NÃO eram infecção e tira a evolução da lista', onclick: () => naoEInfeccao(e) }, 'Não é infecção')))))),
       semCaso.length > 60 ? el('p', { class: 'texto-suave' }, `… e mais ${fmtInt(semCaso.length - 60)}.`) : null,
       msg));
   }
@@ -452,6 +468,8 @@ async function montarInfeccoes(conteudo) {
           alvo.ConfirmadoPor = app.usuario;
           alvo.ConfirmadoEm = hojeISO();
           await gravarBanco('iras', atualIras);
+          /* Corpus: a decisão final chega às linhas da evolução que abriu este caso. */
+          if (typeof atualizarCorpusDecisao === 'function') await atualizarCorpusDecisao(caso.ID_IRAS, statusNovo);
           /* A cultura que definiu a infecção aponta para o caso (e só ela). */
           if (statusNovo === 'confirmado') {
             const atualCul = await lerBanco('culturas');

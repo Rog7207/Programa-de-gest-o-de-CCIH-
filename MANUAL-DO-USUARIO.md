@@ -517,9 +517,17 @@ a CCIH decide, notifica no SINAN e registra aqui o que foi feito.
 Os agravos de **notificação imediata** vêm marcados. A aba também mostra **Isolamento
 indicado** (agravo transmissível sem precaução ativa) e leva para a aba Isolamentos.
 
-**Lista "Para digitação"**: cada item tem **Excluir manualmente** (reversível). Ao importar
-o SINAN, os que já foram notificados **saem sozinhos** (dedup por episódio — mesma internação,
-ou ±30 dias no ambulatório; assim um episódio novo do mesmo agravo volta a aparecer).
+**Lista "Para digitação"**: cada item tem **Excluir manualmente** (reversível), e o botão
+**Imprimir lista para o SINAN** gera a folha com os casos (o arquivo fica em `fichas/`). Ao
+importar o SINAN, os que já foram notificados **saem sozinhos** (dedup por episódio — mesma
+internação, ou ±30 dias no ambulatório; assim um episódio novo do mesmo agravo volta a aparecer).
+
+**Corpus de treinamento**: toda decisão sobre um sinal achado numa evolução — suspeita de IRAS
+aberta, confirmada ou descartada, "não é infecção", agravo notificado ou descartado — fica
+guardada com o texto da evolução (`evolucoes.xlsx`, aba `corpus`). É a base para, no futuro,
+treinar um classificador que selecione melhor as suspeitas. Fica só na pasta de dados; para
+sair dela precisa ser anonimizado. Na aba Infecções, a lista "Evoluções que sugerem infecção"
+ganhou o botão **Não é infecção** para registrar os negativos.
 
 **Importar as notificações do SINAN**: na aba Importar, solte o export **NINDINET (.dbf)**.
 O app liga cada notificação ao paciente pela identidade (nome + nascimento) e guarda **só o

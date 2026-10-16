@@ -5672,6 +5672,22 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       dos.VERSAO_PROMPT_DOSSIE === 3 && /MESMA infecção/.test(dos.PROMPT_AVALIACAO_DOSSIE) && /até D16/.test(dos.PROMPT_AVALIACAO_DOSSIE) && /UMA hemocultura isolada NÃO é IPCS/.test(dos.PROMPT_AVALIACAO_DOSSIE)
       && /- MÉDIA:/.test(dos.PROMPT_AVALIACAO_DOSSIE) && /COPIADO EXATAMENTE/.test(dos.PROMPT_AVALIACAO_DOSSIE) && /INFECÇÃO NA ADMISSÃO:/.test(dos.PROMPT_AVALIACAO_DOSSIE));
 
+    /* Formato por dia: D5 - urocultura positiva / D6 - inserção de CVC / D10 - início de meropenem */
+    const ld = dos.linhaDoTempoPorDia(d);
+    const txtDias = dos.linhasPorDia(d);
+    verificar('por dia: ordem cronológica, cada linha "Dn - texto"', ld.every((l, i, a) => i === 0 || a[i - 1].data <= l.data) && txtDias.split('\n').slice(2).filter(Boolean).every(l => /^D-?\d+ - /.test(l)), txtDias.slice(0, 400));
+    verificar('por dia: cultura positiva com germe e resistência; negativa e colonização ficam de fora',
+      /D6 - Aspirado traqueal positiva: Klebsiella pneumoniae; KPC; resistente a MEROPENEM/.test(txtDias) && !/Urocultura sem crescimento/.test(txtDias) && !/Swab retal/.test(txtDias), txtDias);
+    verificar('por dia: inserção de cateter venoso central (cadastro) e sonda vesical (cabeçalho da evolução) com o dia certo',
+      /D3 - Inserção de cateter venoso central\n/.test(txtDias) && /D3 - Inserção de sonda vesical de demora \(citado na evolução\)/.test(txtDias), txtDias.match(/.*Inserção.*/g));
+    verificar('por dia: início de antibiótico pelo nome, profilaxia identificada, evolução intercalada no dia',
+      /D6 - Início de piperacilina-tazobactam/.test(txtDias) && /D2 - Profilaxia cirúrgica com cefazolina/.test(txtDias) && /D6 - Evolução médica \(UTI Adulto\): Febre e infiltrado novo/.test(txtDias), txtDias);
+    verificar('por dia: nunca leva decisão da CCIH (caso de IRAS registrado, classificação)', !/Caso de IRAS|CCIH|Contaminação|Presente na admissão/.test(txtDias), txtDias);
+    verificar('por dia: incluirNegativas mostra a urocultura sem crescimento', /D1 - Urocultura sem crescimento/.test(dos.linhasPorDia(d, { incluirNegativas: true })));
+    verificar('template: "TOT (23/09/)" com barra sobrando é lido', imp.extrairTemplateEvolucao('# Dispositivos invasivos: TOT (23/09/), SVD (23/09)').dispositivos.map(x => x.nome).join() === 'TOT,SVD');
+    verificar('por dia: dispositivos da visita à UTI entram como "em uso" no dia', /D10 - Em uso na visita à UTI: cateter venoso central, ventilação mecânica/.test(txtDias), txtDias.match(/.*visita.*/g));
+    verificar('nome do dispositivo por extenso', dos.nomeDispositivo('CVCJD') === 'cateter venoso central' && dos.nomeDispositivo('TOT') === 'ventilação mecânica (tubo orotraqueal)' && dos.nomeDispositivo('SVD') === 'sonda vesical de demora');
+
     /* Suspeita da IA × IRAS já notificada na janela */
     const casosReg = [{ id: 'IRA-1', topografia: 'Pneumonia associada à ventilação mecânica (PAV)', dia: 8, status: 'confirmado' },
       { id: 'IRA-2', topografia: 'IPCS com confirmação laboratorial', dia: 12, status: 'descartado' },

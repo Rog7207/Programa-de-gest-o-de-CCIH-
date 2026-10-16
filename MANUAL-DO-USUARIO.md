@@ -633,6 +633,7 @@ decide nada sozinho.
   CCIH validar**). `--n=10` dá uma amostra estratificada por escore; `--todos` gera para todos os
   internados (rotina diária); `--atendimentos=…` escolhe casos.
 - **Avaliar com o modelo local**: `node scripts/avaliar-dossies-ollama.js <pasta-dos-dossiês>` manda cada dossiê ao Ollama da própria máquina (padrão `qwen3:8b`) e grava a resposta ao lado, com a **conferência dos trechos citados** (literal, parcial ou não encontrado no dossiê). `--cego` no gerador tira as decisões da CCIH para medir a IA contra elas (`_gabarito.json`).
+- **Formato por dia** (para classificador): cada internação sai também como `ATD-*.dias.txt` e `.dias.json`, uma linha por evento no eixo do dia, com as evoluções intercaladas — "D5 - Urocultura positiva: …", "D6 - Inserção de cateter venoso central", "D10 - Início de meropenem". Só eventos positivos e nunca as decisões da CCIH.
 - **IRAS já notificada**: suspeita da IA no mesmo sítio de uma IRAS já notificada nessa internação, com início a até 14 dias dela, é **desconsiderada** (mesma janela da aba Infecções). Se a CCIH tinha **descartado** aquele episódio, a suspeita volta com o aviso para conferir se é episódio novo.
 - **Regras automáticas no dossiê**: o bloco **Infecção presente na admissão (D1–D2)** reúne o que já havia na entrada; cultura do mesmo sítio até D16 é marcada como provável mesma infecção, e contaminante de pele em hemocultura única é marcado como insuficiente para IPCS.
 - **Privacidade**: os dossiês saem **sem nome e sem autor**, e o nome do paciente é apagado do

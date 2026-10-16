@@ -1843,7 +1843,8 @@ function extrairTemplateEvolucao(texto) {
   const mDisp = /dispositivos? invasivos?:?\s*([^\n#]+)/.exec(t);
   if (mDisp) {
     for (const item of mDisp[1].split(/[;,]/)) {
-      const m = /([a-z][a-z .]{1,25}?)\s*\((\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\)/.exec(item.trim());
+      /* "TOT (23/09/)": barra sobrando no fim da data também vale (dossiê, 16/10/2026). */
+      const m = /([a-z][a-z .]{1,25}?)\s*\((\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\/?\)/.exec(item.trim());
       if (m) r.dispositivos.push({ nome: m[1].trim().toUpperCase(), data: m[2] });
     }
   }

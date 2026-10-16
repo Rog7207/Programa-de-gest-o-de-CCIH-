@@ -14,6 +14,8 @@
      ... --evolucoes=/x/evo.xls     export cru de evoluções do Tasy a somar (pode repetir)
      ... --hoje=2026-10-16          data de referência (padrão: hoje)
      ... --saida=/pasta             destino (padrão: <pasta>/dossies/<carimbo>)
+     Para cada internação saem também ATD-*.dias.txt e ATD-*.dias.json: uma linha por evento
+     no eixo do dia ("D5 - Urocultura positiva: …"), entrada para classificador pequeno.
      ... --cego                     sem as decisões da CCIH (casos de IRAS, classificação das
                                     culturas) — para calibrar a IA; o gabarito vai em _gabarito.json */
 
@@ -94,6 +96,12 @@ for (const c of escolhidos) {
   const texto = dossie.renderizarDossie(c.dossie, { cego: flag('cego') });
   const nome = `ATD-${c.atendimento}.md`;
   fs.writeFileSync(path.join(destino, nome), texto, 'utf-8');
+  /* Formato por dia (D5 - urocultura positiva…), para classificador: texto e JSON. Sempre
+     sem as decisões da CCIH. */
+  fs.writeFileSync(path.join(destino, `ATD-${c.atendimento}.dias.txt`), dossie.linhasPorDia(c.dossie), 'utf-8');
+  fs.writeFileSync(path.join(destino, `ATD-${c.atendimento}.dias.json`), JSON.stringify({ atendimento: c.atendimento,
+    idade: c.dossie.paciente.idade, sexo: c.dossie.paciente.sexo, admissao: c.dossie.admissao, diaReferencia: c.dossie.diaReferencia,
+    eventos: dossie.linhaDoTempoPorDia(c.dossie) }, null, 1), 'utf-8');
   totalChars += texto.length;
   indice.push(`| ${nome} | D${c.dia} | ${c.setor} | ${c.evolucoes} | ${c.escore} | ${c.sinais.join(', ')} | ${c.irasRegistrada ? 'sim' : ''} |`);
 }

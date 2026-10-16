@@ -538,6 +538,84 @@ function cegarDossie(d) {
   return c;
 }
 
+/* ---- Formato POR DIA (pedido de 16/10/2026) ----
+   Uma linha por evento, tudo no eixo do dia da internação, com as evoluções intercaladas:
+     D5 - Urocultura positiva: Escherichia coli …
+     D6 - Inserção de cateter venoso central
+     D10 - Início de meropenem
+   É a entrada pensada para um classificador pequeno (sim/não, sítio, data): sem tabelas nem
+   seções, só a sequência. Leva só eventos POSITIVOS (o que aconteceu) — cultura negativa fica
+   de fora salvo opcoes.incluirNegativas — e nunca as decisões da CCIH (é sempre "cego").
+   Devolve [{ dia, data, tipo, texto }] em ordem; linhasPorDia() vira o texto. */
+const NOME_DISPOSITIVO = [
+  [/\bcvc|cateter venoso central|picc|duplo.?lumen|shilley/i, 'cateter venoso central'],   /* CVCJD, CVCSCE… */
+  [/\bsvd\b|sonda vesical|cateter vesical|folley|foley/i, 'sonda vesical de demora'],
+  [/\bvm\b|\btot\b|ventila[cç][aã]o mec|tubo orotraqueal|intuba/i, 'ventilação mecânica (tubo orotraqueal)'],
+  [/\btqt\b|traqueostom/i, 'traqueostomia'],
+  [/\bpai\b|pressao arterial invasiva|pressão arterial invasiva/i, 'pressão arterial invasiva'],
+  [/\bdve\b|derivacao ventricular|derivação ventricular/i, 'derivação ventricular externa'],
+  [/\bnpt\b/i, 'nutrição parenteral'],
+  [/hemodi[aá]lise|cateter de di[aá]lise|\bcdl\b/i, 'cateter de hemodiálise']
+];
+function nomeDispositivo(nome) {
+  for (const [re, rot] of NOME_DISPOSITIVO) if (re.test(String(nome || ''))) return rot;
+  return String(nome || '').trim().toLowerCase();
+}
+/* "03/10" ou "03/10/26" do cabeçalho da evolução → ISO, com o ano da admissão (ou o anterior
+   se a data cairia depois da evolução). */
+function _dataCurta(ddmm, referenciaISO) {
+  const m = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/.exec(String(ddmm || '').trim());
+  if (!m) return '';
+  let ano = m[3] ? Number(m[3].length === 2 ? '20' + m[3] : m[3]) : Number(String(referenciaISO).slice(0, 4));
+  let iso = `${ano}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  if (!m[3] && iso > _d10(referenciaISO)) iso = `${ano - 1}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  return _ehData(iso) && isFinite(Date.parse(iso)) ? iso : '';
+}
+function linhaDoTempoPorDia(dossie, opcoes) {
+  const op = opcoes || {};
+  const d = cegarDossie(dossie);
+  const L = [];
+  const add = (data, dia, tipo, texto, ordem) => { if (_ehData(data) && texto) L.push({ dia, data: _d10(data), tipo, texto, _o: ordem }); };
+  add(d.admissao, 1, 'admissao', `Admissão hospitalar${d.setores.length ? ' em ' + d.setores[0].setor : ''}${d.clinica ? ' (clínica: ' + d.clinica + ')' : ''}`, 0);
+  for (const p of d.internacoesPrevias) add(p.entrada, diaDaInternacao(p.entrada, d.admissao), 'internacao_previa', `Internação anterior${p.alta ? ', alta em ' + dataBR(p.alta) : ''}`, 0);
+  d.setores.slice(1).forEach(s => add(s.entrada, s.diaEntrada, 'transferencia', 'Transferência para ' + s.setor, 1));
+  d.cirurgias.forEach(c => add(c.data, c.dia, 'cirurgia', 'Cirurgia: ' + [c.procedimento, c.contaminacao ? 'potencial ' + c.contaminacao.toLowerCase() : '', c.duracaoMin ? c.duracaoMin + ' min' : ''].filter(Boolean).join(', '), 2));
+  /* dispositivos: cadastro + cabeçalho das evoluções (uma inserção por dispositivo e data) */
+  const vistosDisp = new Set();
+  const addDisp = (nome, data, fonte) => {
+    const rot = nomeDispositivo(nome); const k = rot + '|' + _d10(data);
+    if (!rot || !_ehData(data) || vistosDisp.has(k)) return; vistosDisp.add(k);
+    add(data, diaDaInternacao(data, d.admissao), 'dispositivo', 'Inserção de ' + rot + (fonte ? ' (' + fonte + ')' : ''), 3);
+  };
+  d.dispositivos.forEach(x => { addDisp(x.nome, x.instalacao); if (x.retirada) add(x.retirada, x.diaRetirada, 'dispositivo', 'Retirada de ' + nomeDispositivo(x.nome), 3); });
+  d.evolucoes.forEach(e => (e.template.dispositivos || []).forEach(x => addDisp(x.nome, _dataCurta(x.data, e.data), 'citado na evolução')));
+  /* Visita da CCIH à UTI: o que estava EM USO naquele dia (sem data de inserção). */
+  d.visitasUti.forEach(v => { if (v.dispositivos.length) add(v.data, v.dia, 'dispositivo', 'Em uso na visita à UTI: ' + v.dispositivos.map(x => nomeDispositivo(x.replace(/\s*\(.*$/, ''))).join(', '), 3); });
+  d.culturas.forEach(c => {
+    if (!c.positiva && !op.incluirNegativas) return;
+    const mat = c.material || 'Cultura';
+    const partes = [c.microrganismo, c.mecanismo, c.resistentes.length ? 'resistente a ' + c.resistentes.join(', ') : ''].filter(Boolean).join('; ');
+    const nota = notaDaCultura(c);
+    add(c.data, c.dia, c.positiva ? 'cultura_positiva' : 'cultura', c.positiva ? `${mat} positiva: ${partes}${nota ? ' [' + nota + ']' : ''}` : `${mat} sem crescimento`, 4);
+  });
+  d.cursos.forEach(c => {
+    const nome = String(c.antibiotico).toLowerCase();
+    add(c.inicio, c.diaInicio, 'antibiotico', c.profilaxia ? 'Profilaxia cirúrgica com ' + nome : 'Início de ' + nome, 5);
+    if (!c.emCurso && !c.profilaxia) add(c.fim, c.diaFim, 'antibiotico', `Fim de ${nome} (${c.dias} dias)`, 5);
+  });
+  d.sepse.forEach(s => add(s.data, s.dia, 'sepse', 'Protocolo de sepse aberto' + (s.foco ? ', foco ' + s.foco : ''), 6));
+  d.vitais.forEach(v => add(v.data, v.dia, 'vitais', 'Sinais vitais alterados: ' + v.alterados.join(', '), 7));
+  d.evolucoes.forEach(e => add(e.data, e.dia, 'evolucao', `${e.rotuloCategoria.charAt(0).toUpperCase() + e.rotuloCategoria.slice(1)}${e.setor ? ' (' + e.setor + ')' : ''}: ${String(e.texto).replace(/\s+/g, ' ').trim()}`, 9));
+  if (d.alta) add(d.alta, diaDaInternacao(d.alta, d.admissao), d.obito ? 'obito' : 'alta', d.obito ? 'Óbito' : 'Alta hospitalar', 10);
+  L.sort((a, b) => a.data.localeCompare(b.data) || a._o - b._o);
+  return L.map(({ _o, ...x }) => x);
+}
+function linhasPorDia(dossie, opcoes) {
+  const d = dossie;
+  const cab = `Atendimento ${d.atendimento} · ${d.paciente.idade !== '' ? d.paciente.idade + ' anos' : 'idade não informada'}${d.paciente.sexo ? ' · ' + d.paciente.sexo : ''} · admissão ${dataBR(d.admissao)} (D1) · referência ${rotuloDia(d.diaReferencia)}${d.alta ? (d.obito ? ' · óbito' : ' · alta') + ' em ' + rotuloDia(diaDaInternacao(d.alta, d.admissao)) : ''}`;
+  return [cab, ''].concat(linhaDoTempoPorDia(d, opcoes).map(l => `${rotuloDia(l.dia)} - ${l.texto}`)).join('\n') + '\n';
+}
+
 function renderizarDossie(dossie, opcoes) {
   const op = opcoes || {};
   const d = op.cego ? cegarDossie(dossie) : dossie;
@@ -842,7 +920,7 @@ if (typeof module !== 'undefined' && module.exports) {
     DOSSIE_RETENCAO_HISTORICO_DIAS, TAMANHO_EVOLUCAO_HISTORICO, acumularHistoricoEvolucoes,
     diaDaInternacao, rotuloDia, dataBR, internacaoDoAtendimento, numerosDaPessoa, anonimizarTexto, cegarDossie,
     ehHemocultura, ehContaminanteComum, sindromeDoMaterial, grupoSindrome, notaDaCultura, conferirTrechos,
-    gruposDoSitio, suspeitaJaNotificada, DOSSIE_JANELA_MESMA_IRAS_DIAS,
+    gruposDoSitio, suspeitaJaNotificada, DOSSIE_JANELA_MESMA_IRAS_DIAS, linhaDoTempoPorDia, linhasPorDia, nomeDispositivo,
     lerEvolucoesCompletasTasy, montarDossieInternacao, sinaisDoDossie, eventosDoDossie, renderizarDossie,
     selecionarInternacoesParaDossie, amostrarDossies, PROMPT_AVALIACAO_DOSSIE, VERSAO_PROMPT_DOSSIE
   };

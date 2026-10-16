@@ -5672,6 +5672,19 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       dos.VERSAO_PROMPT_DOSSIE === 3 && /MESMA infecção/.test(dos.PROMPT_AVALIACAO_DOSSIE) && /até D16/.test(dos.PROMPT_AVALIACAO_DOSSIE) && /UMA hemocultura isolada NÃO é IPCS/.test(dos.PROMPT_AVALIACAO_DOSSIE)
       && /- MÉDIA:/.test(dos.PROMPT_AVALIACAO_DOSSIE) && /COPIADO EXATAMENTE/.test(dos.PROMPT_AVALIACAO_DOSSIE) && /INFECÇÃO NA ADMISSÃO:/.test(dos.PROMPT_AVALIACAO_DOSSIE));
 
+    /* Suspeita da IA × IRAS já notificada na janela */
+    const casosReg = [{ id: 'IRA-1', topografia: 'Pneumonia associada à ventilação mecânica (PAV)', dia: 8, status: 'confirmado' },
+      { id: 'IRA-2', topografia: 'IPCS com confirmação laboratorial', dia: 12, status: 'descartado' },
+      { id: 'IRA-3', topografia: 'ISC incisional profunda', dia: 15, status: 'em investigação' }];
+    verificar('IA "pneumonia/PAV" em D15 = mesma IRAS notificada em D8 (≤14 d) → desconsiderar',
+      dos.suspeitaJaNotificada({ sitio: 'pneumonia/PAV', dia: 'D15' }, casosReg).situacao === 'ja_notificada');
+    verificar('mesma pneumonia mas D25 (>14 d do caso) → suspeita nova', dos.suspeitaJaNotificada({ sitio: 'PAV', dia: 'D25' }, casosReg).situacao === 'nova');
+    verificar('sítio diferente (ITU) → suspeita nova', dos.suspeitaJaNotificada({ sitio: 'ITU', dia: 'D10' }, casosReg).situacao === 'nova');
+    verificar('IPCS que a CCIH descartou não suprime: vai com aviso', dos.suspeitaJaNotificada({ sitio: 'IPCS', dia: 'D12' }, casosReg).situacao === 'descartada_antes');
+    verificar('em investigação também conta como notificada; dia ilegível casa pelo sítio',
+      dos.suspeitaJaNotificada({ sitio: 'infecção de sítio cirúrgico (ISC)', dia: 'não dá para saber' }, casosReg).caso.id === 'IRA-3');
+    verificar('sítio "nenhum" nunca é suprimido', dos.suspeitaJaNotificada({ sitio: 'nenhum', dia: '' }, casosReg).situacao === 'nova');
+
     /* seleção: 5002 tem só D2 (fora, <48 h); 5003 não tem evolução; 5001 entra */
     const cand = dos.selecionarInternacoesParaDossie(bancos, { hoje });
     verificar('seleção: só internados com ≥48 h e evolução na janela', cand.length === 1 && cand[0].atendimento === '5001' && cand[0].escore === d.escore, cand.map(c => c.atendimento));

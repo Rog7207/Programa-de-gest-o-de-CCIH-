@@ -11,7 +11,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { conferirTrechos } = require(path.join(__dirname, '..', 'js', 'dossie.js'));
+const { conferirTrechos, suspeitaJaNotificada } = require(path.join(__dirname, '..', 'js', 'dossie.js'));
 
 const pasta = process.argv.slice(2).find(a => !a.startsWith('--'));
 const arg = nome => { const a = process.argv.find(x => x.startsWith('--' + nome + '=')); return a ? a.slice(nome.length + 3) : ''; };
@@ -103,14 +103,21 @@ async function avaliar(arquivo) {
         : '- nenhum trecho citado') + '\n', 'utf-8');
     }
     const g = gabarito.get(atd);
-    resultados.push({ atendimento: atd, ...campos, segundos: res.segundos,
+    /* Mesma IRAS já notificada na janela (mesmo sítio, ±14 d): a suspeita é desconsiderada. */
+    const jaNotif = g && /alta|m[ée]dia/.test(campos.faixa) ? suspeitaJaNotificada(campos, g.iras) : { situacao: 'nova', caso: null };
+    const situacao = jaNotif.situacao === 'ja_notificada' ? `já notificada (${jaNotif.caso.id || jaNotif.caso.topografia}) — desconsiderar`
+      : jaNotif.situacao === 'descartada_antes' ? `CCIH já descartou ${jaNotif.caso.topografia} (D${jaNotif.caso.dia}) — conferir se é episódio novo`
+      : (/alta|m[ée]dia/.test(campos.faixa) ? 'para a CCIH' : '');
+    resultados.push({ atendimento: atd, ...campos, segundos: res.segundos, situacao,
       trechos: `${conf.literais}/${conf.itens.length}` + (conf.ausentes ? ` (${conf.ausentes} não achado${conf.ausentes > 1 ? 's' : ''})` : ''),
       ccih: g ? (g.iras.length ? g.iras.map(i => `${i.topografia} (D${i.dia}, ${i.status})`).join('; ') : 'nenhum caso registrado') : '' });
     if (!res.reaproveitado) console.log(`${campos.faixa} · ${campos.sitio || '-'} · ${res.segundos} s`);
   }
   fs.writeFileSync(path.join(pasta, '_avaliacao-ia.json'), JSON.stringify({ modelo, em: new Date().toISOString(), resultados }, null, 2), 'utf-8');
-  const md = [`# Avaliação por IA (${modelo})`, '', '| Atendimento | Faixa | Sítio | Dispositivo | Dia | Confiança | Trechos literais | Tempo | Registrado pela CCIH |', '|---|---|---|---|---|---|---|---|---|',
-    ...resultados.map(r => `| ${r.atendimento} | ${r.faixa} | ${r.sitio} | ${r.dispositivo} | ${r.dia} | ${r.confianca} | ${r.trechos} | ${r.segundos} s | ${r.ccih} |`)];
+  const md = [`# Avaliação por IA (${modelo})`, '', '| Atendimento | Faixa | Sítio | Dispositivo | Dia | Confiança | Trechos literais | Situação | Tempo | Registrado pela CCIH |', '|---|---|---|---|---|---|---|---|---|---|',
+    ...resultados.map(r => `| ${r.atendimento} | ${r.faixa} | ${r.sitio} | ${r.dispositivo} | ${r.dia} | ${r.confianca} | ${r.trechos} | ${r.situacao} | ${r.segundos} s | ${r.ccih} |`)];
+  const fila = resultados.filter(r => r.situacao === 'para a CCIH' || /^CCIH já descartou/.test(r.situacao)).length;
+  md.push('', `Fila para a CCIH: ${fila} de ${resultados.length} (alta/média, sem IRAS já notificada no mesmo sítio em ±14 dias).`);
   fs.writeFileSync(path.join(pasta, '_avaliacao-ia.md'), md.join('\n') + '\n', 'utf-8');
   console.log('\n' + md.join('\n'));
 })();

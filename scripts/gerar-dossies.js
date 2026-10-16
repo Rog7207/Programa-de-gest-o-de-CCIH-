@@ -101,7 +101,7 @@ fs.writeFileSync(path.join(destino, '_indice.md'), indice.join('\n') + '\n', 'ut
 /* Gabarito: o que a CCIH já registrou em cada internação (para comparar com a IA). */
 fs.writeFileSync(path.join(destino, '_gabarito.json'), JSON.stringify(escolhidos.map(c => ({
   atendimento: c.atendimento, dia: c.dia, setor: c.setor, escore: c.escore,
-  iras: c.dossie.iras.map(i => ({ topografia: i.topografia, dia: i.dia, status: i.status, criterio: i.criterio, microrganismo: i.microrganismo })),
+  iras: c.dossie.iras.map(i => ({ id: i.id, topografia: i.topografia, dia: i.dia, status: i.status, criterio: i.criterio, microrganismo: i.microrganismo })),
   culturasClassificadas: c.dossie.culturas.filter(x => x.classificacao).map(x => ({ dia: x.dia, material: x.material, microrganismo: x.microrganismo, classificacao: x.classificacao }))
 })), null, 2), 'utf-8');
 

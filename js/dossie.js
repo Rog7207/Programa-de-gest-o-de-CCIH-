@@ -744,6 +744,48 @@ function conferirTrechos(resposta, textoDossie) {
   return { itens, literais: conta('literal'), parciais: conta('parcial'), ausentes: conta('ausente') };
 }
 
+/* ---- Suspeita da IA × IRAS já notificada (pedido de 16/10/2026) ----
+   Se a CCIH já notificou a MESMA IRAS na janela de tempo, a suspeita da IA é desconsiderada:
+   mesmo grupo de sítio e início a até 14 dias do caso registrado (a mesma janela de
+   mesmoCasoIras / IRAS_JANELA_DUPLICATA_DIAS da aba Infecções). Caso que a CCIH DESCARTOU não
+   suprime — a IA pode estar vendo um episódio novo —, mas a suspeita vai com o aviso.
+   O sítio da IA é texto livre ("pneumonia/PAV", "IPCS", "pele e partes moles"); os dois
+   lados passam pelo mesmo agrupamento. */
+const DOSSIE_JANELA_MESMA_IRAS_DIAS = 14;
+function gruposDoSitio(texto) {
+  const t = _txt(texto);
+  const g = new Set();
+  if (/pneumon|\bpav\b|traqueobronq|respirat/.test(t)) g.add('pneumonia');
+  if (/ipcs|corrente sangu|bacteremia|\bsepse\b|septic/.test(t)) g.add('ipcs');
+  if (/\bitu\b|urin/.test(t)) g.add('itu');
+  if (/\bisc\b|sitio cirurg|ferida operat|incisional|orgao.?cavidade/.test(t)) g.add('isc');
+  if (/pele|partes moles|celulite/.test(t)) g.add('pele');
+  if (/abdom|peritoni/.test(t)) g.add('abdominal');
+  if (/gastro|clostr|diarr/.test(t)) g.add('gastrointestinal');
+  if (/\bsnc\b|meningit|ventriculit|nervoso central/.test(t)) g.add('snc');
+  return g;
+}
+const _STATUS_NOTIFICADA = /confirmad|digitad|investiga/;
+/* campos = { sitio, dia } da resposta da IA; casos = [{ id, topografia, dia, status }] da
+   internação. Devolve { situacao: 'nova' | 'ja_notificada' | 'descartada_antes', caso }. */
+function suspeitaJaNotificada(campos, casos, janelaDias) {
+  const janela = janelaDias === undefined ? DOSSIE_JANELA_MESMA_IRAS_DIAS : janelaDias;
+  const gIA = gruposDoSitio((campos || {}).sitio);
+  if (!gIA.size) return { situacao: 'nova', caso: null };
+  const diaIA = Number((/D(-?\d+)/.exec(String((campos || {}).dia || '')) || [])[1]);
+  const casam = (casos || []).filter(c => {
+    const gC = gruposDoSitio(c.topografia);
+    if (![...gIA].some(g => gC.has(g))) return false;
+    if (!isFinite(diaIA) || c.dia === null || c.dia === undefined || c.dia === '') return true;
+    return Math.abs(Number(c.dia) - diaIA) <= janela;
+  });
+  const notificado = casam.find(c => _STATUS_NOTIFICADA.test(_txt(c.status)));
+  if (notificado) return { situacao: 'ja_notificada', caso: notificado };
+  const descartado = casam.find(c => /descart/.test(_txt(c.status)));
+  if (descartado) return { situacao: 'descartada_antes', caso: descartado };
+  return { situacao: 'nova', caso: null };
+}
+
 /* Instrução para o modelo: a pergunta, a convenção temporal e os critérios principais por
    sítio. Semente para a CCIH VALIDAR contra os critérios nacionais vigentes (ANVISA, Critérios
    Diagnósticos de IRAS) — não é documento oficial. A saída pedida é estruturada para a
@@ -800,6 +842,7 @@ if (typeof module !== 'undefined' && module.exports) {
     DOSSIE_RETENCAO_HISTORICO_DIAS, TAMANHO_EVOLUCAO_HISTORICO, acumularHistoricoEvolucoes,
     diaDaInternacao, rotuloDia, dataBR, internacaoDoAtendimento, numerosDaPessoa, anonimizarTexto, cegarDossie,
     ehHemocultura, ehContaminanteComum, sindromeDoMaterial, grupoSindrome, notaDaCultura, conferirTrechos,
+    gruposDoSitio, suspeitaJaNotificada, DOSSIE_JANELA_MESMA_IRAS_DIAS,
     lerEvolucoesCompletasTasy, montarDossieInternacao, sinaisDoDossie, eventosDoDossie, renderizarDossie,
     selecionarInternacoesParaDossie, amostrarDossies, PROMPT_AVALIACAO_DOSSIE, VERSAO_PROMPT_DOSSIE
   };

@@ -2317,11 +2317,68 @@ function preClassificarCultura(cultura) {
 function culturaDoPainel(cultura) {
   if (cultura.StatusRevisao === 'descartada') return false;
   const classe = String(cultura.AvaliacaoCCIH || '').trim();
-  if (cultura.StatusRevisao === 'triagem' || CLASSES_TRIAGEM.includes(classe)) return false;
+  /* A triagem esconde só as classes de triagem (negativa, colonização, água…). A regra
+     D1–D3 também marca 'triagem', mas com "Presente na admissão": essa cultura CONTINUA no
+     painel/perfil — é infecção do paciente, só não precisa de revisão manual. */
+  if (CLASSES_TRIAGEM.includes(classe) || (cultura.StatusRevisao === 'triagem' && !classe)) return false;
   /* "na"/"nao"/"-" no campo do microrganismo é cultura negativa digitada à mão, não germe:
      não entra no painel nem no perfil por mais que tenha uma classificação positiva colada
      pela importação. */
   return !!germeDaCultura(cultura.Microrganismo);
+}
+
+/* ---- Regra D1–D3: cultura colhida até o 3º dia da internação = PRESENTE NA ADMISSÃO ----
+   Decisão da CCIH do HNSC (16/10/2026): a cultura pedida na emergência muitas vezes só é
+   colhida (ou só chega ao internista) no 2º–3º dia — até D3 não é infecção nova. Medido no
+   banco: das 946 culturas de D1–D3 classificadas pela CCIH, 92,7% eram admissão; as IRAS que
+   escapariam são quase todas READMISSÃO (alta ≤30 d antes) ou CIRURGIA recente — essas duas
+   situações ficam como EXCEÇÃO e continuam pendentes para a CCIH (com o motivo). Com as
+   exceções, 3,6% das IRAS seriam classificadas como admissão (vs. 8,6% sem elas).
+   Só mexe em cultura PENDENTE, positiva e sem classificação; marca StatusRevisao 'triagem'
+   (foi o app, não a CCIH — reversível na revisão) e TriagemRegra com o motivo. NÃO esconde
+   multirresistente da tela de isolamentos (detectarMultirresistentes ignora a classificação). */
+const REGRA_ADMISSAO_ATE_DIA = 3;
+const REGRA_ADMISSAO_READMISSAO_DIAS = 30;
+const REGRA_ADMISSAO_CIRURGIA_DIAS = 90;
+function avaliarRegraAdmissao(cultura, internacoesDoPaciente, cirurgiasDoPaciente) {
+  const r = internacaoNaColeta(cultura.Prontuario, cultura.DataColeta, internacoesDoPaciente || []);
+  if (!r || r.situacao !== 'internado' || r.diaDaInternacao > REGRA_ADMISSAO_ATE_DIA) return null;
+  const adm = String(r.internacao.DataInternacao).slice(0, 10);
+  const coleta = String(cultura.DataColeta).slice(0, 10);
+  const previa = (internacoesDoPaciente || []).filter(i => i !== r.internacao && /^\d{4}-/.test(String(i.DataAlta || '')))
+    .map(i => diasDesde(i.DataAlta, adm)).filter(d => d !== null && d >= 0 && d <= REGRA_ADMISSAO_READMISSAO_DIAS)
+    .sort((a, b) => a - b)[0];
+  const cirurgia = (cirurgiasDoPaciente || []).map(c => diasDesde(c.DataCirurgia, coleta))
+    .filter(d => d !== null && d >= 0 && d <= REGRA_ADMISSAO_CIRURGIA_DIAS).sort((a, b) => a - b)[0];
+  const excecoes = [];
+  if (previa !== undefined) excecoes.push(`readmissão (alta ${previa} d antes)`);
+  if (cirurgia !== undefined) excecoes.push(cirurgia === 0 ? 'cirurgia no dia da coleta' : `cirurgia ${cirurgia} d antes`);
+  return { dia: r.diaDaInternacao, excecoes };
+}
+function aplicarRegraAdmissao(culturas, internacoes, cirurgias) {
+  const porPront = (lista, campo) => {
+    const m = new Map();
+    for (const x of (lista || [])) { const p = normalizarProntuario(x.Prontuario); if (!p) continue; if (!m.has(p)) m.set(p, []); m.get(p).push(x); }
+    return m;
+  };
+  const intPor = porPront(internacoes), cirPor = porPront(cirurgias);
+  let classificadas = 0, excecoes = 0;
+  for (const c of (culturas || [])) {
+    if (c.StatusRevisao !== 'pendente' || String(c.AvaliacaoCCIH || '').trim() || !germeDaCultura(c.Microrganismo)) continue;
+    const p = normalizarProntuario(c.Prontuario);
+    const r = avaliarRegraAdmissao(c, intPor.get(p) || [], cirPor.get(p) || []);
+    if (!r) continue;
+    if (r.excecoes.length) {
+      c.TriagemRegra = `avaliar: coleta em D${r.dia}, mas ${r.excecoes.join(' e ')} (exceção à regra D1–D${REGRA_ADMISSAO_ATE_DIA})`;
+      excecoes++;
+    } else {
+      c.AvaliacaoCCIH = 'Presente na admissão';
+      c.StatusRevisao = 'triagem';
+      c.TriagemRegra = `regra D1–D${REGRA_ADMISSAO_ATE_DIA}: coleta em D${r.dia}`;
+      classificadas++;
+    }
+  }
+  return { classificadas, excecoes };
 }
 
 /* Agrupa culturas REPETIDAS: o mesmo paciente costuma ter o mesmo germe em várias amostras
@@ -4629,7 +4686,7 @@ if (typeof module !== 'undefined' && module.exports) {
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,
-    preClassificarCultura, culturaDoPainel, germeDaCultura, agruparCulturasRepetidas, indiceSepse, culturaDeProtocoloSepse, JANELA_CULTURA_SEPSE,
+    preClassificarCultura, culturaDoPainel, aplicarRegraAdmissao, avaliarRegraAdmissao, REGRA_ADMISSAO_ATE_DIA, REGRA_ADMISSAO_READMISSAO_DIAS, REGRA_ADMISSAO_CIRURGIA_DIAS, germeDaCultura, agruparCulturasRepetidas, indiceSepse, culturaDeProtocoloSepse, JANELA_CULTURA_SEPSE,
     prepararRelatorio, adesaoHigiene, tipoPrecaucao, encerrarIsolamentosAusentes, encerrarIsolamentosPorSaida, seguiuProtocoloEmpirico, dataDoRelatorio, vincularAvaliacaoAPrescricao,
     momentoCanonico, categoriaProfissional, normalizarObservacaoHigiene, MOMENTOS_OMS,
     principioAtivo, aplicarObitos,

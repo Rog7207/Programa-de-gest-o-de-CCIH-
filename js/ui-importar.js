@@ -203,6 +203,13 @@ async function importarArquivoAutomatico(arquivo) {
       }
     }
     banco[definicao.abaDestino] = existentes;
+    /* Regra D1–D3 (16/10/2026): cultura colhida até D3 = presente na admissão, salvo
+       readmissão ≤30 d ou cirurgia ≤90 d (ficam pendentes com o motivo). */
+    let regraAdmissao = null;
+    if (tipo === 'culturas' && novos.length) {
+      const [bPacRegra, bCirRegra] = await Promise.all([lerBanco('pacientes'), lerBanco('cirurgias').catch(() => ({ cirurgias: [] }))]);
+      regraAdmissao = aplicarRegraAdmissao(existentes.slice(existentes.length - novos.length), bPacRegra.internacoes || [], bCirRegra.cirurgias || []);
+    }
     if (definicao.permiteAntibiograma) banco.sensibilidade = (banco.sensibilidade || []).concat(linhasSensibilidade);
     if (linhasAvaliacao.length) banco.avaliacoes = (banco.avaliacoes || []).concat(linhasAvaliacao);
     if (novos.length || internacoesAtualizadas || reparadasAntigas || conciliados) await gravarBanco(definicao.destino, banco);
@@ -238,6 +245,7 @@ async function importarArquivoAutomatico(arquivo) {
         + (naoCirurgias ? `, ${fmtInt(naoCirurgias)} não-cirurgias excluídas` : '')
         + (semIdentificacao ? `, ${fmtInt(semIdentificacao)} sem identificação excluídas` : '')
         + (prontuariosCorrigidos ? `, ${fmtInt(prontuariosCorrigidos)} prontuários corrigidos pelo atendimento ou pelo nome + data` : '')
+        + (regraAdmissao && (regraAdmissao.classificadas || regraAdmissao.excecoes) ? `, ${fmtInt(regraAdmissao.classificadas)} colhidas até D3 classificadas como admissão (${fmtInt(regraAdmissao.excecoes)} exceções para avaliar)` : '')
         + (conciliacao ? `, ${fmtInt(conciliados)} casos conciliados (digitados)` + (conciliacao.duplicadasNoTasy.length ? `, ⚠ ${fmtInt(conciliacao.duplicadasNoTasy.length)} duplicadas no Tasy ignoradas` : '') : '')
         + (reparadasAntigas ? `, ${fmtInt(reparadasAntigas)} registros antigos reparados` : '')
         + (casaveis ? `, ${fmtInt(casaveis)} registros do laboratório passíveis de unificação` : '')
@@ -1854,6 +1862,11 @@ async function renderPasso5() {
       banco[definicao.abaDestino] = existentes;
       if (definicao.permiteAntibiograma) {
         banco.sensibilidade = (banco.sensibilidade || []).concat(linhasSensibilidade);
+      }
+      if (imp.tipo === 'culturas' && novos.length) {
+        const [bPacRegra, bCirRegra] = await Promise.all([lerBanco('pacientes'), lerBanco('cirurgias').catch(() => ({ cirurgias: [] }))]);
+        const r = aplicarRegraAdmissao(existentes.slice(existentes.length - novos.length), bPacRegra.internacoes || [], bCirRegra.cirurgias || []);
+        if (r.classificadas || r.excecoes) anotar(`Regra D1–D${REGRA_ADMISSAO_ATE_DIA}: ${fmtInt(r.classificadas)} cultura(s) colhida(s) até D${REGRA_ADMISSAO_ATE_DIA} classificada(s) como presente na admissão (revisáveis no filtro "triagem"); ${fmtInt(r.excecoes)} exceção(ões) — readmissão ou cirurgia recente — ficam pendentes com o motivo. Multirresistentes continuam na tela de isolamentos.`);
       }
       await gravarBanco(definicao.destino, banco);
       anotar(`${ESQUEMAS[definicao.destino].arquivo} gravado.`);

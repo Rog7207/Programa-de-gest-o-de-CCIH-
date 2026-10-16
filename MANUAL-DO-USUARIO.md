@@ -209,6 +209,17 @@ cultura sem crescimento → **Negativa**; swab de vigilância e pesquisa de SGB 
 **Colonização**; leite e água → controles. Essas ficam com status `triagem` e **fora do
 painel** (há um seletor no relatório para vê-las quando quiser).
 
+**Regra D1–D3 (presente na admissão):** cultura positiva colhida **até o 3º dia** da
+internação entra automaticamente como **Presente na admissão** (status `triagem`, com o
+motivo "regra D1–D3: coleta em D2"), porque a cultura pedida na emergência costuma ser
+colhida ou chegar ao internista só no 2º–3º dia. **Exceções**, que continuam pendentes com o
+motivo em destaque: **readmissão** (alta há 30 dias ou menos) e **cirurgia** nos 90 dias
+anteriores à coleta. No histórico, a regra concordou com a CCIH em 93% das culturas de
+D1–D3 e, com as exceções, deixaria passar 3,6% das IRAS. Ela continua no painel e no perfil
+microbiológico (é infecção do paciente) e é reversível na revisão. **Multirresistentes
+classificados pela regra continuam na tela de isolamentos.** Para aplicar às culturas já
+pendentes: `node scripts/aplicar-regra-admissao.js` (simula; `--aplicar` grava com backup).
+
 O que sobra na **fila de revisão** (aba Culturas) é o que pode ser infecção. Clique na
 linha: o detalhe abre embaixo dela, com antibiograma e o botão "Ver ficha do paciente".
 Classifique: Presente na admissão / IRAS (pede topografia e dispositivo) / Colonização /

@@ -253,7 +253,9 @@ async function montarCulturas(conteudo) {
       }
       if (c.StatusRevisao === 'triagem') {
         cartao.append(el('p', { class: 'texto-suave' },
-          `Triagem automática: ${c.AvaliacaoCCIH}. Classifique abaixo se discordar.`));
+          `Triagem automática: ${c.AvaliacaoCCIH}${c.TriagemRegra ? ' (' + c.TriagemRegra + ')' : ''}. Classifique abaixo se discordar.`));
+      } else if (/^avaliar:/.test(String(c.TriagemRegra || ''))) {
+        cartao.append(el('p', { class: 'aviso-erro-texto' }, '⚠ ' + c.TriagemRegra.replace(/^avaliar:\s*/, 'Colhida cedo, ')));
       }
       const selAval = el('select', {}, CLASSIFICACOES_CULTURA.filter(o => o !== 'Negativa')
         .map(o => el('option', { value: o }, o === 'Não é cultura' ? 'Não é cultura (descartar)' : o)));

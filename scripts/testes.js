@@ -5710,6 +5710,52 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     verificar('lerEvolucoesCompletasTasy: reconhece, pula inativadas, data ISO', rc.reconhecido && rc.evolucoes.length === 1 && rc.evolucoes[0].DataEvolucao === '2026-10-15', rc);
   }
 
+  /* == 103. Regra D1–D3: cultura colhida até D3 = presente na admissão (16/10/2026) == */
+  {
+    console.log('\n== 103. Regra D1–D3 (presente na admissão) com exceções ==');
+    global.internacaoNaColeta = imp.internacaoNaColeta; global.diasDesde = imp.diasDesde;
+    const internacoes = [
+      { Prontuario: '10', Atendimento: 'A1', DataInternacao: '2026-10-01', DataAlta: '' },
+      { Prontuario: '20', Atendimento: 'A2', DataInternacao: '2026-10-01', DataAlta: '' },
+      { Prontuario: '20', Atendimento: 'A0', DataInternacao: '2026-09-10', DataAlta: '2026-09-20' },   /* alta 11 d antes */
+      { Prontuario: '30', Atendimento: 'A3', DataInternacao: '2026-10-01', DataAlta: '' },
+      { Prontuario: '40', Atendimento: 'A4', DataInternacao: '2026-10-01', DataAlta: '' },
+      { Prontuario: '40', Atendimento: 'A9', DataInternacao: '2026-07-01', DataAlta: '2026-07-05' }];  /* alta 88 d antes: não é readmissão */
+    const cirurgias = [{ Prontuario: '30', DataCirurgia: '2026-09-15' }, { Prontuario: '40', DataCirurgia: '2026-05-01' }];
+    const c = (id, pront, data, extra) => ({ ID_Cultura: id, Prontuario: pront, DataColeta: data, Material: 'Hemocultura', Microrganismo: 'Klebsiella pneumoniae', StatusRevisao: 'pendente', AvaliacaoCCIH: '', ...(extra || {}) });
+    const culturas = [
+      c('K1', '10', '2026-10-03'),                                           /* D3 → admissão */
+      c('K2', '10', '2026-10-04'),                                           /* D4 → fica pendente */
+      c('K3', '20', '2026-10-02'),                                           /* D2, readmissão → exceção */
+      c('K4', '30', '2026-10-01'),                                           /* D1, cirurgia 16 d antes → exceção */
+      c('K5', '40', '2026-10-02'),                                           /* D2; alta 88 d e cirurgia 154 d antes: fora das janelas → admissão */
+      c('K6', '10', '2026-10-01', { StatusRevisao: 'avaliada', AvaliacaoCCIH: 'IRAS' }),   /* humano: intocado */
+      c('K7', '10', '2026-10-01', { Microrganismo: '' }),                    /* sem germe: intocado */
+      c('K8', '99', '2026-10-01'),                                           /* sem internação: intocado */
+      c('K9', '10', '2026-10-02', { MecanismoResistencia: 'KPC' })];         /* D2 + MDR → admissão, MAS segue no isolamento */
+    const r = imp.aplicarRegraAdmissao(culturas, internacoes, cirurgias);
+    const k = id => culturas.find(x => x.ID_Cultura === id);
+    verificar('regra: D3 sem exceção vira "Presente na admissão" em triagem, com o motivo',
+      k('K1').AvaliacaoCCIH === 'Presente na admissão' && k('K1').StatusRevisao === 'triagem' && /regra D1–D3: coleta em D3/.test(k('K1').TriagemRegra), k('K1'));
+    verificar('regra: D4 não é tocada', k('K2').StatusRevisao === 'pendente' && !k('K2').AvaliacaoCCIH && !k('K2').TriagemRegra);
+    verificar('exceção: readmissão ≤30 d fica pendente com o motivo', k('K3').StatusRevisao === 'pendente' && !k('K3').AvaliacaoCCIH && /readmissão \(alta 11 d antes\)/.test(k('K3').TriagemRegra), k('K3').TriagemRegra);
+    verificar('exceção: cirurgia ≤90 d fica pendente com o motivo', k('K4').StatusRevisao === 'pendente' && /cirurgia 16 d antes/.test(k('K4').TriagemRegra), k('K4').TriagemRegra);
+    verificar('fora das janelas (alta 88 d, cirurgia 154 d) vira admissão', k('K5').AvaliacaoCCIH === 'Presente na admissão');
+    verificar('classificação humana, cultura sem germe e paciente sem internação ficam intocados',
+      k('K6').AvaliacaoCCIH === 'IRAS' && k('K6').StatusRevisao === 'avaliada' && k('K7').StatusRevisao === 'pendente' && !k('K7').TriagemRegra && k('K8').StatusRevisao === 'pendente' && !k('K8').TriagemRegra);
+    verificar('contagem: 3 classificadas, 2 exceções', r.classificadas === 3 && r.excecoes === 2, r);
+    verificar('cultura da regra continua no painel/perfil (é infecção do paciente), só sai da fila de pendentes',
+      imp.culturaDoPainel(k('K1')) === true && k('K1').StatusRevisao !== 'pendente');
+    verificar('triagem negativa continua fora do painel', imp.culturaDoPainel({ StatusRevisao: 'triagem', AvaliacaoCCIH: 'Negativa', Microrganismo: 'X' }) === false
+      && imp.culturaDoPainel({ StatusRevisao: 'triagem', AvaliacaoCCIH: 'Colonização', Microrganismo: 'Klebsiella pneumoniae' }) === false);
+    const al = require(path.join(__dirname, '..', 'js', 'alertas.js'));
+    const mdr = al.detectarMultirresistentes(culturas, [], '2026-10-16', 30);
+    const pend = al.pendenciasIsolamento(culturas, [], [], [], '2026-10-16', 30);
+    verificar('MDR classificado como admissão pela regra CONTINUA na tela de isolamentos',
+      mdr.some(m => m.ID_Cultura === 'K9') && pend.some(m => m.ID_Cultura === 'K9') && k('K9').AvaliacaoCCIH === 'Presente na admissão', pend.map(m => m.ID_Cultura));
+    verificar('reaplicar não muda nada (idempotente)', (() => { const r2 = imp.aplicarRegraAdmissao(culturas, internacoes, cirurgias); return r2.classificadas === 0 && r2.excecoes === 2; })());
+  }
+
   console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
   process.exit(falharam ? 1 : 0);
 })();

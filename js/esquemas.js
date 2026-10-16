@@ -12,7 +12,9 @@ const ESQUEMAS = {
   culturas: {
     arquivo: 'culturas.xlsx',
     abas: {
-      culturas: ['ID_Cultura', 'IDOrigem', 'Prontuario', 'DataColeta', 'DataResultado', 'Setor', 'Material', 'Sitio', 'Resultado', 'Microrganismo', 'MecanismoResistencia', 'Antibiograma', 'StatusRevisao', 'AvaliacaoCCIH', 'CriadoPor', 'CriadoEm', 'ID_IRAS'],
+      culturas: ['ID_Cultura', 'IDOrigem', 'Prontuario', 'DataColeta', 'DataResultado', 'Setor', 'Material', 'Sitio', 'Resultado', 'Microrganismo', 'MecanismoResistencia', 'Antibiograma', 'StatusRevisao', 'AvaliacaoCCIH', 'CriadoPor', 'CriadoEm', 'ID_IRAS',
+        /* Regra automática que classificou (ou mandou avaliar por exceção) — 16/10/2026. */
+        'TriagemRegra'],
       sensibilidade: ['ID_Cultura', 'Antibiotico', 'Resultado']
     }
   },

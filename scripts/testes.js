@@ -5688,6 +5688,33 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     verificar('por dia: dispositivos da visita à UTI entram como "em uso" no dia', /D10 - Em uso na visita à UTI: cateter venoso central, ventilação mecânica/.test(txtDias), txtDias.match(/.*visita.*/g));
     verificar('nome do dispositivo por extenso', dos.nomeDispositivo('CVCJD') === 'cateter venoso central' && dos.nomeDispositivo('TOT') === 'ventilação mecânica (tubo orotraqueal)' && dos.nomeDispositivo('SVD') === 'sonda vesical de demora');
 
+    /* Categorias do Tasy, fisioterapia, notas da CCIH e dispositivos no texto */
+    verificar('categorias: E médica, N4 fisioterapia, EC nota da CCIH, TNU outra; código novo com "FISIOTERAPIA" vira fisioterapia',
+      dos.categoriaEvolucao('E').grupo === 'medica' && dos.categoriaEvolucao('N4').grupo === 'fisioterapia' && dos.categoriaEvolucao('EC').grupo === 'ccih'
+      && dos.categoriaEvolucao('TNU').grupo === 'outra' && dos.categoriaEvolucao('NP12', 'FISIOTERAPIA MANHA - ausculta').grupo === 'fisioterapia');
+    verificar('dispositivo no texto: instalação/retirada da enfermagem e checklist da CCIH',
+      JSON.stringify(dos.dispositivosNoTexto('Realizada retirada do dispositivo Cateter Venoso Central')) === '[{"acao":"retirada","nome":"Cateter Venoso Central"}]'
+      && dos.dispositivosNoTexto('Realizada instalação do dispositivo Sonda Vesical de Demora.')[0].acao === 'insercao'
+      && dos.nomeDispositivo(dos.dispositivosNoTexto('Avaliação: CCIH- HNSC - Inserção Cateter Venoso Central Adultos Local da iserção: : Subclavia')[0].nome) === 'cateter venoso central');
+    {
+      const b4 = JSON.parse(JSON.stringify(bancos));
+      b4.evolucoes_historico.evolucoes.push(
+        { Atendimento: '5001', Prontuario: '777', Setor: 'UTI Adulto', Categoria: 'ENF', DataEvolucao: '2026-10-09', Texto: 'Realizada instalação do dispositivo Sonda Vesical de Demora' },
+        { Atendimento: '5001', Prontuario: '777', Setor: 'UTI Adulto', Categoria: 'ENF', DataEvolucao: '2026-10-12', Texto: 'Realizada retirada do dispositivo Sonda Vesical de Demora' },
+        { Atendimento: '5001', Prontuario: '777', Setor: 'UTI Adulto', Categoria: 'CHL', DataEvolucao: '2026-10-11', Texto: 'Avaliação: CCIH- HNSC - Inserção Cateter Venoso Central Adultos Local da iserção: : Subclavia' },
+        { Atendimento: '5001', Prontuario: '777', Setor: 'UTI Adulto', Categoria: 'EC', DataEvolucao: '2026-10-11', Texto: 'Pelo SCIH: caso de PAV confirmado, notificar.' },
+        { Atendimento: '5001', Prontuario: '777', Setor: 'UTI Adulto', Categoria: 'N4', DataEvolucao: '2026-10-11', Texto: 'FISIOTERAPIA MANHA - secreção espessa amarelada em grande quantidade' },
+        { Atendimento: '5001', Prontuario: '777', Setor: 'UTI Adulto', Categoria: 'TNU', DataEvolucao: '2026-10-11', Texto: 'Triagem Nutricional Peso 80 kg' });
+      const d4 = dos.montarDossieInternacao(b4, '5001', { hoje });
+      const t4 = dos.linhasPorDia(d4);
+      verificar('por dia: instalação e retirada registradas pela enfermagem viram eventos de dispositivo',
+        /D9 - Inserção de sonda vesical de demora \(registro da enfermagem\)/.test(t4) && /D12 - Retirada de sonda vesical de demora/.test(t4), t4.match(/.*(Inserção|Retirada).*/g));
+      verificar('por dia: checklist da CCIH vira inserção de CVC, mas o texto da nota da CCIH não entra',
+        /D11 - Inserção de cateter venoso central \(checklist de inserção\)/.test(t4) && !/Pelo SCIH|PAV confirmado|Avaliação: CCIH/.test(t4), t4);
+      verificar('por dia: fisioterapia entra; triagem nutricional fica de fora', /D11 - Fisioterapia \(UTI Adulto\): FISIOTERAPIA MANHA/.test(t4) && !/Triagem Nutricional/.test(t4));
+      verificar('dossiê cego também tira a nota da CCIH; o completo mantém', !/Pelo SCIH/.test(dos.renderizarDossie(d4, { cego: true })) && /Pelo SCIH/.test(dos.renderizarDossie(d4)));
+    }
+
     /* Suspeita da IA × IRAS já notificada na janela */
     const casosReg = [{ id: 'IRA-1', topografia: 'Pneumonia associada à ventilação mecânica (PAV)', dia: 8, status: 'confirmado' },
       { id: 'IRA-2', topografia: 'IPCS com confirmação laboratorial', dia: 12, status: 'descartado' },

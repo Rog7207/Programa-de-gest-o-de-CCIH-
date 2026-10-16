@@ -197,7 +197,51 @@ function sindromeDoMaterial(material, sitio) {
 /* Ferida operatória e pele/partes moles se confundem na prática: mesmo grupo. */
 function grupoSindrome(s) { return s === 'ferida operatoria' || s === 'pele e partes moles' ? 'pele/ferida' : (s || ''); }
 
-const ROTULO_CATEGORIA_EVOLUCAO = { E: 'evolução médica', ENF: 'evolução de enfermagem', SAE: 'SAE (enfermagem)', Tec: 'técnico de enfermagem', SRM: 'sala de recuperação/medicação', EV: 'evolução', P: 'parecer', R: 'residente' };
+/* Categorias de evolução do Tasy do HNSC (Ie evolução clínica), mapeadas pelo CONTEÚDO em
+   16/10/2026. grupo: medica | enfermagem | fisioterapia | ccih | outra. As de grupo 'outra'
+   (nutrição, plano multidisciplinar, boletim à família, agência transfusional…) não pesam para
+   infecção e ficam fora do formato por dia. As da CCIH ('Pelo SCIH', notificação do NHE,
+   checklist de inserção) são JULGAMENTO/registro da própria CCIH: nunca entram em dossiê cego —
+   o checklist de inserção vira evento de dispositivo. Código desconhecido: entra, pelo texto
+   (FISIOTERAPIA → fisioterapia). */
+const CATEGORIAS_EVOLUCAO = {
+  E: ['evolução médica', 'medica'], SRM: ['evolução médica (UTI)', 'medica'], SUO: ['evolução médica (UTI)', 'medica'],
+  USF: ['evolução médica (UTI)', 'medica'], SUN: ['evolução médica (UTI)', 'medica'], SU: ['evolução médica (admissão/especialidade)', 'medica'],
+  AF: ['anamnese de admissão', 'medica'], AU: ['admissão na UTI', 'medica'], Cur: ['evolução médica', 'medica'], R: ['pedido de parecer', 'medica'],
+  ENF: ['evolução de enfermagem', 'enfermagem'], Tec: ['técnico de enfermagem', 'enfermagem'], SAE: ['SAE (enfermagem)', 'enfermagem'],
+  EM: ['anotação de enfermagem', 'enfermagem'], ES: ['cuidados com a pele (enfermagem)', 'enfermagem'],
+  N3: ['fisioterapia', 'fisioterapia'], N4: ['fisioterapia', 'fisioterapia'], NP7: ['fisioterapia', 'fisioterapia'], NP9: ['fisioterapia', 'fisioterapia'],
+  EV: ['fisioterapia (avaliação funcional)', 'fisioterapia'],
+  FIS: ['fluxo de isolamento (síndrome gripal)', 'enfermagem'],
+  EC: ['nota da CCIH', 'ccih'], NHE: ['núcleo de epidemiologia', 'ccih'], CHL: ['checklist da CCIH', 'ccih'],
+  HDU: ['plano multidisciplinar', 'outra'], RM: ['round multidisciplinar', 'outra'], TNU: ['triagem nutricional', 'outra'],
+  EN: ['avaliação nutricional', 'outra'], TSF: ['nutrição', 'outra'], PCO: ['cuidados paliativos', 'outra'], FCH: ['farmácia clínica', 'outra'],
+  SAC: ['aviso cirúrgico', 'outra'], C19: ['boletim à família', 'outra'], P: ['parecer (psicologia/serviço social)', 'outra'],
+  CME: ['anotação de exame de imagem', 'outra'], EAG: ['agência transfusional', 'outra']
+};
+function categoriaEvolucao(codigo, texto) {
+  const c = CATEGORIAS_EVOLUCAO[String(codigo || '').trim()];
+  if (c) return { rotulo: c[0], grupo: c[1] };
+  if (/^\W*fisioterapia/i.test(String(texto || '')) || /fisioterapia/i.test(String(texto || '').slice(0, 60))) return { rotulo: 'fisioterapia', grupo: 'fisioterapia' };
+  if (/^\W*pelo s?cih/i.test(String(texto || ''))) return { rotulo: 'nota da CCIH', grupo: 'ccih' };
+  return { rotulo: codigo ? 'evolução (' + codigo + ')' : 'evolução', grupo: 'medica' };
+}
+const ROTULO_CATEGORIA_EVOLUCAO = Object.fromEntries(Object.entries(CATEGORIAS_EVOLUCAO).map(([k, v]) => [k, v[0]]));
+
+/* Dispositivos registrados de forma PADRONIZADA no texto (vale também nas enfermarias, onde
+   não há o cabeçalho do CTI): "Realizada instalação/retirada do dispositivo Cateter Venoso
+   Central" (enfermagem) e o checklist da CCIH "Inserção Cateter Venoso Central …". Devolve
+   [{ acao: 'insercao'|'retirada', nome }]. */
+function dispositivosNoTexto(texto) {
+  const t = String(texto || '');
+  const r = [];
+  const re = /realizad[ao]\s+(?:a\s+)?(instala[cç][aã]o|inser[cç][aã]o|retirada|remo[cç][aã]o)\s+d[oa]\s+dispositivo\s+([^.;\n"]{3,60})/gi;
+  let m;
+  while ((m = re.exec(t))) r.push({ acao: /retirad|remo/i.test(m[1]) ? 'retirada' : 'insercao', nome: m[2].trim() });
+  const ck = /ccih\s*-\s*hnsc\s*-\s*inser[cç][aã]o\s+([a-zà-ú ]{5,50}?)(?:\s+adult|\s+pedi|\s+neonat|\s+local|\s+i\.|$)/i.exec(t);
+  if (ck && ck[1]) r.push({ acao: 'insercao', nome: ck[1].trim() });
+  return r;
+}
 
 /* Monta o dossiê de UMA internação. opcoes: { hoje, janelaEvolucoesDias, evolucoesExtras } —
    evolucoesExtras são evoluções lidas de um export cru (lerEvolucoesCompletasTasy), que se somam
@@ -352,7 +396,8 @@ function montarDossieInternacao(bancos, atendimento, opcoes) {
       const vitais = vitaisFn(texto, { neoPed });
       evolucoes.push({ data: d, dia: dia(d), admissao: daAdmissao, sindromes: (sinais.sindromes || []).filter(s => s !== 'geral'),
         trechosSinais: (sinais.sinais || []).map(s => s.rotulo + ': ' + s.trecho), setor: String(e.Setor || '').trim(), categoria: String(e.Categoria || '').trim(),
-        rotuloCategoria: ROTULO_CATEGORIA_EVOLUCAO[String(e.Categoria || '').trim()] || (e.Categoria ? 'evolução (' + e.Categoria + ')' : 'evolução'),
+        rotuloCategoria: categoriaEvolucao(e.Categoria, texto).rotulo, grupoCategoria: categoriaEvolucao(e.Categoria, texto).grupo,
+        dispositivosTexto: dispositivosNoTexto(texto),
         texto: anonimizarTexto(texto, nomes), sinais: sinais.resumo, sinaisLista: sinais.sinais.map(s => s.rotulo), sinaisFortes: sinais.fortes, negados: sinais.negados,
         vitaisAlterados: vitais.alterados || [], template: templateFn(texto), _ordem: Number(e._ordem) || 0 });
     }
@@ -468,6 +513,13 @@ function sinaisDoDossie(d) {
   const dispAtivos = d.dispositivos.filter(x => !x.retirada || x.retirada >= d.referencia);
   const dispVisita = new Set(); d.visitasUti.forEach(v => v.dispositivos.forEach(x => dispVisita.add(x.replace(/\s*\(.*$/, ''))));
   const dispEvo = new Set(); d.evolucoes.forEach(e => (e.template.dispositivos || []).forEach(x => dispEvo.add(x.nome)));
+  /* instalação registrada pela enfermagem/checklist que não tem retirada depois */
+  const dispTexto = new Map();
+  d.evolucoes.slice().sort((a, b) => a.data.localeCompare(b.data)).forEach(e => (e.dispositivosTexto || []).forEach(x => {
+    const n = typeof nomeDispositivo === 'function' ? nomeDispositivo(x.nome) : x.nome;
+    if (x.acao === 'insercao') dispTexto.set(n, true); else dispTexto.delete(n);
+  }));
+  dispTexto.forEach((_, n) => dispEvo.add(n));
   const todosDisp = [...new Set(dispAtivos.map(x => x.nome).concat([...dispVisita], [...dispEvo]))].filter(Boolean);
   if (todosDisp.length) add('dispositivo_invasivo', 2, 'dispositivo invasivo: ' + todosDisp.join(', '));
   if (d.emUTI) add('uti', 1, 'paciente em UTI/CTI');
@@ -531,6 +583,8 @@ function notaDaCultura(c) {
 function cegarDossie(d) {
   const triagem = (typeof CLASSES_TRIAGEM !== 'undefined' && CLASSES_TRIAGEM) || ['Negativa', 'Colonização', 'Água', 'Leite', 'Controle ambiental/alimentar'];
   const c = { ...d, iras: [],
+    /* notas da CCIH ("Pelo SCIH…", NHE, checklist) são julgamento/registro da própria CCIH */
+    evolucoes: (d.evolucoes || []).filter(e => e.grupoCategoria !== 'ccih'),
     culturas: d.culturas.map(x => ({ ...x, idIras: '', classificacao: triagem.includes(x.classificacao) ? x.classificacao : '', status: triagem.includes(x.classificacao) ? x.status : '' })),
     sinais: d.sinais.filter(s => s.codigo !== 'iras_registrada') };
   c.escore = c.sinais.reduce((s, f) => s + f.peso, 0);
@@ -575,6 +629,8 @@ function linhaDoTempoPorDia(dossie, opcoes) {
   const op = opcoes || {};
   const d = cegarDossie(dossie);
   const L = [];
+  /* Grupos de evolução que entram (padrão: médica, enfermagem e fisioterapia). */
+  const grupos = new Set(op.gruposEvolucao || ['medica', 'enfermagem', 'fisioterapia']);
   const add = (data, dia, tipo, texto, ordem) => { if (_ehData(data) && texto) L.push({ dia, data: _d10(data), tipo, texto, _o: ordem }); };
   add(d.admissao, 1, 'admissao', `Admissão hospitalar${d.setores.length ? ' em ' + d.setores[0].setor : ''}${d.clinica ? ' (clínica: ' + d.clinica + ')' : ''}`, 0);
   for (const p of d.internacoesPrevias) add(p.entrada, diaDaInternacao(p.entrada, d.admissao), 'internacao_previa', `Internação anterior${p.alta ? ', alta em ' + dataBR(p.alta) : ''}`, 0);
@@ -589,6 +645,12 @@ function linhaDoTempoPorDia(dossie, opcoes) {
   };
   d.dispositivos.forEach(x => { addDisp(x.nome, x.instalacao); if (x.retirada) add(x.retirada, x.diaRetirada, 'dispositivo', 'Retirada de ' + nomeDispositivo(x.nome), 3); });
   d.evolucoes.forEach(e => (e.template.dispositivos || []).forEach(x => addDisp(x.nome, _dataCurta(x.data, e.data), 'citado na evolução')));
+  /* registro padronizado da enfermagem e checklist de inserção da CCIH (o checklist sai do
+     dossiê cego como texto, mas o FATO da inserção é dado, não julgamento) */
+  (dossie.evolucoes || []).forEach(e => (e.dispositivosTexto || []).forEach(x => {
+    if (x.acao === 'insercao') addDisp(x.nome, e.data, e.grupoCategoria === 'ccih' ? 'checklist de inserção' : 'registro da enfermagem');
+    else { const rot = nomeDispositivo(x.nome); const k = 'ret|' + rot + '|' + e.data; if (!vistosDisp.has(k)) { vistosDisp.add(k); add(e.data, e.dia, 'dispositivo', 'Retirada de ' + rot, 3); } }
+  }));
   /* Visita da CCIH à UTI: o que estava EM USO naquele dia (sem data de inserção). */
   d.visitasUti.forEach(v => { if (v.dispositivos.length) add(v.data, v.dia, 'dispositivo', 'Em uso na visita à UTI: ' + v.dispositivos.map(x => nomeDispositivo(x.replace(/\s*\(.*$/, ''))).join(', '), 3); });
   d.culturas.forEach(c => {
@@ -605,7 +667,7 @@ function linhaDoTempoPorDia(dossie, opcoes) {
   });
   d.sepse.forEach(s => add(s.data, s.dia, 'sepse', 'Protocolo de sepse aberto' + (s.foco ? ', foco ' + s.foco : ''), 6));
   d.vitais.forEach(v => add(v.data, v.dia, 'vitais', 'Sinais vitais alterados: ' + v.alterados.join(', '), 7));
-  d.evolucoes.forEach(e => add(e.data, e.dia, 'evolucao', `${e.rotuloCategoria.charAt(0).toUpperCase() + e.rotuloCategoria.slice(1)}${e.setor ? ' (' + e.setor + ')' : ''}: ${String(e.texto).replace(/\s+/g, ' ').trim()}`, 9));
+  d.evolucoes.filter(e => grupos.has(e.grupoCategoria || 'medica')).forEach(e => add(e.data, e.dia, 'evolucao', `${e.rotuloCategoria.charAt(0).toUpperCase() + e.rotuloCategoria.slice(1)}${e.setor ? ' (' + e.setor + ')' : ''}: ${String(e.texto).replace(/\s+/g, ' ').trim()}`, 9));
   if (d.alta) add(d.alta, diaDaInternacao(d.alta, d.admissao), d.obito ? 'obito' : 'alta', d.obito ? 'Óbito' : 'Alta hospitalar', 10);
   L.sort((a, b) => a.data.localeCompare(b.data) || a._o - b._o);
   return L.map(({ _o, ...x }) => x);
@@ -920,7 +982,7 @@ if (typeof module !== 'undefined' && module.exports) {
     DOSSIE_RETENCAO_HISTORICO_DIAS, TAMANHO_EVOLUCAO_HISTORICO, acumularHistoricoEvolucoes,
     diaDaInternacao, rotuloDia, dataBR, internacaoDoAtendimento, numerosDaPessoa, anonimizarTexto, cegarDossie,
     ehHemocultura, ehContaminanteComum, sindromeDoMaterial, grupoSindrome, notaDaCultura, conferirTrechos,
-    gruposDoSitio, suspeitaJaNotificada, DOSSIE_JANELA_MESMA_IRAS_DIAS, linhaDoTempoPorDia, linhasPorDia, nomeDispositivo,
+    gruposDoSitio, suspeitaJaNotificada, DOSSIE_JANELA_MESMA_IRAS_DIAS, linhaDoTempoPorDia, linhasPorDia, nomeDispositivo, categoriaEvolucao, dispositivosNoTexto, CATEGORIAS_EVOLUCAO,
     lerEvolucoesCompletasTasy, montarDossieInternacao, sinaisDoDossie, eventosDoDossie, renderizarDossie,
     selecionarInternacoesParaDossie, amostrarDossies, PROMPT_AVALIACAO_DOSSIE, VERSAO_PROMPT_DOSSIE
   };

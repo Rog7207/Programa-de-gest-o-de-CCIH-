@@ -169,6 +169,34 @@ function acumularHistoricoEvolucoes(novas, antigas, internacoes, hoje, opcoes) {
   return { evolucoes: saida, novas: n, descartadas };
 }
 
+/* Texto minúsculo sem acento, COM espaços (normalizarTexto tira os espaços). */
+const _txt = v => String(v == null ? '' : v).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+const _germeNorm = v => _txt(v).replace(/\b(spp?|sp)\.?$/, '').trim();
+
+function ehHemocultura(material) { return /hemocult|\bsangue\b/.test(_txt(material)); }
+
+/* Contaminantes comuns de pele (lista do critério de IPCS). */
+const RE_CONTAMINANTE_COMUM = /coagulase[- ]?negativ|\bscn\b|staphylococcus (epidermidis|haemolyticus|hominis|capitis|warneri|saprophyticus|simulans|cohnii)|corynebacterium|difteroide|^bacillus(?! anthracis)|micrococcus|cutibacterium|propionibacterium|viridans|aerococcus|rhodococcus/;
+function ehContaminanteComum(microrganismo) { return RE_CONTAMINANTE_COMUM.test(_txt(microrganismo)); }
+
+/* Síndrome a que o material pertence — mesmas síndromes de sinaisDeInfeccaoNaEvolucao. Swab
+   de vigilância e materiais sem sítio ficam '' (não definem infecção de sítio). */
+function sindromeDoMaterial(material, sitio) {
+  const t = _txt((material || '') + ' ' + (sitio || ''));
+  if (/swab|vigilancia|leite|agua/.test(t)) return '';
+  if (/hemocult|sangue|ponta de cateter/.test(t)) return 'corrente sanguinea';
+  if (/urocult|urina/.test(t)) return 'urinaria';
+  if (/traqueal|escarro|broncoalveolar|aspirado|pleural|pulmon/.test(t)) return 'respiratoria';
+  if (/ferida operat|incis|sitio cirurg/.test(t)) return 'ferida operatoria';
+  if (/partes moles|tecido|abscesso|pele|osso|articular|ferida/.test(t)) return 'pele e partes moles';
+  if (/ascit|peritone|abdom|bile|biliar/.test(t)) return 'abdominal';
+  if (/liquor|lcr/.test(t)) return 'snc';
+  if (/fezes/.test(t)) return 'gastrointestinal';
+  return '';
+}
+/* Ferida operatória e pele/partes moles se confundem na prática: mesmo grupo. */
+function grupoSindrome(s) { return s === 'ferida operatoria' || s === 'pele e partes moles' ? 'pele/ferida' : (s || ''); }
+
 const ROTULO_CATEGORIA_EVOLUCAO = { E: 'evolução médica', ENF: 'evolução de enfermagem', SAE: 'SAE (enfermagem)', Tec: 'técnico de enfermagem', SRM: 'sala de recuperação/medicação', EV: 'evolução', P: 'parecer', R: 'residente' };
 
 /* Monta o dossiê de UMA internação. opcoes: { hoje, janelaEvolucoesDias, evolucoesExtras } —
@@ -271,7 +299,10 @@ function montarDossieInternacao(bancos, atendimento, opcoes) {
     .map(c => {
       const sens = sensPorCultura.get(c.ID_Cultura) || [];
       const classe = String(c.AvaliacaoCCIH || '').trim();
-      const positiva = !!germe(c.Microrganismo) && !classesTriagem.includes(classe) && classe !== 'Não é cultura' && classe !== 'Contaminação';
+      /* Positiva = cresceu germe e não é triagem automática (negativa, colonização, água…).
+         "Contaminação" é JULGAMENTO da CCIH: não entra aqui (senão o modo cego vazaria); o
+         contaminante comum de pele é marcado de forma determinística mais abaixo. */
+      const positiva = !!germe(c.Microrganismo) && !classesTriagem.includes(classe) && classe !== 'Não é cultura';
       return { id: c.ID_Cultura, data: _d10(c.DataColeta), dia: dia(c.DataColeta), resultado: _d10(c.DataResultado), material: String(c.Material || '').trim(), sitio: String(c.Sitio || '').trim(),
         setor: String(c.Setor || '').trim(), microrganismo: String(c.Microrganismo || '').trim(), mecanismo: String(c.MecanismoResistencia || '').trim(),
         classificacao: classe, status: String(c.StatusRevisao || '').trim(), positiva, idIras: String(c.ID_IRAS || '').trim(),
@@ -307,7 +338,11 @@ function montarDossieInternacao(bancos, atendimento, opcoes) {
       const daPessoaMesma = !e.Atendimento && conjunto.has(_np(e.Prontuario));
       if (!doAtendimento && !daPessoaMesma) continue;
       const d = _d10(e.DataEvolucao);
-      if (!_ehData(d) || d < inicioEvo || d > referencia || d < _somaDias(admissao, -1)) continue;
+      /* D1–D2 entram SEMPRE, mesmo fora da janela de 21 dias: é nelas que está o motivo da
+         internação, e sem isso a IA chama de IRAS a infecção que veio de casa (1ª rodada do
+         Qwen, 16/10/2026: "pneumonia aspirativa" em D2 virou PAV em D7). */
+      const daAdmissao = _ehData(d) && d >= _somaDias(admissao, -1) && d <= _somaDias(admissao, DOSSIE_DIA_IRAS - 2);
+      if (!_ehData(d) || (d < inicioEvo && !daAdmissao) || d > referencia || d < _somaDias(admissao, -1)) continue;
       const texto = String(e.Texto || '').trim();
       if (!texto) continue;
       const chave = d + '|' + _nt(texto).slice(0, 200);
@@ -315,7 +350,8 @@ function montarDossieInternacao(bancos, atendimento, opcoes) {
       vistos.add(chave);
       const sinais = sinaisFn(texto);
       const vitais = vitaisFn(texto, { neoPed });
-      evolucoes.push({ data: d, dia: dia(d), setor: String(e.Setor || '').trim(), categoria: String(e.Categoria || '').trim(),
+      evolucoes.push({ data: d, dia: dia(d), admissao: daAdmissao, sindromes: (sinais.sindromes || []).filter(s => s !== 'geral'),
+        trechosSinais: (sinais.sinais || []).map(s => s.rotulo + ': ' + s.trecho), setor: String(e.Setor || '').trim(), categoria: String(e.Categoria || '').trim(),
         rotuloCategoria: ROTULO_CATEGORIA_EVOLUCAO[String(e.Categoria || '').trim()] || (e.Categoria ? 'evolução (' + e.Categoria + ')' : 'evolução'),
         texto: anonimizarTexto(texto, nomes), sinais: sinais.resumo, sinaisLista: sinais.sinais.map(s => s.rotulo), sinaisFortes: sinais.fortes, negados: sinais.negados,
         vitaisAlterados: vitais.alterados || [], template: templateFn(texto), _ordem: Number(e._ordem) || 0 });
@@ -338,8 +374,53 @@ function montarDossieInternacao(bancos, atendimento, opcoes) {
   }
   const vitais = [...vitaisPorDia.entries()].sort((x, y) => x[0].localeCompare(y[0])).map(([d, s]) => ({ data: d, dia: dia(d), alterados: [...s] }));
 
+  /* ---- contaminante comum de pele em hemocultura de amostra ÚNICA ----
+     Critério de IPCS: contaminante comum (SCN, Corynebacterium, Bacillus, Micrococcus,
+     Cutibacterium, Streptococcus viridans) só conta com DUAS hemoculturas de coletas separadas
+     no mesmo dia ou em dias consecutivos. Amostra única é marcada (1ª rodada: o Qwen chamou de
+     IPCS um SCN isolado que a CCIH tinha descartado). */
+  for (const c of culturas) {
+    if (!c.positiva || !ehHemocultura(c.material) || !ehContaminanteComum(c.microrganismo)) continue;
+    const g = _germeNorm(c.microrganismo);
+    const pares = culturas.filter(o => o !== c && o.positiva && ehHemocultura(o.material) && _germeNorm(o.microrganismo) === g
+      && o.dia !== null && c.dia !== null && Math.abs(o.dia - c.dia) <= 1);
+    c.contaminanteUnico = pares.length === 0;
+    c.contaminanteComum = true;
+  }
+
+  /* ---- infecção PRESENTE NA ADMISSÃO (D1–D2) ----
+     Síndromes nomeadas nas evoluções de D1–D2, culturas positivas colhidas até D2 e antibiótico
+     terapêutico iniciado até D2. Cultura do MESMO sítio colhida até 14 dias depois do último dia
+     da janela de admissão (D2 + 14 = D16) é marcada como provável MESMA infecção (prazo de
+     infecção repetida do critério nacional/NHSN). */
+  const limiteAdm = DOSSIE_DIA_IRAS - 1;              /* D2 */
+  const evoAdm = evolucoes.filter(e => e.dia !== null && e.dia <= limiteAdm);
+  const culAdm = culturas.filter(c => c.positiva && c.dia !== null && c.dia <= limiteAdm && sindromeDoMaterial(c.material, c.sitio));
+  const cursosAdm = cursos.filter(c => !c.profilaxia && c.diaInicio !== null && c.diaInicio <= limiteAdm);
+  cursosAdm.forEach(c => { c.naAdmissao = true; });
+  const gruposAdm = new Set();
+  evoAdm.forEach(e => e.sindromes.forEach(s => gruposAdm.add(grupoSindrome(s))));
+  culAdm.forEach(c => gruposAdm.add(grupoSindrome(sindromeDoMaterial(c.material, c.sitio))));
+  gruposAdm.delete('');
+  for (const c of culturas) {
+    if (c.dia === null) continue;
+    const grupo = grupoSindrome(sindromeDoMaterial(c.material, c.sitio));
+    if (c.dia <= limiteAdm) c.naAdmissao = true;
+    else if (grupo && gruposAdm.has(grupo) && c.dia <= limiteAdm + 14) c.mesmaInfeccaoDaAdmissao = true;
+  }
+  const infeccaoAdmissao = {
+    grupos: [...gruposAdm],
+    evolucoesDisponiveis: evoAdm.length,
+    /* um trecho por dia + rótulo (as evoluções repetem o mesmo cabeçalho de manhã/tarde/noite) */
+    trechos: (() => { const vistos = new Set(); return evoAdm.flatMap(e => e.trechosSinais.filter(t => !/^(febre|leucocitose|antibiótico iniciado)/i.test(t))
+      .filter(t => { const k = e.dia + '|' + t.split(':')[0]; if (vistos.has(k)) return false; vistos.add(k); return true; })
+      .map(t => `${rotuloDia(e.dia)}: ${t}`)).slice(0, 8); })(),
+    culturas: [...new Set(culAdm.map(c => `${c.microrganismo} em ${c.material} (${rotuloDia(c.dia)})`))],
+    cursos: [...new Set(cursosAdm.map(c => `${c.antibiotico} desde ${rotuloDia(c.diaInicio)}`))]
+  };
+
   const dossie = {
-    atendimento: atd, prontuario: pront, outrosNumeros: numeros.filter(n => n !== pront),
+    atendimento: atd, prontuario: pront, outrosNumeros: numeros.filter(n => n !== pront), infeccaoAdmissao,
     paciente: { idade, sexo: String(cadastro.Sexo || '').trim() },
     admissao, alta, obito, desfecho: String(intern.Desfecho || '').trim(), clinica: String(intern.Clinica || '').trim(),
     referencia, diaReferencia: diaRef, hoje, janelaEvolucoesDias: janelaEvo, inicioJanelaEvolucoes: inicioEvo,
@@ -368,8 +449,16 @@ function sinaisDoDossie(d) {
   if (prolongados.length) add('atb_prolongado', 1, 'curso ≥10 dias: ' + prolongados.map(c => `${c.antibiotico} (${c.dias} d)`).join(', '));
   const colhidas = d.culturas.filter(c => c.dia !== null && c.dia >= DOSSIE_DIA_IRAS);
   if (colhidas.length) add('cultura_apos_d3', 2, `${colhidas.length} cultura(s) colhida(s) a partir de D3`);
-  const positivas = colhidas.filter(c => c.positiva);
+  const positivas = colhidas.filter(c => c.positiva && !c.contaminanteUnico && !c.mesmaInfeccaoDaAdmissao);
   if (positivas.length) add('cultura_positiva_apos_d3', 4, 'cultura positiva a partir de D3: ' + positivas.map(c => `${c.microrganismo} em ${c.material || 'material não informado'} (${rotuloDia(c.dia)})`).join('; '));
+  const unicas = colhidas.filter(c => c.contaminanteUnico);
+  if (unicas.length) add('contaminante_amostra_unica', 0, 'contaminante comum de pele em hemocultura de amostra ÚNICA (não satisfaz IPCS sozinho): ' + unicas.map(c => `${c.microrganismo} (${rotuloDia(c.dia)})`).join('; '));
+  const adm = d.infeccaoAdmissao || { grupos: [] };
+  if (adm.grupos.length) {
+    const mesmas = colhidas.filter(c => c.mesmaInfeccaoDaAdmissao && c.positiva);
+    add('infeccao_na_admissao', -3, `infecção já presente na admissão (D1–D2): ${adm.grupos.join(', ')}` + (mesmas.length
+      ? ' — culturas posteriores do MESMO sítio até D16 são provavelmente a mesma infecção: ' + mesmas.map(c => `${c.microrganismo} em ${c.material} (${rotuloDia(c.dia)})`).join('; ') : ''));
+  }
   const mdr = d.culturas.filter(c => c.mecanismo);
   if (mdr.length) add('multirresistente', 1, 'mecanismo de resistência: ' + [...new Set(mdr.map(c => c.mecanismo))].join(', '));
   const cirNaInternacao = d.cirurgias.filter(c => c.dia !== null && c.dia >= 1);
@@ -407,11 +496,11 @@ function eventosDoDossie(d) {
   d.cirurgias.forEach(c => add(c.data, c.dia, 'cirurgia', 'Cirurgia: ' + c.procedimento, [c.procedimentoOriginal !== c.procedimento ? c.procedimentoOriginal : '', c.contaminacao, c.asa ? 'ASA ' + c.asa : '', c.duracaoMin ? c.duracaoMin + ' min' : '', c.carater, c.profilaxia ? 'profilaxia: ' + c.profilaxia : '', c.isc ? 'ISC registrada: ' + c.isc : ''].filter(Boolean).join(' · ')));
   d.dispositivos.forEach(x => { add(x.instalacao, x.diaInstalacao, 'dispositivo', 'Instalado: ' + x.nome, x.categoria); if (x.retirada) add(x.retirada, x.diaRetirada, 'dispositivo', 'Retirado: ' + x.nome, x.dias !== '' ? x.dias + ' dias de uso' : ''); });
   d.cursos.forEach(c => {
-    add(c.inicio, c.diaInicio, 'antibiotico', (c.profilaxia ? 'Profilaxia cirúrgica: ' : 'Início de ') + c.antibiotico, [c.dose, c.via, c.indicacao, c.setor, c.emCurso ? `em curso (${c.dias} d)` : ''].filter(Boolean).join(' · '));
+    add(c.inicio, c.diaInicio, 'antibiotico', (c.profilaxia ? 'Profilaxia cirúrgica: ' : 'Início de ') + c.antibiotico, [c.dose, c.via, c.indicacao, c.setor, c.naAdmissao ? 'iniciado na admissão' : '', c.emCurso ? `em curso (${c.dias} d)` : ''].filter(Boolean).join(' · '));
     if (!c.emCurso) add(c.fim, c.diaFim, 'antibiotico', 'Fim de ' + c.antibiotico, `${c.dias} dia(s)` + (c.parecer ? ' · ' + c.parecer : ''));
   });
   d.culturas.forEach(c => add(c.data, c.dia, c.positiva ? 'cultura_positiva' : 'cultura', c.microrganismo ? `Cultura: ${c.microrganismo}` : 'Cultura colhida (sem crescimento/sem resultado)',
-    [c.material, c.sitio, c.setor, c.mecanismo, c.classificacao ? 'CCIH: ' + c.classificacao : (c.status ? 'revisão: ' + c.status : ''), c.resultado ? 'resultado ' + dataBR(c.resultado) : '', c.resistentes.length ? 'R: ' + c.resistentes.join(', ') : '', c.sensiveis.length ? 'S: ' + c.sensiveis.join(', ') : ''].filter(Boolean).join(' · ')));
+    [c.material, c.sitio, c.setor, c.mecanismo, c.classificacao ? 'CCIH: ' + c.classificacao : (c.status ? 'revisão: ' + c.status : ''), c.resultado ? 'resultado ' + dataBR(c.resultado) : '', c.resistentes.length ? 'R: ' + c.resistentes.join(', ') : '', c.sensiveis.length ? 'S: ' + c.sensiveis.join(', ') : '', notaDaCultura(c) ? '⚠ ' + notaDaCultura(c) : ''].filter(Boolean).join(' · ')));
   d.sepse.forEach(s => add(s.data, s.dia, 'sepse', 'Protocolo de sepse (' + s.confirmada + ')', [s.setor, s.foco, s.news ? 'NEWS ' + s.news : ''].filter(Boolean).join(' · ')));
   d.visitasUti.forEach(v => add(v.data, v.dia, 'visita_uti', 'Visita da CCIH à UTI', [v.dispositivos.join(', '), v.suspeita ? 'suspeita de IRAS: ' + v.suspeita : '', v.observacoes].filter(Boolean).join(' · ')));
   d.precaucoes.forEach(p => { add(p.inicio, p.dia, 'isolamento', 'Precaução de ' + (p.tipo || 'contato'), p.motivo); if (p.fim) add(p.fim, diaDaInternacao(p.fim, d.admissao), 'isolamento', 'Precaução encerrada', p.tipo); });
@@ -421,6 +510,16 @@ function eventosDoDossie(d) {
   const ordem = { internacao_previa: 0, admissao: 1, transferencia: 2, cirurgia: 3, dispositivo: 4, antibiotico: 5, cultura: 6, cultura_positiva: 6, sepse: 7, visita_uti: 8, isolamento: 9, iras: 10, vitais: 11, alta: 12, obito: 12 };
   ev.sort((x, y) => x.data.localeCompare(y.data) || (ordem[x.tipo] || 0) - (ordem[y.tipo] || 0));
   return ev;
+}
+
+/* Observação determinística de uma cultura (vai na tabela e na linha do tempo). */
+function notaDaCultura(c) {
+  const n = [];
+  if (c.naAdmissao && c.positiva) n.push('colhida em D1–D2: infecção/colonização PRESENTE NA ADMISSÃO');
+  if (c.mesmaInfeccaoDaAdmissao && c.positiva) n.push('mesmo sítio da infecção presente na admissão, até D16: provável MESMA infecção, não IRAS nova');
+  if (c.contaminanteUnico) n.push('contaminante comum de pele em hemocultura de amostra ÚNICA: não satisfaz IPCS sozinho');
+  else if (c.contaminanteComum && ehHemocultura(c.material)) n.push('contaminante comum de pele com 2+ hemoculturas em dias próximos');
+  return n.join('; ');
 }
 
 /* Texto do dossiê (Markdown), pronto para o modelo. Sem nome, sem autor. */
@@ -455,6 +554,28 @@ function renderizarDossie(dossie, opcoes) {
   if (d.internacoesPrevias.length) L.push(`Readmissão: ${d.internacoesPrevias.length} internação(ões) nos 90 dias anteriores (${d.internacoesPrevias.map(p => dataBR(p.entrada) + '→' + (p.alta ? dataBR(p.alta) : '?')).join('; ')}).`);
   L.push('');
 
+  const adm = d.infeccaoAdmissao || { grupos: [], trechos: [], culturas: [], cursos: [], evolucoesDisponiveis: 0 };
+  L.push('## Infecção presente na admissão (D1–D2)');
+  L.push('');
+  if (adm.grupos.length || adm.culturas.length || adm.cursos.length) {
+    if (adm.grupos.length) L.push(`- Síndrome(s) infecciosa(s) já na admissão: **${adm.grupos.join(', ')}**. Infecção do MESMO sítio até D16 é provavelmente a MESMA infecção (não é IRAS nova).`);
+    adm.trechos.forEach(t => L.push(`- ${t}`));
+    if (adm.culturas.length) L.push(`- Culturas positivas colhidas até D2: ${adm.culturas.join('; ')}`);
+    if (adm.cursos.length) L.push(`- Antibiótico terapêutico iniciado até D2 (tratamento de infecção da admissão): ${adm.cursos.join('; ')}`);
+  } else {
+    L.push('- Nenhuma infecção documentada em D1–D2 nas evoluções, culturas e antibióticos disponíveis.');
+  }
+  /* Sem evolução de D1–D2 (comum enquanto o histórico acumula), quem decide é o que foi FEITO
+     na admissão: antibiótico terapêutico ou cultura positiva em D1–D2 sugerem infecção que veio
+     de fora; sem nada disso, infecção na admissão é improvável. (2ª rodada, 16/10/2026: o aviso
+     genérico rebaixava para MÉDIA as IRAS verdadeiras.) */
+  if (!adm.evolucoesDisponiveis) {
+    L.push(adm.cursos.length || adm.culturas.length
+      ? '- Não há evolução de D1–D2 neste dossiê (motivo da internação desconhecido), MAS houve antibiótico terapêutico e/ou cultura positiva em D1–D2: é possível que já houvesse infecção na admissão.'
+      : '- Não há evolução de D1–D2 neste dossiê, mas também NÃO houve antibiótico terapêutico nem cultura positiva em D1–D2: infecção presente na admissão é improvável.');
+  }
+  L.push('');
+
   L.push('## Sinais de atenção (triagem automática, não é diagnóstico)');
   L.push('');
   if (d.sinais.length) d.sinais.forEach(s => L.push(`- ${s.texto}`)); else L.push('- nenhum sinal automático');
@@ -478,16 +599,16 @@ function renderizarDossie(dossie, opcoes) {
   if (d.cursos.length) {
     L.push('| Antibiótico | Início | Fim | Dias | Dose/via | Indicação registrada | Observação |');
     L.push('|---|---|---|---|---|---|---|');
-    d.cursos.forEach(c => L.push(`| ${c.antibiotico} | ${rotuloDia(c.diaInicio)} (${dataBR(c.inicio)}) | ${c.emCurso ? 'em curso' : rotuloDia(c.diaFim) + ' (' + dataBR(c.fim) + ')'} | ${c.dias} | ${[c.dose, c.via].filter(Boolean).join(' ')} | ${c.indicacao} | ${[c.profilaxia ? 'provável profilaxia cirúrgica' : '', c.parecer].filter(Boolean).join('; ')} |`));
+    d.cursos.forEach(c => L.push(`| ${c.antibiotico} | ${rotuloDia(c.diaInicio)} (${dataBR(c.inicio)}) | ${c.emCurso ? 'em curso' : rotuloDia(c.diaFim) + ' (' + dataBR(c.fim) + ')'} | ${c.dias} | ${[c.dose, c.via].filter(Boolean).join(' ')} | ${c.indicacao} | ${[c.profilaxia ? 'provável profilaxia cirúrgica' : '', c.naAdmissao ? 'iniciado na admissão (D1–D2)' : '', c.parecer].filter(Boolean).join('; ')} |`));
   } else L.push('Nenhum antibiótico no período.');
   L.push('');
 
   L.push('## Culturas');
   L.push('');
   if (d.culturas.length) {
-    L.push('| Coleta | Material | Microrganismo | Mecanismo | Antibiograma | Classificação da CCIH |');
-    L.push('|---|---|---|---|---|---|');
-    d.culturas.forEach(c => L.push(`| ${rotuloDia(c.dia)} (${dataBR(c.data)}) | ${[c.material, c.sitio].filter(Boolean).join(' / ')} | ${c.microrganismo || 'sem crescimento / sem resultado'} | ${c.mecanismo} | ${c.resistentes.length || c.sensiveis.length ? ['R: ' + c.resistentes.join(', '), 'S: ' + c.sensiveis.join(', ')].filter(x => !/: $/.test(x)).join('; ') : c.antibiogramaTexto} | ${c.classificacao || (c.status ? 'revisão ' + c.status : '')} |`));
+    L.push('| Coleta | Material | Microrganismo | Mecanismo | Antibiograma | Classificação | Observação automática |');
+    L.push('|---|---|---|---|---|---|---|');
+    d.culturas.forEach(c => L.push(`| ${rotuloDia(c.dia)} (${dataBR(c.data)}) | ${[c.material, c.sitio].filter(Boolean).join(' / ')} | ${c.microrganismo || 'sem crescimento / sem resultado'} | ${c.mecanismo} | ${c.resistentes.length || c.sensiveis.length ? ['R: ' + c.resistentes.join(', '), 'S: ' + c.sensiveis.join(', ')].filter(x => !/: $/.test(x)).join('; ') : c.antibiogramaTexto} | ${c.classificacao || (c.status ? 'revisão ' + c.status : '')} | ${notaDaCultura(c)} |`));
   } else L.push('Nenhuma cultura no período.');
   L.push('');
 
@@ -511,11 +632,11 @@ function renderizarDossie(dossie, opcoes) {
     L.push('');
   }
 
-  L.push(`## Evoluções (${d.evolucoes.length}, últimos ${d.janelaEvolucoesDias} dias, ordem cronológica)`);
+  L.push(`## Evoluções (${d.evolucoes.length}: as de D1–D2 e as dos últimos ${d.janelaEvolucoesDias} dias, ordem cronológica)`);
   L.push('');
   if (!d.evolucoes.length) L.push('Nenhuma evolução disponível na janela.');
   for (const e of d.evolucoes) {
-    L.push(`### ${rotuloDia(e.dia)} · ${dataBR(e.data)} · ${e.setor || 'setor não informado'} · ${e.rotuloCategoria}`);
+    L.push(`### ${rotuloDia(e.dia)} · ${dataBR(e.data)} · ${e.setor || 'setor não informado'} · ${e.rotuloCategoria}${e.admissao ? ' · ADMISSÃO' : ''}`);
     const marcas = [];
     if (e.sinais) marcas.push('sinais no texto: ' + e.sinais);
     if (e.vitaisAlterados.length) marcas.push('vitais alterados: ' + e.vitaisAlterados.join(', '));
@@ -587,43 +708,89 @@ function amostrarDossies(candidatos, n) {
   return topo.concat(meio, fim);
 }
 
+/* Confere os trechos que o modelo citou em EVIDÊNCIAS contra o texto do dossiê (1ª rodada do
+   Qwen, 16/10/2026: ~1 em 5 "trechos literais" era paráfrase ou inventado). Para cada item:
+   'literal' (o texto aparece igual, ignorando caixa/acento/pontuação), 'parcial' (≥ 80% das
+   palavras aparecem no dossiê) ou 'ausente'. Devolve { itens, literais, parciais, ausentes }. */
+function conferirTrechos(resposta, textoDossie) {
+  const norm = v => _txt(v).replace(/[^a-z0-9%/ ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const base = ' ' + norm(textoDossie) + ' ';
+  const palavrasBase = new Set(base.split(' ').filter(Boolean));
+  const t = String(resposta || '').replace(/\*\*/g, '');
+  const m = /EVID[ÊE]NCIAS\s*:([\s\S]*?)(?:\n\s*(?:CONTRA|CONFIAN[ÇC]A|CRIT[ÉE]RIOS ATENDIDOS)\s*:|$)/i.exec(t);
+  const itens = [];
+  if (m) {
+    for (const linha of m[1].split('\n')) {
+      const l = linha.replace(/^\s*[-*•\d.)]+\s*/, '').trim();
+      if (!l) continue;
+      const aspas = [...l.matchAll(/["“”«]([^"“”»]{3,})["“”»]/g)].map(x => x[1]);
+      const dia = (/\(?\b(D-?\d+)\b\)?/.exec(l) || [])[1] || '';
+      const trechos = aspas.length ? aspas : [l.replace(/\(?\bD-?\d+\b\)?/g, '').trim()];
+      for (const tr of trechos) {
+        const n = norm(tr);
+        if (!n) continue;
+        let situacao;
+        if (base.includes(' ' + n + ' ') || base.includes(n)) situacao = 'literal';
+        else {
+          const ps = n.split(' ').filter(p => p.length >= 3);
+          const achadas = ps.filter(p => palavrasBase.has(p)).length;
+          situacao = ps.length && achadas / ps.length >= 0.8 ? 'parcial' : 'ausente';
+        }
+        itens.push({ trecho: tr, dia, situacao });
+      }
+    }
+  }
+  const conta = s => itens.filter(i => i.situacao === s).length;
+  return { itens, literais: conta('literal'), parciais: conta('parcial'), ausentes: conta('ausente') };
+}
+
 /* Instrução para o modelo: a pergunta, a convenção temporal e os critérios principais por
    sítio. Semente para a CCIH VALIDAR contra os critérios nacionais vigentes (ANVISA, Critérios
    Diagnósticos de IRAS) — não é documento oficial. A saída pedida é estruturada para a
-   conferência por amostragem ser rápida. */
+   conferência por amostragem ser rápida. Versão 2 (16/10/2026), depois da 1ª rodada do Qwen:
+   regra explícita da infecção presente na admissão, do contaminante em amostra única, faixas
+   definidas (o modelo nunca usava MÉDIA) e trechos obrigatoriamente copiados. */
+const VERSAO_PROMPT_DOSSIE = 3;
 const PROMPT_AVALIACAO_DOSSIE = `# Tarefa: avaliar probabilidade de infecção relacionada à assistência à saúde (IRAS)
 
-Você recebe o dossiê de UMA internação hospitalar: trajetória por setor, cirurgias, dispositivos invasivos, cursos de antibiótico, culturas, protocolos e o texto das evoluções clínicas (ordem cronológica). Leia tudo e responda SOMENTE no formato de saída abaixo. Você não decide nada sozinho: a Comissão de Controle de Infecção Hospitalar (CCIH) confere a sua resposta.
+Você recebe o dossiê de UMA internação hospitalar: infecção presente na admissão, trajetória por setor, cirurgias, dispositivos invasivos, cursos de antibiótico, culturas, protocolos e o texto das evoluções clínicas (ordem cronológica). Leia tudo e responda SOMENTE no formato de saída abaixo, em português. Você não decide nada sozinho: a Comissão de Controle de Infecção Hospitalar (CCIH) confere a sua resposta.
 
 ## Convenção temporal (use exatamente esta)
 - D1 = dia da admissão hospitalar. D2 = dia seguinte, e assim por diante. Dias negativos = antes da admissão.
-- Uma infecção é HOSPITALAR (IRAS) quando o primeiro sinal/sintoma ou a primeira cultura compatível ocorre em D3 ou depois, E não havia evidência de que já estava presente ou incubando na admissão (D1–D2).
-- Infecção presente em D1–D2 é COMUNITÁRIA (não é IRAS), salvo infecção de sítio cirúrgico de cirurgia anterior ou infecção claramente ligada a internação/procedimento anterior.
+- Uma infecção é HOSPITALAR (IRAS) quando o primeiro sinal/sintoma ou a primeira cultura compatível ocorre em D3 ou depois, E não havia a mesma infecção presente ou incubando na admissão (D1–D2).
 - Associada a dispositivo: o dispositivo (ventilação mecânica, cateter venoso central, sonda vesical de demora) estava em uso por mais de 2 dias consecutivos e estava presente no dia da infecção ou no dia anterior.
-- Infecção de sítio cirúrgico (ISC): até 30 dias após a cirurgia (90 dias se houver implante).
+- Infecção de sítio cirúrgico (ISC): até 30 dias após a cirurgia (90 dias se houver implante). ISC de cirurgia ANTERIOR à internação é IRAS mesmo aparecendo em D1.
+
+## Regras que você DEVE aplicar antes de concluir
+1. INFECÇÃO PRESENTE NA ADMISSÃO: leia a seção "Infecção presente na admissão (D1–D2)" e as evoluções marcadas ADMISSÃO. Se a síndrome já estava lá (ex.: "pneumonia aspirativa" em D2), uma cultura ou piora do MESMO sítio até D16 é a MESMA infecção — NÃO é IRAS. Só é IRAS se surgir um sítio DIFERENTE, ou o mesmo sítio depois de D16, ou houver melhora clara seguida de quadro novo.
+2. Antibiótico iniciado em D1–D2 trata infecção da admissão. Troca ou escalonamento desse antibiótico depois de D3, sozinho, não prova IRAS.
+3. CONTAMINANTE: estafilococo coagulase-negativo, Corynebacterium, Bacillus, Micrococcus, Cutibacterium ou Streptococcus viridans em UMA hemocultura isolada NÃO é IPCS (precisa de duas hemoculturas de coletas separadas + febre, calafrio ou hipotensão). A coluna "Observação automática" das culturas já marca isso.
+4. Cultura de vigilância (swab retal/nasal) positiva é COLONIZAÇÃO, não infecção.
+5. Se o dossiê não traz evolução de D1–D2, siga a seção "Infecção presente na admissão": sem antibiótico terapêutico nem cultura positiva em D1–D2, considere que NÃO havia infecção na admissão e avalie o quadro a partir de D3 normalmente. Com antibiótico ou cultura em D1–D2 e quadro do MESMO sítio até D16, use no máximo MÉDIA.
 
 ## Critérios principais por sítio (resumo; a CCIH valida a versão completa)
 - Pneumonia (PAV se em ventilação mecânica > 2 dias): imagem com infiltrado/consolidação novo ou progressivo E pelo menos dois de: febre (> 38 °C) ou hipotermia, leucocitose ou leucopenia, secreção traqueal/escarro purulento novo ou aumentado, piora da troca gasosa (queda de saturação, aumento de O2 ou de parâmetros ventilatórios), tosse/dispneia/taquipneia novas, ausculta com roncos/estertores novos.
-- Infecção primária de corrente sanguínea (IPCS; associada a CVC se CVC > 2 dias): hemocultura com patógeno reconhecido não relacionado a infecção em outro sítio; OU duas hemoculturas (coletas separadas) com o mesmo contaminante comum de pele (estafilococo coagulase-negativo, Bacillus, difteroides etc.) MAIS febre, calafrios ou hipotensão. Sepse clínica sem hemocultura positiva só com sinais sistêmicos e sem outro foco, com antibiótico iniciado.
+- Infecção primária de corrente sanguínea (IPCS; associada a CVC se CVC > 2 dias): hemocultura com patógeno reconhecido não relacionado a infecção em outro sítio; OU duas hemoculturas (coletas separadas) com o mesmo contaminante comum de pele MAIS febre, calafrios ou hipotensão.
 - Infecção do trato urinário (ITU; associada a SVD se SVD > 2 dias): pelo menos um sintoma (febre, urgência, polaciúria, disúria, dor suprapúbica ou lombar) E urocultura com até duas espécies e pelo menos 10^5 UFC/mL. Bacteriúria sem sintomas não é infecção.
-- Infecção de sítio cirúrgico: drenagem purulenta da incisão ou de órgão/cavidade; OU cultura positiva de secreção/tecido do sítio obtida assepticamente; OU deiscência/abertura deliberada da ferida com dor, edema, calor ou hiperemia; OU abscesso/evidência de infecção em reoperação, imagem ou exame histopatológico. Superficial (pele/subcutâneo), profunda (fáscia/músculo) ou de órgão/cavidade.
-- Pele e partes moles, infecção intra-abdominal, gastroenterite (incluindo Clostridioides difficile), infecções do sistema nervoso central e outras: sinais locais + cultura ou imagem compatível, iniciados em D3 ou depois.
+- Infecção de sítio cirúrgico: drenagem purulenta da incisão ou de órgão/cavidade; OU cultura positiva de secreção/tecido do sítio obtida assepticamente; OU deiscência/abertura deliberada da ferida com dor, edema, calor ou hiperemia; OU abscesso/evidência de infecção em reoperação, imagem ou exame histopatológico.
+- Pele e partes moles, intra-abdominal, gastroenterite (incluindo Clostridioides difficile), sistema nervoso central e outras: sinais locais + cultura ou imagem compatível, iniciados em D3 ou depois, sem estarem presentes na admissão.
 
-## Como pesar a evidência
-- Cultura positiva colhida em D3 ou depois, com sítio compatível e tratamento iniciado, pesa muito. Cultura de vigilância (swab retal/nasal) positiva é COLONIZAÇÃO, não infecção.
-- Antibiótico novo ou escalonado a partir de D3 sem explicação de profilaxia é sinal forte, mas não basta sozinho.
-- O médico assistente escrever "pneumonia", "ITU", "sepse", "infecção de ferida" a partir de D3 é sinal forte. Observe negações ("afebril", "sem sinais flogísticos", "nega").
-- Febre isolada, leucocitose isolada ou PCR elevada sem foco são sinais fracos.
-- Se a CCIH já registrou um caso de IRAS nesta internação, avalie mesmo assim como se não soubesse e diga se concorda.
+## Como escolher a FAIXA
+- ALTA: critério completo de um sítio, com início em D3 ou depois, documentado no dossiê, e NÃO explicado pela infecção da admissão, por colonização ou por contaminante. Use ALTA só quando você consegue citar os trechos que fecham o critério.
+- MÉDIA: há sinais de infecção NOVA a partir de D3 (antibiótico novo ou escalonado com sinal clínico, infecção nomeada pelo médico, cultura positiva de sítio estéril), mas falta parte do critério, OU não dá para separar da infecção da admissão.
+- BAIXA: só sinais fracos ou isolados (febre isolada, PCR/leucocitose sem foco, antibiótico sem foco descrito), OU o quadro é bem explicado pela infecção da admissão, colonização ou contaminante.
+- SEM EVIDÊNCIA: nenhum sinal de infecção a partir de D3.
+- CONFIANÇA: 80–100 só quando o dossiê é claro; 50–79 quando há dúvida; abaixo de 50 quando faltam dados.
 
-## Formato de saída (obrigatório)
+## Formato de saída (obrigatório, sem texto antes ou depois)
 FAIXA: uma de [ALTA probabilidade de IRAS | MÉDIA probabilidade de IRAS | BAIXA probabilidade de IRAS | SEM EVIDÊNCIA de infecção]
 SÍTIO PROVÁVEL: (pneumonia/PAV, IPCS, ITU, ISC, pele e partes moles, intra-abdominal, gastrointestinal, SNC, outro, nenhum)
 DISPOSITIVO ASSOCIADO: (VM, CVC, SVD, nenhum, não dá para saber)
 DIA PROVÁVEL DE INÍCIO: Dn (ou "não dá para saber")
+INFECÇÃO NA ADMISSÃO: qual síndrome já estava presente em D1–D2 (ou "nenhuma documentada") e se o quadro atual é a mesma infecção
 CRITÉRIOS ATENDIDOS: lista curta
-EVIDÊNCIAS: até 5 trechos LITERAIS do dossiê (copiados), cada um com o Dn em que aparece
-CONTRA: o que fala contra IRAS (infecção comunitária, colonização, profilaxia, negações…)
+EVIDÊNCIAS: até 5 itens, cada um com um trecho COPIADO EXATAMENTE do dossiê entre aspas, seguido do dia, ex.: - "secreção traqueal purulenta" (D7). Não traduza, não resuma, não invente: se não achar o trecho, não cite.
+CONTRA: o que fala contra IRAS (infecção da admissão, colonização, contaminante, profilaxia, negações…)
 CONFIANÇA: 0 a 100
 `;
 
@@ -632,7 +799,8 @@ if (typeof module !== 'undefined' && module.exports) {
     DOSSIE_JANELA_EVOLUCOES_DIAS, DOSSIE_ANTES_ADMISSAO_DIAS, DOSSIE_DIA_IRAS, DOSSIE_MINIMO_HORAS,
     DOSSIE_RETENCAO_HISTORICO_DIAS, TAMANHO_EVOLUCAO_HISTORICO, acumularHistoricoEvolucoes,
     diaDaInternacao, rotuloDia, dataBR, internacaoDoAtendimento, numerosDaPessoa, anonimizarTexto, cegarDossie,
+    ehHemocultura, ehContaminanteComum, sindromeDoMaterial, grupoSindrome, notaDaCultura, conferirTrechos,
     lerEvolucoesCompletasTasy, montarDossieInternacao, sinaisDoDossie, eventosDoDossie, renderizarDossie,
-    selecionarInternacoesParaDossie, amostrarDossies, PROMPT_AVALIACAO_DOSSIE
+    selecionarInternacoesParaDossie, amostrarDossies, PROMPT_AVALIACAO_DOSSIE, VERSAO_PROMPT_DOSSIE
   };
 }

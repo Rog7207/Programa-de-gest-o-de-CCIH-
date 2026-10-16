@@ -1756,7 +1756,8 @@ function internacaoNaColeta(prontuario, dataColeta, internacoes) {
    "febre". Termo FORTE = o médico já nomeou a infecção (PAV, choque séptico, IRAS…). */
 const NEGACOES_EVOLUCAO = [
   /afebril|apiretic/g,
-  /\b(sem|nega|negou|ausencia de|ausente|nao apresenta|nao ha|nao tem|nega(ndo)?)\s+(sinais? (de )?)?(febre|infec[cç][aã]o|secre[cç][aã]o|flogistic[oa]s?|purulent[oa]|leucocitose|hiperemia|piuria|deiscencia|disuria)/g
+  /* "sem presença de sinais flogísticos" (dossiê, 16/10/2026) também é negação. */
+  /\b(sem|nega|negou|ausencia de|ausente|nao apresenta|nao ha|nao tem|nega(ndo)?)\s+(presenca de\s+)?(sinais? (de )?)?(febre|infec[cç][aã]o|secre[cç][aã]o|flogistic[oa]s?|purulent[oa]|leucocitose|hiperemia|piuria|deiscencia|disuria)/g
 ];
 const SINAIS_INFECCAO = [
   /* [síndrome, rótulo, regex, forte] */

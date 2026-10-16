@@ -7,10 +7,11 @@
    já registrou.
 
    Uso: node scripts/avaliar-dossies-ollama.js <pasta-dos-dossies> [--modelo=qwen3:8b]
-        [--sem-pensar] [--refazer] [--so=1440176,1443876] */
+        [--sem-pensar] [--refazer] [--so=1440176,1443876] [--max-tokens=6000] */
 
 const fs = require('fs');
 const path = require('path');
+const { conferirTrechos } = require(path.join(__dirname, '..', 'js', 'dossie.js'));
 
 const pasta = process.argv.slice(2).find(a => !a.startsWith('--'));
 const arg = nome => { const a = process.argv.find(x => x.startsWith('--' + nome + '=')); return a ? a.slice(nome.length + 3) : ''; };
@@ -28,7 +29,7 @@ const gabarito = fs.existsSync(path.join(pasta, '_gabarito.json'))
 
 /* Contexto: ~2,8 caracteres por token em português, + folga para o raciocínio e a resposta. */
 function contextoPara(caracteres) {
-  const tokens = Math.ceil(caracteres / 2.8) + 6144;
+  const tokens = Math.ceil(caracteres / 2.8) + 7168;
   return Math.min(32768, Math.max(8192, Math.ceil(tokens / 4096) * 4096));
 }
 
@@ -40,7 +41,7 @@ function lerCampos(texto) {
   const f = faixaBruta.toUpperCase();
   const faixa = /SEM EVID/.test(f) ? 'sem evidência' : /\bALTA\b/.test(f) ? 'alta' : /M[ÉE]DIA/.test(f) ? 'média' : /BAIXA/.test(f) ? 'baixa' : '?';
   return { faixa, faixaBruta, sitio: campo('S[ÍI]TIO PROV[ÁA]VEL'), dispositivo: campo('DISPOSITIVO ASSOCIADO'),
-    dia: campo('DIA PROV[ÁA]VEL DE IN[ÍI]CIO'), confianca: (campo('CONFIAN[ÇC]A').match(/\d+/) || [''])[0] };
+    dia: campo('DIA PROV[ÁA]VEL DE IN[ÍI]CIO'), admissao: campo('INFEC[ÇC][ÃA]O NA ADMISS[ÃA]O'), confianca: (campo('CONFIAN[ÇC]A').match(/\d+/) || [''])[0] };
 }
 
 async function avaliar(arquivo) {
@@ -48,7 +49,12 @@ async function avaliar(arquivo) {
   const corpo = {
     model: modelo, stream: false,
     messages: [{ role: 'system', content: prompt }, { role: 'user', content: dossie }],
-    options: { temperature: 0.1, num_ctx: contextoPara(prompt.length + dossie.length) }
+    /* Amostragem recomendada pela Qwen para o qwen3: com raciocínio, temperatura 0,6 (perto de
+       zero o modelo entra em laço repetindo o raciocínio — visto em 16/10/2026, 11 mil tokens
+       num dossiê só); sem raciocínio, 0,7. num_predict limita o pior caso. */
+    options: { num_ctx: contextoPara(prompt.length + dossie.length), top_p: 0.8, top_k: 20,
+      temperature: flag('sem-pensar') ? 0.7 : 0.6, presence_penalty: 1.0,
+      num_predict: Number(arg('max-tokens')) || (flag('sem-pensar') ? 1500 : 6000) }
   };
   if (flag('sem-pensar')) corpo.think = false;
   const t0 = Date.now();
@@ -62,7 +68,9 @@ async function avaliar(arquivo) {
   const mThink = /<think>([\s\S]*?)<\/think>/.exec(resposta);
   const raciocinio = pensamento || (mThink ? mThink[1].trim() : '');
   resposta = resposta.replace(/<think>[\s\S]*?<\/think>/, '').trim();
-  return { resposta, raciocinio, segundos, num_ctx: corpo.options.num_ctx,
+  const cortado = j.done_reason === 'length';
+  if (cortado && !/FAIXA\s*:/i.test(resposta)) resposta = '(RESPOSTA CORTADA: o modelo atingiu o limite de tokens sem concluir)\n' + resposta;
+  return { resposta, raciocinio, segundos, cortado, num_ctx: corpo.options.num_ctx,
     tokensEntrada: j.prompt_eval_count, tokensSaida: j.eval_count };
 }
 
@@ -87,14 +95,22 @@ async function avaliar(arquivo) {
         '## Resposta', res.resposta, '', res.raciocinio ? '## Raciocínio do modelo\n\n' + res.raciocinio : ''].join('\n'), 'utf-8');
     }
     const campos = lerCampos(res.resposta);
+    /* Trechos citados × texto do dossiê: o modelo às vezes parafraseia ou inventa. */
+    const conf = conferirTrechos(res.resposta, fs.readFileSync(path.join(pasta, arq), 'utf-8'));
+    if (!res.reaproveitado) {
+      fs.appendFileSync(saida, '\n## Conferência dos trechos citados\n\n' + (conf.itens.length
+        ? conf.itens.map(i => `- [${i.situacao}] "${i.trecho}"${i.dia ? ' (' + i.dia + ')' : ''}`).join('\n')
+        : '- nenhum trecho citado') + '\n', 'utf-8');
+    }
     const g = gabarito.get(atd);
     resultados.push({ atendimento: atd, ...campos, segundos: res.segundos,
+      trechos: `${conf.literais}/${conf.itens.length}` + (conf.ausentes ? ` (${conf.ausentes} não achado${conf.ausentes > 1 ? 's' : ''})` : ''),
       ccih: g ? (g.iras.length ? g.iras.map(i => `${i.topografia} (D${i.dia}, ${i.status})`).join('; ') : 'nenhum caso registrado') : '' });
     if (!res.reaproveitado) console.log(`${campos.faixa} · ${campos.sitio || '-'} · ${res.segundos} s`);
   }
   fs.writeFileSync(path.join(pasta, '_avaliacao-ia.json'), JSON.stringify({ modelo, em: new Date().toISOString(), resultados }, null, 2), 'utf-8');
-  const md = [`# Avaliação por IA (${modelo})`, '', '| Atendimento | Faixa | Sítio | Dispositivo | Dia | Confiança | Tempo | Registrado pela CCIH |', '|---|---|---|---|---|---|---|---|',
-    ...resultados.map(r => `| ${r.atendimento} | ${r.faixa} | ${r.sitio} | ${r.dispositivo} | ${r.dia} | ${r.confianca} | ${r.segundos} s | ${r.ccih} |`)];
+  const md = [`# Avaliação por IA (${modelo})`, '', '| Atendimento | Faixa | Sítio | Dispositivo | Dia | Confiança | Trechos literais | Tempo | Registrado pela CCIH |', '|---|---|---|---|---|---|---|---|---|',
+    ...resultados.map(r => `| ${r.atendimento} | ${r.faixa} | ${r.sitio} | ${r.dispositivo} | ${r.dia} | ${r.confianca} | ${r.trechos} | ${r.segundos} s | ${r.ccih} |`)];
   fs.writeFileSync(path.join(pasta, '_avaliacao-ia.md'), md.join('\n') + '\n', 'utf-8');
   console.log('\n' + md.join('\n'));
 })();

@@ -5605,12 +5605,72 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
 
     const md = dos.renderizarDossie(d);
     verificar('render: cabeçalho com atendimento, D1 e referência D16; sem nome e sem autor', /atendimento 5001/.test(md) && /\(D1\)/.test(md) && /D16 \(16\/10\/2026\)/.test(md) && !/Maria|Souza|Dr\. X|Enf\./.test(md), md.slice(0, 300));
-    verificar('render: tem as seções principais e a evolução D6 com PAV', ['## Sinais de atenção', '## Trajetória por setor', '## Linha do tempo', '## Antibióticos', '## Culturas', '## Cirurgias e dispositivos', '## Registros da CCIH', '## Evoluções (4'].every(s => md.includes(s)) && /### D6 · 06\/10\/2026/.test(md) && /Provável PAV/.test(md), md.match(/^## .*/gm));
+    verificar('render: tem as seções principais e a evolução D6 com PAV', ['## Sinais de atenção', '## Trajetória por setor', '## Linha do tempo', '## Antibióticos', '## Culturas', '## Cirurgias e dispositivos', '## Registros da CCIH', '## Infecção presente na admissão', '## Evoluções (4'].every(s => md.includes(s)) && /### D6 · 06\/10\/2026/.test(md) && /Provável PAV/.test(md), md.match(/^## .*/gm));
     const mdCego = dos.renderizarDossie(d, { cego: true });
     verificar('modo cego: sem caso de IRAS registrado nem "CCIH JÁ registrou"; mantém suspeita da visita e a triagem automática (Colonização)',
       !/Caso de IRAS|CCIH JÁ registrou|Registros da CCIH[\s\S]*IRAS já registrado/.test(mdCego) && /suspeita de IRAS: pulmonar/.test(mdCego) && /Colonização/.test(mdCego) && d.iras.length === 1,
       mdCego.match(/.*IRAS.*/g));
     verificar('render: linha do tempo mostra profilaxia e cultura positiva com R:', /Profilaxia cirúrgica: Cefazolina/.test(md) && /Klebsiella pneumoniae.*R: MEROPENEM/.test(md));
+
+    verificar('admissão sem infecção documentada: bloco diz "nenhuma" e não há sinal infeccao_na_admissao',
+      /Nenhuma infecção documentada em D1–D2/.test(md) && !cod.includes('infeccao_na_admissao'));
+
+    /* == Correções da 1ª rodada do Qwen: admissão, contaminante único, trechos, prompt v2 == */
+    verificar('negação "sem presença de sinais flogísticos" não vira celulite', !imp.sinaisDeInfeccaoNaEvolucao('acesso: CVC sem presença de sinais flogísticos').sinais.some(x => /celulite/.test(x.rotulo)));
+    verificar('material → síndrome', dos.sindromeDoMaterial('Secreção traqueal') === 'respiratoria' && dos.sindromeDoMaterial('Hemocultura') === 'corrente sanguinea'
+      && dos.sindromeDoMaterial('Urocultura') === 'urinaria' && dos.sindromeDoMaterial('Secreção de partes moles') === 'pele e partes moles'
+      && dos.sindromeDoMaterial('Swab de vigilância') === '' && dos.grupoSindrome('ferida operatoria') === dos.grupoSindrome('pele e partes moles'));
+    verificar('contaminante comum: SCN, Corynebacterium, viridans sim; S. aureus e Bacillus anthracis não',
+      dos.ehContaminanteComum('Staphylococcus coagulase-negativo') && dos.ehContaminanteComum('Corynebacterium spp') && dos.ehContaminanteComum('Streptococcus grupo viridans')
+      && !dos.ehContaminanteComum('Staphylococcus aureus') && !dos.ehContaminanteComum('Bacillus anthracis'));
+    const b2 = JSON.parse(JSON.stringify(bancos));
+    b2.evolucoes_historico.evolucoes = [
+      { Atendimento: '5001', Prontuario: '777', Setor: 'Emergência', Categoria: 'E', DataEvolucao: '2026-09-20', Texto: 'evolução antiga fora da janela e antes da admissão' },
+      { Atendimento: '5001', Prontuario: '777', Setor: 'Emergência', Categoria: 'E', DataEvolucao: '2026-10-02', Texto: 'Internada por pneumonia aspirativa, iniciado ceftriaxona.' },
+      { Atendimento: '5001', Prontuario: '777', Setor: 'UTI Adulto', Categoria: 'E', DataEvolucao: '2026-10-06', Texto: 'Secreção traqueal purulenta.' }];
+    b2.culturas.culturas.push(
+      { ID_Cultura: 'C4', Prontuario: '777', DataColeta: '2026-10-08', Material: 'Hemocultura', Microrganismo: 'Staphylococcus coagulase-negativo', StatusRevisao: 'pendente', AvaliacaoCCIH: 'Contaminação' },
+      { ID_Cultura: 'C5', Prontuario: '777', DataColeta: '2026-10-12', Material: 'Hemocultura', Microrganismo: 'Corynebacterium spp', StatusRevisao: 'pendente' },
+      { ID_Cultura: 'C6', Prontuario: '777', DataColeta: '2026-10-13', Material: 'Hemocultura', Microrganismo: 'Corynebacterium spp', StatusRevisao: 'pendente' },
+      { ID_Cultura: 'C7', Prontuario: '777', DataColeta: '2026-10-02', Material: 'Urocultura', Microrganismo: 'Escherichia coli', StatusRevisao: 'pendente' });
+    /* janela curta (5 dias) para provar que D1–D2 entram mesmo fora dela */
+    const d2 = dos.montarDossieInternacao(b2, '5001', { hoje, janelaEvolucoesDias: 5 });
+    verificar('evolução de D2 entra mesmo fora da janela de 5 dias, marcada como admissão; a de 20/09 não',
+      d2.evolucoes.some(e => e.dia === 2 && e.admissao) && !d2.evolucoes.some(e => /antes da admissão/.test(e.texto)) && !d2.evolucoes.some(e => e.dia === 6),
+      d2.evolucoes.map(e => [e.dia, e.admissao]));
+    verificar('infecção da admissão: respiratória (texto D2) + urinária (urocultura D2)', ['respiratoria', 'urinaria'].every(g => d2.infeccaoAdmissao.grupos.includes(g)), d2.infeccaoAdmissao);
+    const cul = id => d2.culturas.find(c => c.id === id);
+    verificar('aspirado traqueal D6 = mesma infecção da admissão (≤D16); urocultura D2 = na admissão',
+      cul('C1').mesmaInfeccaoDaAdmissao && cul('C7').naAdmissao && !cul('C1').naAdmissao, [cul('C1'), cul('C7')].map(c => [c.id, c.naAdmissao, c.mesmaInfeccaoDaAdmissao]));
+    verificar('SCN em hemocultura única = contaminante único; Corynebacterium em D12 e D13 não é único',
+      cul('C4').contaminanteUnico && cul('C4').positiva && !cul('C5').contaminanteUnico && !cul('C6').contaminanteUnico);
+    const cod2 = d2.sinais.map(s => s.codigo);
+    const pos2 = (d2.sinais.find(s => s.codigo === 'cultura_positiva_apos_d3') || {}).texto || '';
+    verificar('sinais: infeccao_na_admissao (peso negativo) e contaminante_amostra_unica; positiva após D3 exclui C1 (mesma infecção) e C4 (único)',
+      cod2.includes('infeccao_na_admissao') && d2.sinais.find(s => s.codigo === 'infeccao_na_admissao').peso < 0 && cod2.includes('contaminante_amostra_unica')
+      && !/Klebsiella/.test(pos2) && !/coagulase/.test(pos2) && /Corynebacterium/.test(pos2), d2.sinais.map(s => s.codigo + ':' + s.texto.slice(0, 80)));
+    const md2 = dos.renderizarDossie(d2, { cego: true });
+    verificar('render: seção de admissão lista as síndromes; culturas com observação automática; evolução marcada ADMISSÃO; ATB "iniciado na admissão" ausente (ceftriaxona só no texto)',
+      /## Infecção presente na admissão[\s\S]*respiratoria/.test(md2) && /provável MESMA infecção/.test(md2) && /amostra ÚNICA/.test(md2) && /· ADMISSÃO/.test(md2), md2.slice(md2.indexOf('## Infecção'), md2.indexOf('## Infecção') + 400));
+    verificar('modo cego não esconde a contaminação determinística, mas esconde o rótulo "Contaminação" da CCIH',
+      /amostra ÚNICA/.test(md2) && !/\| Contaminação \|/.test(md2));
+    /* antibiótico terapêutico iniciado em D1 vira "iniciado na admissão" */
+    b2.antibioticos.prescricoes.push({ ID_Prescricao: 'P9', Prontuario: '777', Atendimento: '5001', Antibiotico: 'Ceftriaxona', Dose: '1 g 12/12h', Via: 'IV', DataInicio: '2026-10-01', DataFim: '2026-10-05' });
+    const d3 = dos.montarDossieInternacao(b2, '5001', { hoje });
+    verificar('ATB terapêutico iniciado em D1 marcado como da admissão (cefazolina de profilaxia não)',
+      d3.cursos.find(c => c.antibiotico === 'Ceftriaxona').naAdmissao && !d3.cursos.find(c => c.antibiotico === 'Cefazolina').naAdmissao && /Ceftriaxona desde D1/.test(d3.infeccaoAdmissao.cursos.join()));
+    const semAdm = dos.montarDossieInternacao({ ...b2, evolucoes: { evolucoes: [], sinais_vitais: [] }, evolucoes_historico: { evolucoes: [] } }, '5001', { hoje });
+    verificar('sem evolução de D1–D2 mas com ATB/cultura em D1–D2: avisa possível infecção na admissão', /MAS houve antibiótico terapêutico/.test(dos.renderizarDossie(semAdm)));
+    verificar('sem evolução de D1–D2 e sem ATB/cultura em D1–D2: infecção na admissão improvável', /infecção presente na admissão é improvável/.test(dos.renderizarDossie(dos.montarDossieInternacao({ ...bancos, evolucoes: { evolucoes: [], sinais_vitais: [] }, evolucoes_historico: { evolucoes: [] } }, '5001', { hoje }))));
+
+    const resp = 'FAIXA: MÉDIA\nEVIDÊNCIAS:\n- "Secreção traqueal purulenta" (D6)\n- "Fever no período" (D7)\n- Internada por pneumonia aspirativa, iniciado ceftriaxona (D2)\n- "pneumonia purulenta aspirativa traqueal" (D3)\nCONTRA: nada\nCONFIANÇA: 60';
+    const ct = dos.conferirTrechos(resp, md2);
+    verificar('conferirTrechos: literal com aspas, literal sem aspas, parcial (palavras do dossiê fora de ordem) e ausente (inventado)',
+      ct.itens.length === 4 && ct.itens[0].situacao === 'literal' && ct.itens[0].dia === 'D6' && ct.itens[1].situacao === 'ausente'
+      && ct.itens[2].situacao === 'literal' && ct.itens[3].situacao === 'parcial' && ct.literais === 2 && ct.ausentes === 1, ct.itens);
+    verificar('prompt v2: regra da admissão (mesmo sítio até D16), contaminante único, faixa MÉDIA definida, trecho copiado exatamente, campo INFECÇÃO NA ADMISSÃO',
+      dos.VERSAO_PROMPT_DOSSIE === 3 && /MESMA infecção/.test(dos.PROMPT_AVALIACAO_DOSSIE) && /até D16/.test(dos.PROMPT_AVALIACAO_DOSSIE) && /UMA hemocultura isolada NÃO é IPCS/.test(dos.PROMPT_AVALIACAO_DOSSIE)
+      && /- MÉDIA:/.test(dos.PROMPT_AVALIACAO_DOSSIE) && /COPIADO EXATAMENTE/.test(dos.PROMPT_AVALIACAO_DOSSIE) && /INFECÇÃO NA ADMISSÃO:/.test(dos.PROMPT_AVALIACAO_DOSSIE));
 
     /* seleção: 5002 tem só D2 (fora, <48 h); 5003 não tem evolução; 5001 entra */
     const cand = dos.selecionarInternacoesParaDossie(bancos, { hoje });

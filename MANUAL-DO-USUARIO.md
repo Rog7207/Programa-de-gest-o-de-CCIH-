@@ -621,6 +621,8 @@ decide nada sozinho.
   para o modelo, com a convenção temporal e os critérios principais por sítio — **semente para a
   CCIH validar**). `--n=10` dá uma amostra estratificada por escore; `--todos` gera para todos os
   internados (rotina diária); `--atendimentos=…` escolhe casos.
+- **Avaliar com o modelo local**: `node scripts/avaliar-dossies-ollama.js <pasta-dos-dossiês>` manda cada dossiê ao Ollama da própria máquina (padrão `qwen3:8b`) e grava a resposta ao lado, com a **conferência dos trechos citados** (literal, parcial ou não encontrado no dossiê). `--cego` no gerador tira as decisões da CCIH para medir a IA contra elas (`_gabarito.json`).
+- **Regras automáticas no dossiê**: o bloco **Infecção presente na admissão (D1–D2)** reúne o que já havia na entrada; cultura do mesmo sítio até D16 é marcada como provável mesma infecção, e contaminante de pele em hemocultura única é marcado como insuficiente para IPCS.
 - **Privacidade**: os dossiês saem **sem nome e sem autor**, e o nome do paciente é apagado do
   texto; nomes de terceiros escritos no corpo da evolução não são. Por isso ficam **dentro da
   pasta de dados** e só podem ir para modelo que rode localmente — nunca para nuvem sem

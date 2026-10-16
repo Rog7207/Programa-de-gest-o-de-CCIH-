@@ -424,8 +424,24 @@ function eventosDoDossie(d) {
 }
 
 /* Texto do dossiê (Markdown), pronto para o modelo. Sem nome, sem autor. */
-function renderizarDossie(d, opcoes) {
+/* Versão CEGA do dossiê (calibração, 16/10/2026): tira o que é JULGAMENTO da CCIH — casos de
+   IRAS registrados e a classificação clínica das culturas (IRAS, contaminação, presente na
+   admissão…) — para o modelo não "colar" a resposta. Fica a triagem automática (Negativa,
+   Colonização: não é julgamento) e a suspeita anotada na visita (dado de entrada que a IA
+   também terá na rotina). O gabarito sai de d.iras do dossiê completo. */
+function cegarDossie(d) {
+  const triagem = (typeof CLASSES_TRIAGEM !== 'undefined' && CLASSES_TRIAGEM) || ['Negativa', 'Colonização', 'Água', 'Leite', 'Controle ambiental/alimentar'];
+  const c = { ...d, iras: [],
+    culturas: d.culturas.map(x => ({ ...x, idIras: '', classificacao: triagem.includes(x.classificacao) ? x.classificacao : '', status: triagem.includes(x.classificacao) ? x.status : '' })),
+    sinais: d.sinais.filter(s => s.codigo !== 'iras_registrada') };
+  c.escore = c.sinais.reduce((s, f) => s + f.peso, 0);
+  c.eventos = eventosDoDossie(c);
+  return c;
+}
+
+function renderizarDossie(dossie, opcoes) {
   const op = opcoes || {};
+  const d = op.cego ? cegarDossie(dossie) : dossie;
   const L = [];
   const dRef = `${rotuloDia(d.diaReferencia)} (${dataBR(d.referencia)})`;
   L.push(`# Dossiê de internação — atendimento ${d.atendimento}`);
@@ -471,7 +487,7 @@ function renderizarDossie(d, opcoes) {
   if (d.culturas.length) {
     L.push('| Coleta | Material | Microrganismo | Mecanismo | Antibiograma | Classificação da CCIH |');
     L.push('|---|---|---|---|---|---|');
-    d.culturas.forEach(c => L.push(`| ${rotuloDia(c.dia)} (${dataBR(c.data)}) | ${[c.material, c.sitio].filter(Boolean).join(' / ')} | ${c.microrganismo || 'sem crescimento / sem resultado'} | ${c.mecanismo} | ${c.resistentes.length || c.sensiveis.length ? ['R: ' + c.resistentes.join(', '), 'S: ' + c.sensiveis.join(', ')].filter(x => !/: $/.test(x)).join('; ') : c.antibiogramaTexto} | ${c.classificacao || ('revisão ' + c.status)} |`));
+    d.culturas.forEach(c => L.push(`| ${rotuloDia(c.dia)} (${dataBR(c.data)}) | ${[c.material, c.sitio].filter(Boolean).join(' / ')} | ${c.microrganismo || 'sem crescimento / sem resultado'} | ${c.mecanismo} | ${c.resistentes.length || c.sensiveis.length ? ['R: ' + c.resistentes.join(', '), 'S: ' + c.sensiveis.join(', ')].filter(x => !/: $/.test(x)).join('; ') : c.antibiogramaTexto} | ${c.classificacao || (c.status ? 'revisão ' + c.status : '')} |`));
   } else L.push('Nenhuma cultura no período.');
   L.push('');
 
@@ -615,7 +631,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     DOSSIE_JANELA_EVOLUCOES_DIAS, DOSSIE_ANTES_ADMISSAO_DIAS, DOSSIE_DIA_IRAS, DOSSIE_MINIMO_HORAS,
     DOSSIE_RETENCAO_HISTORICO_DIAS, TAMANHO_EVOLUCAO_HISTORICO, acumularHistoricoEvolucoes,
-    diaDaInternacao, rotuloDia, dataBR, internacaoDoAtendimento, numerosDaPessoa, anonimizarTexto,
+    diaDaInternacao, rotuloDia, dataBR, internacaoDoAtendimento, numerosDaPessoa, anonimizarTexto, cegarDossie,
     lerEvolucoesCompletasTasy, montarDossieInternacao, sinaisDoDossie, eventosDoDossie, renderizarDossie,
     selecionarInternacoesParaDossie, amostrarDossies, PROMPT_AVALIACAO_DOSSIE
   };

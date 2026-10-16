@@ -5606,6 +5606,10 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     const md = dos.renderizarDossie(d);
     verificar('render: cabeçalho com atendimento, D1 e referência D16; sem nome e sem autor', /atendimento 5001/.test(md) && /\(D1\)/.test(md) && /D16 \(16\/10\/2026\)/.test(md) && !/Maria|Souza|Dr\. X|Enf\./.test(md), md.slice(0, 300));
     verificar('render: tem as seções principais e a evolução D6 com PAV', ['## Sinais de atenção', '## Trajetória por setor', '## Linha do tempo', '## Antibióticos', '## Culturas', '## Cirurgias e dispositivos', '## Registros da CCIH', '## Evoluções (4'].every(s => md.includes(s)) && /### D6 · 06\/10\/2026/.test(md) && /Provável PAV/.test(md), md.match(/^## .*/gm));
+    const mdCego = dos.renderizarDossie(d, { cego: true });
+    verificar('modo cego: sem caso de IRAS registrado nem "CCIH JÁ registrou"; mantém suspeita da visita e a triagem automática (Colonização)',
+      !/Caso de IRAS|CCIH JÁ registrou|Registros da CCIH[\s\S]*IRAS já registrado/.test(mdCego) && /suspeita de IRAS: pulmonar/.test(mdCego) && /Colonização/.test(mdCego) && d.iras.length === 1,
+      mdCego.match(/.*IRAS.*/g));
     verificar('render: linha do tempo mostra profilaxia e cultura positiva com R:', /Profilaxia cirúrgica: Cefazolina/.test(md) && /Klebsiella pneumoniae.*R: MEROPENEM/.test(md));
 
     /* seleção: 5002 tem só D2 (fora, <48 h); 5003 não tem evolução; 5001 entra */

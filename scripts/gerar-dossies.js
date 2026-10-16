@@ -13,7 +13,9 @@
      ... --atendimentos=123,456     só estes atendimentos
      ... --evolucoes=/x/evo.xls     export cru de evoluções do Tasy a somar (pode repetir)
      ... --hoje=2026-10-16          data de referência (padrão: hoje)
-     ... --saida=/pasta             destino (padrão: <pasta>/dossies/<carimbo>) */
+     ... --saida=/pasta             destino (padrão: <pasta>/dossies/<carimbo>)
+     ... --cego                     sem as decisões da CCIH (casos de IRAS, classificação das
+                                    culturas) — para calibrar a IA; o gabarito vai em _gabarito.json */
 
 const fs = require('fs');
 const path = require('path');
@@ -89,13 +91,19 @@ const indice = [`# Dossiês gerados em ${dossie.dataBR(hoje)} — ${escolhidos.l
   '| Arquivo | Dia | Setor | Evoluções | Escore | Sinais automáticos | IRAS já registrada |', '|---|---|---|---|---|---|---|'];
 let totalChars = 0;
 for (const c of escolhidos) {
-  const texto = dossie.renderizarDossie(c.dossie);
+  const texto = dossie.renderizarDossie(c.dossie, { cego: flag('cego') });
   const nome = `ATD-${c.atendimento}.md`;
   fs.writeFileSync(path.join(destino, nome), texto, 'utf-8');
   totalChars += texto.length;
   indice.push(`| ${nome} | D${c.dia} | ${c.setor} | ${c.evolucoes} | ${c.escore} | ${c.sinais.join(', ')} | ${c.irasRegistrada ? 'sim' : ''} |`);
 }
 fs.writeFileSync(path.join(destino, '_indice.md'), indice.join('\n') + '\n', 'utf-8');
+/* Gabarito: o que a CCIH já registrou em cada internação (para comparar com a IA). */
+fs.writeFileSync(path.join(destino, '_gabarito.json'), JSON.stringify(escolhidos.map(c => ({
+  atendimento: c.atendimento, dia: c.dia, setor: c.setor, escore: c.escore,
+  iras: c.dossie.iras.map(i => ({ topografia: i.topografia, dia: i.dia, status: i.status, criterio: i.criterio, microrganismo: i.microrganismo })),
+  culturasClassificadas: c.dossie.culturas.filter(x => x.classificacao).map(x => ({ dia: x.dia, material: x.material, microrganismo: x.microrganismo, classificacao: x.classificacao }))
+})), null, 2), 'utf-8');
 
 console.log(`\n${escolhidos.length} dossiês em ${destino}`);
 console.log(`Tamanho médio: ${Math.round(totalChars / escolhidos.length / 1000)} mil caracteres (~${Math.round(totalChars / escolhidos.length / 3.5 / 100) * 100} tokens).`);

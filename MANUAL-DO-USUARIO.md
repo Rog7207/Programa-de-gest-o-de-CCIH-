@@ -133,6 +133,7 @@ remapear a cada vez) e a **auditoria de vocabulário** (junta termos quase iguai
 | Pacientes em isolamento | foto de quem está isolado agora | Tasy |
 | Óbitos | desfecho das internações | Tasy |
 | Antibióticos prescritos | prescrições em janelas renovadas | Tasy |
+| Evoluções clínicas (Tasy) | foto do dia (ficha, UTI, sinais de infecção) **e** histórico acumulado para o dossiê de IA | recorte diário do Tasy |
 | Sinais vitais (Tasy 2411) | medidas por atendimento (para a visita à UTI) | Tasy |
 | IRAS do IMAS (Tasy 2485) | lista oficial de IRAS por classificação | Tasy |
 | Invasividade — NISS (Tasy 3066) | pacientes-dia e dispositivos-dia por setor | Tasy (um por setor) |
@@ -595,7 +596,39 @@ A aba Pós-alta acompanha infecção de sítio cirúrgico depois da alta:
 
 ---
 
-## 12. Segurança e boas práticas
+## 12. Dossiê de internação para avaliação por IA
+
+Ler evolução por evolução, antibiótico por antibiótico e cultura por cultura para achar uma
+IRAS é retrabalho. O **dossiê de internação** junta, para cada internado, tudo que o banco sabe
+num documento só, ordenado pelo **dia de internação** (D1 = dia da admissão; D3 em diante =
+início hospitalar): trajetória por setor, cirurgias, dispositivos, cursos de antibiótico,
+culturas com antibiograma, protocolos de sepse, decisões já registradas pela CCIH e o **texto
+das evoluções das últimas 3 semanas**. Um modelo de linguagem **local** (na máquina da CCIH) lê o
+dossiê e devolve faixa de probabilidade (alta / média / baixa / sem evidência), sítio provável,
+dia de início e os **trechos literais** que sustentam a conclusão. A CCIH confere; o app não
+decide nada sozinho.
+
+- **Histórico de evoluções**: o Tasy exporta só um recorte diário. Por isso, a cada importação
+  de evoluções, **todas** as evoluções do dia entram em `evolucoes_historico.xlsx` (sem autor),
+  deduplicadas, e ficam enquanto o paciente estiver internado ou por 28 dias. É esse histórico
+  que dá as 3 semanas do dossiê — então **importe as evoluções todos os dias**.
+- **Triagem automática**: cada dossiê abre com sinais determinísticos (antibiótico novo a partir
+  de D3, troca/escalonamento, cultura positiva a partir de D3, cirurgia, dispositivo, sinais no
+  texto, vitais alterados, protocolo de sepse, suspeita na visita à UTI) e um escore que ordena a
+  fila. Não é diagnóstico.
+- **Gerar**: `PASTA_CCIH="…/Dados CCIH" node scripts/gerar-dossies.js` cria em `dossies/<data>/` um
+  `.md` por internação (≥48 h, com evolução), `_indice.md` e `PROMPT-avaliacao.md` (a instrução
+  para o modelo, com a convenção temporal e os critérios principais por sítio — **semente para a
+  CCIH validar**). `--n=10` dá uma amostra estratificada por escore; `--todos` gera para todos os
+  internados (rotina diária); `--atendimentos=…` escolhe casos.
+- **Privacidade**: os dossiês saem **sem nome e sem autor**, e o nome do paciente é apagado do
+  texto; nomes de terceiros escritos no corpo da evolução não são. Por isso ficam **dentro da
+  pasta de dados** e só podem ir para modelo que rode localmente — nunca para nuvem sem
+  autorização institucional.
+
+---
+
+## 13. Segurança e boas práticas
 
 - **Backup** = copiar a pasta de dados inteira. Os scripts de manutenção também deixam
   cópias em `backups/` antes de qualquer mudança em massa.

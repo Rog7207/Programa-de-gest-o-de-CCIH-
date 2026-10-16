@@ -1456,8 +1456,15 @@ function lerEvolucoesTasy(matriz) {
     }
     for (const e of lista) if (escolhidas.has(e)) evolucoes.push(e);
   }
+  /* TODAS as evoluções do export (pedido de 16/10/2026, dossiê para IA): o Tasy exporta um
+     recorte diário, então o histórico de 3 semanas só existe se o app acumular dia a dia
+     (evolucoes_historico, ver acumularHistoricoEvolucoes em dossie.js). A foto operacional
+     acima continua igual. */
+  const todas = [];
+  for (const lista of porAtendimento.values()) for (const e of lista) todas.push({ ...e });
   evolucoes.forEach(e => { delete e._ordem; });
-  return { reconhecido: true, evolucoes, problemas, atendimentos: porAtendimento.size };
+  todas.forEach(e => { delete e._ordem; });
+  return { reconhecido: true, evolucoes, todas, problemas, atendimentos: porAtendimento.size };
 }
 
 /* Mesma regra de ehSetorDeUTI (alertas.js) — repetida aqui porque a leitura e a retenção

@@ -601,6 +601,8 @@ async function telaEvolucoes(arquivo, leitura) {
       + `${fmtInt(descartadas)} sem pendência são descartadas. `
       + (persistidasPrevia ? `${fmtInt(persistidasPrevia)} evolução(ões) da foto anterior são mantidas: pacientes que já tiveram alta ou óbito (fora deste export) mas ainda têm pendência.`
         : 'A foto anterior é substituída.')),
+    el('p', {}, `Além da foto, TODAS as ${fmtInt((leitura.todas || leitura.evolucoes).length)} evoluções do recorte entram no histórico acumulado `
+      + `(evolucoes_historico: enquanto o paciente estiver internado ou por ${DOSSIE_RETENCAO_HISTORICO_DIAS} dias), que alimenta o dossiê de internação para a IA.`),
     datas.length ? el('p', { class: 'texto-suave' }, 'Datas: ' + datas.join(', ')
       + '. O texto fica só neste banco local — nunca sai em exportação ou miniapp.') : null,
     leitura.problemas.length ? el('details', {},
@@ -621,10 +623,28 @@ async function telaEvolucoes(arquivo, leitura) {
             await gravarBanco('evolucoes', banco);
             return { total: banco.evolucoes.length, persistidas: mescla.persistidas };
           });
+          /* Histórico acumulado (dossiê para IA, 16/10/2026): TODAS as evoluções do recorte
+             do dia entram no evolucoes_historico, deduplicadas; retenção enquanto internado
+             ou 28 dias. Falha aqui não desfaz a foto, só avisa. */
+          let historico = null;
+          try {
+            historico = await comTrava(['evolucoes_historico'], async () => {
+              const hist = await lerBanco('evolucoes_historico');
+              const r = acumularHistoricoEvolucoes(leitura.todas || leitura.evolucoes, hist.evolucoes || [],
+                (bancosRetencao.pacientes || {}).internacoes || [], hojeISO());
+              hist.evolucoes = r.evolucoes;
+              await gravarBanco('evolucoes_historico', hist);
+              return r;
+            });
+          } catch (e) { historico = { erro: e.message }; }
           imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
             el('h2', {}, 'Importado'),
             el('p', {}, `Foto do dia gravada: ${fmtInt(resumo.total)} evoluções de pacientes com pendência`
               + (resumo.persistidas ? ` (${fmtInt(resumo.persistidas)} mantidas da foto anterior — pacientes fora do export com pendência aberta)` : '') + '.'),
+            historico && !historico.erro ? el('p', {}, `Histórico para o dossiê: ${fmtInt(historico.novas)} evolução(ões) nova(s) acumulada(s); `
+              + `${fmtInt(historico.evolucoes.length)} no histórico (internados ou últimos ${DOSSIE_RETENCAO_HISTORICO_DIAS} dias)`
+              + (historico.descartadas ? `; ${fmtInt(historico.descartadas)} antiga(s) descartada(s)` : '') + '.') : null,
+            historico && historico.erro ? el('p', { class: 'aviso-erro-texto' }, 'Histórico do dossiê não gravado: ' + historico.erro) : null,
             el('p', { class: 'texto-suave' }, 'Aparecem na ficha do paciente enquanto a pendência existir.')));
         } catch (e) {
           imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao gravar: ' + e.message));

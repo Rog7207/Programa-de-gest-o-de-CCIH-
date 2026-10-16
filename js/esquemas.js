@@ -90,6 +90,18 @@ const ESQUEMAS = {
         'Prontuario', 'DataEvolucao', 'Setor', 'DecididoPor', 'DecididoEm', 'AtualizadoPor', 'AtualizadoEm']
     }
   },
+  /* HISTÓRICO acumulado das evoluções (pedido de 16/10/2026): o Tasy exporta um recorte
+     diário, e o dossiê de internação para a IA precisa das últimas 3 semanas — então cada
+     importação ACRESCENTA aqui todas as evoluções do dia (deduplicadas), e a retenção guarda
+     enquanto o paciente está internado ou a evolução tem menos de DOSSIE_RETENCAO_HISTORICO_DIAS.
+     Sem autor (minimização). Texto NUNCA sai da pasta de dados. Arquivo separado da foto
+     operacional para não inchar o que a ficha lê a cada abertura. */
+  evolucoes_historico: {
+    arquivo: 'evolucoes_historico.xlsx',
+    abas: {
+      evolucoes: ['ID_Evolucao', 'Atendimento', 'Prontuario', 'Setor', 'Categoria', 'DataEvolucao', 'Texto', 'SinaisInfeccao', 'ImportadoEm']
+    }
+  },
   higiene_maos: {
     arquivo: 'higiene_maos.xlsx',
     abas: {
@@ -233,6 +245,7 @@ const VOCAB_APLICACAO = {
     ['evolucoes', 'evolucoes', 'Setor'],
     ['evolucoes', 'sinais_vitais', 'Setor'],
     ['evolucoes', 'corpus', 'Setor'],
+    ['evolucoes_historico', 'evolucoes', 'Setor'],
     ['higiene_maos', 'observacoes', 'Setor'], ['higiene_maos', 'consumo_alcool', 'Setor'],
     ['surtos', 'investigacoes', 'Setor'],
     ['denominadores', 'censo_setor', 'Setor'], ['denominadores', 'dispositivos_dia', 'Setor'],

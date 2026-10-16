@@ -5520,6 +5520,132 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     }
   }
 
+  /* == 102. Dossiê de internação para IA (16/10/2026): dia D, sinais, histórico, render == */
+  {
+    console.log('\n== 102. Dossiê de internação para avaliação por IA ==');
+    for (const k of ['normalizarProntuario', 'germeDaCultura', 'culturaDoPainel', 'cursosDeAntibiotico', 'sinaisDeInfeccaoNaEvolucao',
+      'sinaisVitaisNaEvolucao', 'extrairTemplateEvolucao', 'alteracoesDaMedida', 'internadosAgora', 'textoEvolucaoNormalizado']) global[k] = imp[k];
+    const dos = require(path.join(__dirname, '..', 'js', 'dossie.js'));
+    verificar('D1 = dia da admissão; véspera = D-1', dos.diaDaInternacao('2026-10-01', '2026-10-01') === 1 && dos.diaDaInternacao('2026-10-05', '2026-10-01') === 5 && dos.diaDaInternacao('2026-09-30', '2026-10-01') === -1);
+    verificar('anonimizar apaga o nome do paciente com acento e caixa, não as partículas',
+      dos.anonimizarTexto('Paciente JOÃO da Silva evolui bem; conversei com João.', ['Joao da Silva']) === 'Paciente [PACIENTE] da [PACIENTE] evolui bem; conversei com [PACIENTE].',
+      dos.anonimizarTexto('Paciente JOÃO da Silva evolui bem; conversei com João.', ['Joao da Silva']));
+
+    const hoje = '2026-10-16';
+    const bancos = {
+      pacientes: {
+        pacientes: [{ Prontuario: '777', Nome: 'Maria Teste Souza', DataNascimento: '1960-05-10', Sexo: 'F' }, { Prontuario: '888', Nome: 'Outro Paciente', DataNascimento: '1990-01-01', Sexo: 'M' }],
+        internacoes: [
+          { ID_Internacao: 'I1', Prontuario: '777', Atendimento: '5001', DataInternacao: '2026-10-01', DataAlta: '', SetorAtual: 'UTI Adulto', Clinica: 'Clínica médica' },
+          { ID_Internacao: 'I0', Prontuario: '777', Atendimento: '4000', DataInternacao: '2026-08-20', DataAlta: '2026-08-28', SetorAtual: 'Unidade 3' },
+          { ID_Internacao: 'I2', Prontuario: '888', Atendimento: '5002', DataInternacao: '2026-10-15', DataAlta: '', SetorAtual: 'Unidade 3' },
+          { ID_Internacao: 'I3', Prontuario: '999', Atendimento: '5003', DataInternacao: '2026-10-05', DataAlta: '', SetorAtual: 'Unidade 4' }]
+      },
+      denominadores: { passagem_setor: [
+        { Atendimento: '5001', Setor: 'Emergência', EntradaSetor: '2026-10-01', SaidaSetor: '2026-10-03' },
+        { Atendimento: '5001', Setor: 'UTI Adulto', EntradaSetor: '2026-10-03', SaidaSetor: '' },
+        /* troca de leito dentro da UTI: duas passagens no mesmo setor = uma estada */
+        { Atendimento: '5001', Setor: 'UTI Adulto', EntradaSetor: '2026-10-08', SaidaSetor: '' },
+        { Atendimento: '5002', Setor: 'Unidade 3', EntradaSetor: '2026-10-15', SaidaSetor: '' },
+        { Atendimento: '5003', Setor: 'Unidade 4', EntradaSetor: '2026-10-05', SaidaSetor: '' },
+        /* alta registrada mas passagem ficou aberta: não entra na rotina */
+        { Atendimento: '4000', Setor: 'Unidade 3', EntradaSetor: '2026-08-20', SaidaSetor: '' }] },
+      cirurgias: { cirurgias: [{ Prontuario: '777', Atendimento: '5001', DataCirurgia: '2026-10-02', Procedimento: 'LAPAROTOMIA', ProcedimentoNHSN: 'Cirurgia geral (outras)', PotencialContaminacao: 'Contaminada', ASA: '3', DuracaoMin: '120' }] },
+      dispositivos: { dispositivos: [{ Prontuario: '777', Dispositivo: 'CVC', Categoria: 'CVC', DataInstalacao: '2026-10-03', DataRetirada: '' }] },
+      uti: { visitas: [{ Prontuario: '777', Data: '2026-10-10', Setor: 'UTI Adulto', CVC: 'S', VM: 'S', SVD: 'N', SuspeitaIRAS: 'S', FocoSuspeito: 'pulmonar' }], avaliacoes_atb: [] },
+      antibioticos: { prescricoes: [
+        { ID_Prescricao: 'P1', Prontuario: '777', Atendimento: '5001', Antibiotico: 'Cefazolina', Dose: '2 g', Via: 'IV', DataInicio: '2026-10-02', DataFim: '2026-10-02' },
+        { ID_Prescricao: 'P2', Prontuario: '777', Atendimento: '5001', Antibiotico: 'Piperacilina-tazobactam', Dose: '4,5 g 6/6h', Via: 'IV', DataInicio: '2026-10-06', DataFim: '2026-10-09', Indicacao: 'pneumonia' },
+        { ID_Prescricao: 'P3', Prontuario: '777', Atendimento: '5001', Antibiotico: 'Piperacilina-tazobactam', Dose: '4,5 g 6/6h', Via: 'IV', DataInicio: '2026-10-10', DataFim: '2026-10-20' },
+        { ID_Prescricao: 'P4', Prontuario: '777', Atendimento: '5001', Antibiotico: 'Vancomicina', Dose: '1 g 12/12h', Via: 'IV', DataInicio: '2026-10-08', DataFim: '2026-10-20' }] },
+      culturas: { culturas: [
+        { ID_Cultura: 'C1', Prontuario: '777', DataColeta: '2026-10-06', Material: 'Aspirado traqueal', Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: 'KPC', StatusRevisao: 'pendente', AvaliacaoCCIH: '' },
+        { ID_Cultura: 'C2', Prontuario: '777', DataColeta: '2026-10-01', Material: 'Urocultura', Microrganismo: '', StatusRevisao: 'triagem', AvaliacaoCCIH: 'Negativa' },
+        { ID_Cultura: 'C3', Prontuario: '777', DataColeta: '2026-10-07', Material: 'Swab retal', Microrganismo: 'Klebsiella pneumoniae', StatusRevisao: 'triagem', AvaliacaoCCIH: 'Colonização' }],
+        sensibilidade: [{ ID_Cultura: 'C1', Antibiotico: 'MEROPENEM', Resultado: 'R' }, { ID_Cultura: 'C1', Antibiotico: 'AMICACINA', Resultado: 'S' }] },
+      sepse: { casos: [] }, isolamentos: { precaucoes: [{ Prontuario: '777', TipoPrecaucao: 'Contato', Motivo: 'KPC', DataInicio: '2026-10-08', DataFim: '' }] },
+      iras: { casos: [{ ID_IRAS: 'IRA-1', Prontuario: '777', DataInfeccao: '2026-10-06', Topografia: 'Pneumonia associada à ventilação mecânica (PAV)', StatusInvestigacao: 'em investigação', CriterioDiagnostico: 'Cultura' }] },
+      evolucoes: { evolucoes: [
+        { ID_Evolucao: 'E1', Atendimento: '5001', Prontuario: '777', Setor: 'UTI Adulto', Categoria: 'E', DataEvolucao: '2026-10-16', Autor: 'Dr. X', Texto: 'Maria Teste segue em VM. Tax 38,5. Secreção traqueal purulenta. # Dispositivos invasivos: CVC (03/10), SVD (03/10)' },
+        { ID_Evolucao: 'E2', Atendimento: '5001', Prontuario: '777', Setor: 'UTI Adulto', Categoria: 'ENF', DataEvolucao: '2026-10-16', Autor: 'Enf.', Texto: 'Paciente afebril, sem secreção.' },
+        { ID_Evolucao: 'E3', Atendimento: '5001', Prontuario: '777', Setor: 'Emergência', Categoria: 'E', DataEvolucao: '2026-09-20', Autor: 'Dr. Y', Texto: 'Evolução antiga demais para a janela.' }],
+        sinais_vitais: [{ Atendimento: '5001', DataMedida: '2026-10-15', Temp: '39', FC: '120', PAS: '110' }] },
+      evolucoes_historico: { evolucoes: [
+        { ID_Evolucao: 'H1', Atendimento: '5001', Prontuario: '777', Setor: 'Emergência', Categoria: 'E', DataEvolucao: '2026-10-01', Texto: 'Admitida por dor abdominal. Afebril.' },
+        { ID_Evolucao: 'H2', Atendimento: '5001', Prontuario: '777', Setor: 'UTI Adulto', Categoria: 'E', DataEvolucao: '2026-10-06', Texto: 'Febre e infiltrado novo em base direita, iniciado piperacilina-tazobactam. Provável PAV.' },
+        /* duplicata da foto: mesma data + mesmo começo de texto → entra uma vez */
+        { ID_Evolucao: 'H3', Atendimento: '5001', Prontuario: '777', Setor: 'UTI Adulto', Categoria: 'ENF', DataEvolucao: '2026-10-16', Texto: 'Paciente afebril, sem secreção.' }] }
+    };
+    const d = dos.montarDossieInternacao(bancos, '5001', { hoje });
+    verificar('dossiê monta para o atendimento com dia de referência D16', d && d.diaReferencia === 16 && d.prontuario === '777', d && d.diaReferencia);
+    verificar('idade na admissão e sexo', d.paciente.idade === 66 && d.paciente.sexo === 'F', d.paciente);
+    verificar('trajetória por setor: Emergência D1–D3, UTI D3–hoje', d.setores.length === 2 && d.setores[0].setor === 'Emergência' && d.setores[1].diaEntrada === 3 && d.setores[1].diaSaida === null, d.setores);
+    verificar('readmissão: internação anterior nos 90 dias entra', d.internacoesPrevias.length === 1 && d.internacoesPrevias[0].alta === '2026-08-28', d.internacoesPrevias);
+    verificar('cursos: cefazolina D2 vira profilaxia; pipe-tazo renovada é 1 curso (D6→, em curso); vanco D8', (() => {
+      const c = n => d.cursos.find(x => x.antibiotico === n);
+      return d.cursos.length === 3 && c('Cefazolina').profilaxia && c('Piperacilina-tazobactam').diaInicio === 6 && c('Piperacilina-tazobactam').emCurso && c('Vancomicina').diaInicio === 8 && !c('Vancomicina').profilaxia;
+    })(), d.cursos.map(c => [c.antibiotico, c.diaInicio, c.dias, c.profilaxia, c.emCurso]));
+    verificar('culturas: aspirado D6 positiva com R/S; urocultura D1 negativa; swab é colonização (não positiva)', (() => {
+      const c = id => d.culturas.find(x => x.id === id);
+      return c('C1').positiva && c('C1').dia === 6 && c('C1').resistentes.includes('MEROPENEM') && !c('C2').positiva && !c('C3').positiva;
+    })(), d.culturas.map(c => [c.id, c.dia, c.positiva]));
+    verificar('evoluções: histórico + foto deduplicados, janela de 21 dias exclui 20/09, ordem cronológica',
+      d.evolucoes.length === 4 && d.evolucoes[0].data === '2026-10-01' && d.evolucoes[3].data === '2026-10-16' && !d.evolucoes.some(e => /antiga demais/.test(e.texto)),
+      d.evolucoes.map(e => e.data));
+    verificar('texto da evolução sai sem o nome da paciente', d.evolucoes.every(e => !/Maria|Teste|Souza/i.test(e.texto)) && d.evolucoes.some(e => /\[PACIENTE\]/.test(e.texto)));
+    verificar('sinais no texto (febre, secreção purulenta, PAV) e negação da enfermagem anotada',
+      d.evolucoes.some(e => /secreção traqueal purulenta/.test(e.sinais)) && d.evolucoes.some(e => e.negados.some(n => /afebril/.test(n))), d.evolucoes.map(e => [e.sinais, e.negados]));
+    verificar('vitais alterados do texto (Tax 38,5) e da aferição estruturada (Temp 39, FC 120)',
+      d.evolucoes.some(e => e.vitaisAlterados.some(v => /Tax/.test(v))) && d.vitais.length === 1 && d.vitais[0].alterados.length === 2, [d.evolucoes.map(e => e.vitaisAlterados), d.vitais]);
+    const cod = d.sinais.map(s => s.codigo);
+    verificar('sinais automáticos: ATB após D3, escalonamento, cultura positiva após D3, MDR, cirurgia, dispositivo, UTI, sinais na evolução, vitais, suspeita na visita, isolamento, IRAS registrada',
+      ['atb_apos_d3', 'troca_ou_escalonamento', 'cultura_apos_d3', 'cultura_positiva_apos_d3', 'multirresistente', 'cirurgia', 'dispositivo_invasivo', 'uti', 'sinais_na_evolucao', 'vitais_alterados', 'suspeita_na_visita', 'isolamento', 'iras_registrada', 'internacao_longa'].every(c => cod.includes(c)), cod);
+    verificar('dispositivos juntam cadastro (CVC), visita (VM) e cabeçalho da evolução (SVD)', /CVC/.test(d.sinais.find(s => s.codigo === 'dispositivo_invasivo').texto) && /VM/.test(d.sinais.find(s => s.codigo === 'dispositivo_invasivo').texto) && /SVD/.test(d.sinais.find(s => s.codigo === 'dispositivo_invasivo').texto), d.sinais.find(s => s.codigo === 'dispositivo_invasivo'));
+    verificar('escore > 0 e eventos em ordem cronológica com dia D', d.escore > 10 && d.eventos.every((e, i, a) => i === 0 || a[i - 1].data <= e.data) && d.eventos.find(e => e.tipo === 'cirurgia').dia === 2, [d.escore, d.eventos.slice(0, 3)]);
+
+    const md = dos.renderizarDossie(d);
+    verificar('render: cabeçalho com atendimento, D1 e referência D16; sem nome e sem autor', /atendimento 5001/.test(md) && /\(D1\)/.test(md) && /D16 \(16\/10\/2026\)/.test(md) && !/Maria|Souza|Dr\. X|Enf\./.test(md), md.slice(0, 300));
+    verificar('render: tem as seções principais e a evolução D6 com PAV', ['## Sinais de atenção', '## Trajetória por setor', '## Linha do tempo', '## Antibióticos', '## Culturas', '## Cirurgias e dispositivos', '## Registros da CCIH', '## Evoluções (4'].every(s => md.includes(s)) && /### D6 · 06\/10\/2026/.test(md) && /Provável PAV/.test(md), md.match(/^## .*/gm));
+    verificar('render: linha do tempo mostra profilaxia e cultura positiva com R:', /Profilaxia cirúrgica: Cefazolina/.test(md) && /Klebsiella pneumoniae.*R: MEROPENEM/.test(md));
+
+    /* seleção: 5002 tem só D2 (fora, <48 h); 5003 não tem evolução; 5001 entra */
+    const cand = dos.selecionarInternacoesParaDossie(bancos, { hoje });
+    verificar('seleção: só internados com ≥48 h e evolução na janela', cand.length === 1 && cand[0].atendimento === '5001' && cand[0].escore === d.escore, cand.map(c => c.atendimento));
+    const sem = dos.selecionarInternacoesParaDossie(bancos, { hoje, semExigirEvolucao: true });
+    verificar('seleção sem exigir evolução inclui 5003 (D12) e exclui 5002 (D2) e 4000 (alta registrada, passagem aberta)', sem.map(c => c.atendimento).sort().join(',') === '5001,5003', sem.map(c => c.atendimento));
+    const porPedido = dos.selecionarInternacoesParaDossie(bancos, { hoje, atendimentos: ['4000'] });
+    verificar('pedido explícito por atendimento gera dossiê mesmo de internação encerrada (referência = alta)', porPedido.length === 1 && porPedido[0].dossie.alta === '2026-08-28' && porPedido[0].dossie.referencia === '2026-08-28', porPedido.map(c => [c.atendimento, c.dossie.referencia]));
+    const amostra = dos.amostrarDossies(Array.from({ length: 40 }, (_, i) => ({ escore: 40 - i })), 10);
+    verificar('amostra estratificada: 10 de 40 com topo, meio e fim', amostra.length === 10 && amostra[0].escore === 40 && amostra[9].escore === 1 && amostra.some(a => a.escore > 10 && a.escore < 35), amostra.map(a => a.escore));
+    verificar('prompt de avaliação define D1/D3, dispositivo > 2 dias e o formato de saída', /D1 = dia da admissão/.test(dos.PROMPT_AVALIACAO_DOSSIE) && /mais de 2 dias/.test(dos.PROMPT_AVALIACAO_DOSSIE) && /FAIXA:/.test(dos.PROMPT_AVALIACAO_DOSSIE) && /EVIDÊNCIAS:/.test(dos.PROMPT_AVALIACAO_DOSSIE));
+
+    /* histórico acumulado: dedup, retenção por internado/28 dias, prontuário pelo atendimento */
+    const antigas = [
+      { ID_Evolucao: 'EVH-1', Atendimento: '5001', Prontuario: '777', DataEvolucao: '2026-09-01', Texto: 'muito antiga mas paciente ainda internado' },
+      { ID_Evolucao: 'EVH-2', Atendimento: '4000', Prontuario: '777', DataEvolucao: '2026-08-25', Texto: 'de internação já encerrada e antiga' },
+      { ID_Evolucao: 'EVH-3', Atendimento: '5003', Prontuario: '', DataEvolucao: '2026-10-10', Texto: 'repetida no export de hoje' }];
+    const novas = [
+      { Atendimento: '5003', DataEvolucao: '2026-10-10', Texto: 'repetida no export de hoje', Setor: 'Unidade 4', Categoria: 'E', Autor: 'Dr. Z' },
+      { Atendimento: '5003', DataEvolucao: '2026-10-16', Texto: 'nova de hoje', Setor: 'Unidade 4', Categoria: 'E' },
+      { Atendimento: '5001', DataEvolucao: '2026-10-16', Texto: 'Tax 38 e secreção purulenta', Setor: 'UTI Adulto', Categoria: 'ENF' }];
+    const h = dos.acumularHistoricoEvolucoes(novas, antigas, bancos.pacientes.internacoes, hoje);
+    verificar('histórico: 2 novas (a repetida não entra), 1 antiga descartada (internação encerrada e >28 d), antiga de internado fica',
+      h.novas === 2 && h.descartadas === 1 && h.evolucoes.length === 4 && h.evolucoes.some(e => e.ID_Evolucao === 'EVH-1') && !h.evolucoes.some(e => e.ID_Evolucao === 'EVH-2'), [h.novas, h.descartadas, h.evolucoes.map(e => e.ID_Evolucao)]);
+    const novaH = h.evolucoes.find(e => e.Texto === 'nova de hoje');
+    verificar('histórico: nova ganha ID, prontuário pelo atendimento, ImportadoEm e sinais; sem campo Autor',
+      /^EVH-20261016-\d{5}$/.test(novaH.ID_Evolucao) && novaH.Prontuario === '999' && novaH.ImportadoEm === hoje && !('Autor' in novaH)
+      && /secreção purulenta/.test(h.evolucoes.find(e => /Tax 38/.test(e.Texto)).SinaisInfeccao), novaH);
+    verificar('lerEvolucoesTasy devolve também TODAS as evoluções do recorte (todas ≥ retidas)', (() => {
+      const m = [['Nr atendimento', 'Ds setor atendimento', 'Ie evolucao clinica', 'Dt evolucao', 'Nm pessoa evolucao', 'Ds evolucao', 'Cd evolucao', 'Dt inativacao'],
+        ['5001', 'UTI', 'E', '15/10/2026', 'A', 'primeira', '1', ''], ['5001', 'UTI', 'E', '16/10/2026', 'B', 'segunda', '2', ''], ['5001', 'UTI', 'ENF', '16/10/2026', 'C', 'enf', '3', '']];
+      const r = imp.lerEvolucoesTasy(m);
+      return r.reconhecido && r.todas.length === 3 && r.evolucoes.length <= 3 && r.todas.every(e => e._ordem === undefined);
+    })());
+    const rc = dos.lerEvolucoesCompletasTasy([['Nr atendimento', 'Ds setor atendimento', 'Ie evolucao clinica', 'Dt evolucao', 'Nm pessoa evolucao', 'Ds evolucao', 'Cd evolucao', 'Dt inativacao'],
+      ['5001', 'UTI', 'E', '15/10/2026', 'A', 'primeira', '1', ''], ['5001', 'UTI', 'E', '16/10/2026', 'B', 'inativada', '2', '16/10/2026']]);
+    verificar('lerEvolucoesCompletasTasy: reconhece, pula inativadas, data ISO', rc.reconhecido && rc.evolucoes.length === 1 && rc.evolucoes[0].DataEvolucao === '2026-10-15', rc);
+  }
+
   console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
   process.exit(falharam ? 1 : 0);
 })();

@@ -5688,6 +5688,16 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     verificar('por dia: dispositivos da visita à UTI entram como "em uso" no dia', /D10 - Em uso na visita à UTI: cateter venoso central, ventilação mecânica/.test(txtDias), txtDias.match(/.*visita.*/g));
     verificar('nome do dispositivo por extenso', dos.nomeDispositivo('CVCJD') === 'cateter venoso central' && dos.nomeDispositivo('TOT') === 'ventilação mecânica (tubo orotraqueal)' && dos.nomeDispositivo('SVD') === 'sonda vesical de demora');
 
+    verificar('anonimizar: telefone, CPF e nome de familiar após parentesco', (() => {
+      const t = dos.anonimizarTexto('Paciente recebeu visita da filha Simone (48) 99979-7017. CPF 123.456.789-01. Filha relata melhora. Esposo João ciente.', []);
+      return /\[TELEFONE\]/.test(t) && !/99979/.test(t) && /\[CPF\]/.test(t) && /filha \[FAMILIAR\]/.test(t) && !/Simone|João/.test(t) && /Filha relata/.test(t) && /Esposo \[FAMILIAR\]/.test(t);
+    })(), dos.anonimizarTexto('Paciente recebeu visita da filha Simone (48) 99979-7017. CPF 123.456.789-01. Filha relata melhora. Esposo João ciente.', []));
+    verificar('anonimizar não come números clínicos (PA 130x80, FiO2 40%, 4,5 g 6/6h)', dos.anonimizarTexto('PA 130x80 FiO2 40% pip-tazo 4,5 g 6/6h FR 22 Hb 10,2', []) === 'PA 130x80 FiO2 40% pip-tazo 4,5 g 6/6h FR 22 Hb 10,2');
+    verificar('EV: fisioterapia pelo texto; solicitação de leito de UTI vira formulário médico',
+      dos.categoriaEvolucao('EV', 'Avaliação: HNSC - Fisioterapia - Avaliação Funcional Escala').grupo === 'fisioterapia'
+      && dos.categoriaEvolucao('EV', 'Avaliação: HNSC - Solicitação de Leito de UTI Solicitação').grupo === 'medica'
+      && /solicitação de leito de uti/.test(dos.categoriaEvolucao('EV', 'Avaliação: HNSC - Solicitação de Leito de UTI Solicitação').rotulo));
+
     /* Categorias do Tasy, fisioterapia, notas da CCIH e dispositivos no texto */
     verificar('categorias: E médica, N4 fisioterapia, EC nota da CCIH, TNU outra; código novo com "FISIOTERAPIA" vira fisioterapia',
       dos.categoriaEvolucao('E').grupo === 'medica' && dos.categoriaEvolucao('N4').grupo === 'fisioterapia' && dos.categoriaEvolucao('EC').grupo === 'ccih'

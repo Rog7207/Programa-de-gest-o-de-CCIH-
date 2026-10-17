@@ -86,7 +86,16 @@ function anonimizarTexto(texto, nomes) {
     const re = new RegExp('\\b' + p.split('').map(ch => _ACENTOS[ch] || ch).join('') + '\\b', 'gi');
     t = t.replace(re, '[PACIENTE]');
   }
-  return t.replace(/(\[PACIENTE\]\s*){2,}/g, '[PACIENTE] ');
+  t = t.replace(/(\[PACIENTE\]\s*){2,}/g, '[PACIENTE] ');
+  /* Telefone, CPF e nome de familiar escritos no texto livre (amostra de 16/10/2026: "visita da
+     filha Simone (48) 9xxxx-xxxx"). O familiar só quando o nome vem logo depois do parentesco e
+     começa com maiúscula num texto que não está todo em caixa alta — em CAIXA ALTA não dá para
+     separar nome de palavra comum, e o nome fica. */
+  t = t.replace(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, '[CPF]');
+  t = t.replace(/(\(?\b\d{2}\)?\s?)?\b9?\d{4}[-.\s]?\d{4}\b/g, m => (m.replace(/\D/g, '').length >= 8 ? '[TELEFONE]' : m));
+  const PARENTESCO = /^(filh[oa]s?|espos[oa]|marido|net[oa]s?|irm[ãa]o?s?|m[ãa]e|pai|sobrinh[oa]|genro|nora|companheir[oa]|cunhad[oa]|tio|tia|prim[oa])$/i;
+  t = t.replace(/([A-Za-zÀ-ÿ]+)(\s+)([A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõçà]{2,})/g, (m, rel, esp, nome) => PARENTESCO.test(rel) ? rel + esp + '[FAMILIAR]' : m);
+  return t;
 }
 
 /* Export cru de evoluções do Tasy, SEM a retenção da foto operacional (lerEvolucoesTasy guarda
@@ -211,7 +220,9 @@ const CATEGORIAS_EVOLUCAO = {
   ENF: ['evolução de enfermagem', 'enfermagem'], Tec: ['técnico de enfermagem', 'enfermagem'], SAE: ['SAE (enfermagem)', 'enfermagem'],
   EM: ['anotação de enfermagem', 'enfermagem'], ES: ['cuidados com a pele (enfermagem)', 'enfermagem'],
   N3: ['fisioterapia', 'fisioterapia'], N4: ['fisioterapia', 'fisioterapia'], NP7: ['fisioterapia', 'fisioterapia'], NP9: ['fisioterapia', 'fisioterapia'],
-  EV: ['fisioterapia (avaliação funcional)', 'fisioterapia'],
+  /* EV é formulário genérico ("Avaliação: HNSC - …"): fisioterapia OU solicitação de leito de
+     UTI etc. — decidido pelo texto em categoriaEvolucao. */
+  EV: ['formulário de avaliação', 'medica'],
   FIS: ['fluxo de isolamento (síndrome gripal)', 'enfermagem'],
   EC: ['nota da CCIH', 'ccih'], NHE: ['núcleo de epidemiologia', 'ccih'], CHL: ['checklist da CCIH', 'ccih'],
   HDU: ['plano multidisciplinar', 'outra'], RM: ['round multidisciplinar', 'outra'], TNU: ['triagem nutricional', 'outra'],
@@ -220,7 +231,19 @@ const CATEGORIAS_EVOLUCAO = {
   CME: ['anotação de exame de imagem', 'outra'], EAG: ['agência transfusional', 'outra']
 };
 function categoriaEvolucao(codigo, texto) {
-  const c = CATEGORIAS_EVOLUCAO[String(codigo || '').trim()];
+  const cod = String(codigo || '').trim();
+  if (cod === 'EV') {
+    if (/fisioterap/i.test(String(texto || '').slice(0, 80))) return { rotulo: 'fisioterapia (avaliação funcional)', grupo: 'fisioterapia' };
+    /* título do formulário: o Tasy repete o título logo depois ("Solicitação de Leito de UTI
+       Solicitação de Leito…") — corta na repetição da 1ª palavra */
+    const m = /avalia[cç][aã]o:\s*hnsc\s*-\s*([^\n]{3,80})/i.exec(String(texto || ''));
+    let titulo = m ? m[1] : '';
+    const prim = (titulo.match(/^\S+/) || [''])[0];
+    const rep = prim ? titulo.indexOf(prim, prim.length) : -1;
+    titulo = (rep > 0 ? titulo.slice(0, rep) : titulo.slice(0, 40)).trim().toLowerCase();
+    return { rotulo: 'formulário' + (titulo ? ': ' + titulo : ''), grupo: 'medica' };
+  }
+  const c = CATEGORIAS_EVOLUCAO[cod];
   if (c) return { rotulo: c[0], grupo: c[1] };
   if (/^\W*fisioterapia/i.test(String(texto || '')) || /fisioterapia/i.test(String(texto || '').slice(0, 60))) return { rotulo: 'fisioterapia', grupo: 'fisioterapia' };
   if (/^\W*pelo s?cih/i.test(String(texto || ''))) return { rotulo: 'nota da CCIH', grupo: 'ccih' };

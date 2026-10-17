@@ -243,6 +243,8 @@ function categoriaEvolucao(codigo, texto) {
     titulo = (rep > 0 ? titulo.slice(0, rep) : titulo.slice(0, 40)).trim().toLowerCase();
     return { rotulo: 'formulário' + (titulo ? ': ' + titulo : ''), grupo: 'medica' };
   }
+  /* boletim à família escrito na evolução médica: não é dado clínico */
+  if (/^\W*(forne[cç]o|passo|realizo passagem de|boletim m[eé]dico)\b.{0,40}boletim|^\W*boletim m[eé]dico/i.test(String(texto || ''))) return { rotulo: 'boletim à família', grupo: 'outra' };
   const c = CATEGORIAS_EVOLUCAO[cod];
   if (c) return { rotulo: c[0], grupo: c[1] };
   if (/^\W*fisioterapia/i.test(String(texto || '')) || /fisioterapia/i.test(String(texto || '').slice(0, 60))) return { rotulo: 'fisioterapia', grupo: 'fisioterapia' };
@@ -695,6 +697,117 @@ function linhaDoTempoPorDia(dossie, opcoes) {
   L.sort((a, b) => a.data.localeCompare(b.data) || a._o - b._o);
   return L.map(({ _o, ...x }) => x);
 }
+/* ---- Fatias para classificador de 512 tokens (pedido de 16/10/2026) ----
+   Uma fatia por dia de internação com evolução ou evento. Cada fatia =
+     1) ESTADO no dia (determinístico, curto): dispositivos em uso e há quantos dias,
+        antibióticos em curso (desde Dn), culturas positivas dos últimos 7 dias, infecção
+        presente na admissão;
+     2) EVENTOS do dia (linhas "Dn - …" do formato por dia);
+     3) EVOLUÇÕES do dia, resumidas: médica > fisioterapia > enfermagem; texto repetido entre
+        turnos sai; dentro de cada evolução ficam primeiro os trechos com termo clínico de
+        infecção.
+   Orçamento em CARACTERES (padrão 1.800 ≈ 512 tokens de BERT em português; ajuste com o
+   tokenizador do modelo). Rótulo (para treino), a partir dos casos da CCIH: iras = início de
+   IRAS não descartada a ±2 dias da fatia; descartada = idem com caso descartado (negativo
+   difícil). agregarFatias junta a resposta do classificador por internação. */
+const FATIA_MAX_CARACTERES = 1800;
+const FATIA_JANELA_ROTULO_DIAS = 2;
+const RE_TRECHO_CLINICO = /febr|febril|tax|temperatura|3[89][,.]\d|secre[cç]|purulent|amarelad|esverdead|espess|infiltrad|consolida|opacidade|dessatur|sat ?o2|spo2|fio2|peep|piora|hipotens|choque|dva|noradren|sepse|septic|pcr\b|procalcit|leucocit|leuc[oó]cit|bastonet|lactato|hemocult|urocult|cultura|antibi|\batb\b|meropen|vancomic|piperacil|cefepim|ceftriax|polimix|ferida|deisc|hiperemi|flog|calor|edema|dor|disuria|pi[uú]ria|urina turva|diurese|diarr|abdome|peritoni|cateter|cvc|svd|sonda|tot\b|ventila|pneumon|\bitu\b|\bpav\b|ipcs|infec/i;
+function _semelhantes(a, b) {
+  const pa = new Set(_txt(a).split(/\W+/).filter(p => p.length > 3));
+  const pb = new Set(_txt(b).split(/\W+/).filter(p => p.length > 3));
+  if (!pa.size || !pb.size) return false;
+  let comum = 0; pa.forEach(p => { if (pb.has(p)) comum++; });
+  return comum / Math.min(pa.size, pb.size) >= 0.8;
+}
+function _resumirTexto(texto, limite) {
+  const t = String(texto || '').replace(/\s+/g, ' ').replace(/^"\s*/, '').trim();
+  if (t.length <= limite) return t;
+  /* pedaços sem conteúdo (cabeçalho "# … #", "-x-x-x-", campo vazio "Atual:") saem */
+  const partes = t.split(/(?<=[.;#!?])\s+|\s+(?=#)/).map(p => p.replace(/^#+\s*|\s*#+$/g, '').trim())
+    .filter(p => (p.match(/[a-zà-ú]/gi) || []).length >= 4 && !/^[^:]{1,40}:\s*(-x-|x-x|-+|atual:)?\s*$/i.test(p) && !/-x-x-/.test(p))
+    .map((p, i) => ({ p, i, clinico: RE_TRECHO_CLINICO.test(p) }));
+  const escolhidos = new Set();
+  let usado = 0;
+  for (const grupo of [partes.filter(x => x.clinico), partes.filter(x => !x.clinico)]) {
+    for (const x of grupo) { if (usado + x.p.length + 1 > limite) continue; escolhidos.add(x.i); usado += x.p.length + 1; }
+  }
+  const r = partes.filter(x => escolhidos.has(x.i)).map(x => x.p).join(' … ');
+  return r || t.slice(0, limite);
+}
+function estadoNoDia(d, dia) {
+  const data = _somaDias(d.admissao, dia - 1);
+  const partes = [];
+  const linhas = linhaDoTempoPorDia(d).filter(l => l.dia <= dia);
+  /* dispositivos: última inserção sem retirada posterior, até o dia */
+  const disp = new Map();
+  for (const l of linhas) {
+    const ins = /^Inserção de (.+?)(?: \(|$)/.exec(l.texto), ret = /^Retirada de (.+)$/.exec(l.texto);
+    if (ins) disp.set(ins[1], l.dia); else if (ret) disp.delete(ret[1]);
+  }
+  if (disp.size) partes.push('Dispositivos: ' + [...disp].map(([n, di]) => `${n} desde ${rotuloDia(di)} (${dia - di + 1} d)`).join('; '));
+  const atb = d.cursos.filter(c => !c.profilaxia && c.inicio <= data && c.fim >= data).map(c => `${String(c.antibiotico).toLowerCase()} desde ${rotuloDia(c.diaInicio)}`);
+  if (atb.length) partes.push('Antibióticos em curso: ' + atb.join('; '));
+  const cul = d.culturas.filter(c => c.positiva && c.dia !== null && c.dia <= dia && c.dia >= dia - 6).map(c => `${c.material} ${c.microrganismo} (${rotuloDia(c.dia)})${c.contaminanteUnico ? ' [contaminante, amostra única]' : ''}${c.mesmaInfeccaoDaAdmissao ? ' [mesma infecção da admissão]' : ''}`);
+  if (cul.length) partes.push('Culturas positivas nos últimos 7 dias: ' + cul.join('; '));
+  const adm = (d.infeccaoAdmissao || {}).grupos || [];
+  partes.push(adm.length ? 'Infecção presente na admissão: ' + adm.join(', ') : 'Sem infecção documentada na admissão');
+  return partes.join('. ') + '.';
+}
+function fatiasParaClassificador(dossie, opcoes) {
+  const op = opcoes || {};
+  const max = op.maxCaracteres || FATIA_MAX_CARACTERES;
+  const d = cegarDossie(dossie);
+  const todas = linhaDoTempoPorDia(dossie, op);
+  const dias = [...new Set(todas.filter(l => l.dia >= 1).map(l => l.dia))].sort((a, b) => a - b);
+  const prioridade = { medica: 0, fisioterapia: 1, enfermagem: 2 };
+  const fatias = [];
+  for (const dia of dias) {
+    const cab = `${rotuloDia(dia)} de internação${d.setores.length ? ' · ' + ((d.setores.filter(s => s.diaEntrada <= dia).pop() || d.setores[0]).setor) : ''}`;
+    const estado = estadoNoDia(d, dia);
+    const eventos = todas.filter(l => l.dia === dia && l.tipo !== 'evolucao' && l.tipo !== 'admissao').map(l => '- ' + l.texto);
+    let base = [cab, estado, eventos.length ? 'Eventos do dia:\n' + eventos.join('\n') : ''].filter(Boolean).join('\n');
+    if (base.length > max * 0.6) base = base.slice(0, Math.floor(max * 0.6)) + ' […]';
+    /* evoluções do dia: prioridade por grupo, sem repetição entre turnos */
+    const grupos = new Set(op.gruposEvolucao || ['medica', 'enfermagem', 'fisioterapia']);
+    const evos = d.evolucoes.filter(e => e.dia === dia && grupos.has(e.grupoCategoria || 'medica'))
+      .sort((a, b) => (prioridade[a.grupoCategoria] || 0) - (prioridade[b.grupoCategoria] || 0) || (b.sinaisLista.length - a.sinaisLista.length));
+    const unicas = [];
+    for (const e of evos) if (!unicas.some(u => _semelhantes(u.texto, e.texto))) unicas.push(e);
+    let resto = max - base.length - 20;
+    const blocos = [];
+    for (const e of unicas) {
+      if (resto < 120) break;
+      const limite = Math.max(120, Math.floor(resto / Math.max(1, Math.min(3, unicas.length - blocos.length))));
+      const r = _resumirTexto(e.texto, limite - e.rotuloCategoria.length - 4);
+      blocos.push(`[${e.rotuloCategoria}] ${r}`);
+      resto -= r.length + e.rotuloCategoria.length + 5;
+    }
+    let texto = base + (blocos.length ? '\nEvoluções:\n' + blocos.join('\n') : '');
+    if (texto.length > max) texto = texto.slice(0, max - 2) + ' …';   /* teto rígido */
+    /* rótulo da CCIH (só quando há casos no dossiê completo) */
+    const perto = (dossie.iras || []).filter(c => c.dia !== null && Math.abs(c.dia - dia) <= FATIA_JANELA_ROTULO_DIAS);
+    const valido = perto.find(c => !/descart/i.test(c.status));
+    fatias.push({ atendimento: d.atendimento, dia, data: _somaDias(d.admissao, dia - 1), texto, caracteres: texto.length,
+      evolucoes: unicas.length, evolucoesDescartadasPorRepeticao: evos.length - unicas.length,
+      rotulo: valido ? { iras: true, sitio: valido.topografia, diaInicio: valido.dia } : { iras: false, descartada: perto.some(c => /descart/i.test(c.status)) } });
+  }
+  return fatias;
+}
+/* Resposta do classificador por fatia [{ dia, infeccao, probabilidade?, sitio }] → uma
+   avaliação por internação: infecção se alguma fatia der sim; dia = 1ª fatia positiva; sítio
+   = o mais frequente entre as positivas (empate: o da 1ª). Sai no formato que
+   suspeitaJaNotificada usa ({ sitio, dia: 'Dn' }). */
+function agregarFatias(respostas) {
+  const pos = (respostas || []).filter(r => r.infeccao === true || r.infeccao === 'sim' || Number(r.probabilidade) >= 0.5)
+    .sort((a, b) => a.dia - b.dia);
+  if (!pos.length) return { infeccao: false, sitio: 'nenhum', dia: '', probabilidade: Math.max(0, ...(respostas || []).map(r => Number(r.probabilidade) || 0)) };
+  const cont = new Map();
+  pos.forEach(r => cont.set(r.sitio, (cont.get(r.sitio) || 0) + 1));
+  const sitio = [...cont.entries()].sort((a, b) => b[1] - a[1] || pos.findIndex(r => r.sitio === a[0]) - pos.findIndex(r => r.sitio === b[0]))[0][0];
+  return { infeccao: true, sitio, dia: rotuloDia(pos[0].dia), diasPositivos: pos.map(r => r.dia), probabilidade: Math.max(...pos.map(r => Number(r.probabilidade) || 1)) };
+}
+
 function linhasPorDia(dossie, opcoes) {
   const d = dossie;
   const cab = `Atendimento ${d.atendimento} · ${d.paciente.idade !== '' ? d.paciente.idade + ' anos' : 'idade não informada'}${d.paciente.sexo ? ' · ' + d.paciente.sexo : ''} · admissão ${dataBR(d.admissao)} (D1) · referência ${rotuloDia(d.diaReferencia)}${d.alta ? (d.obito ? ' · óbito' : ' · alta') + ' em ' + rotuloDia(diaDaInternacao(d.alta, d.admissao)) : ''}`;
@@ -826,11 +939,13 @@ function selecionarInternacoesParaDossie(bancos, opcoes) {
   const b = bancos || {};
   const hoje = _d10(op.hoje) || new Date().toISOString().slice(0, 10);
   const internadosFn = typeof internadosAgora === 'function' ? internadosAgora : (bb => (((bb.pacientes || {}).internacoes) || []).filter(i => !String(i.DataAlta || '').trim()));
-  const base = op.atendimentos && op.atendimentos.length
-    ? op.atendimentos.map(a => internacaoDoAtendimento(((b.pacientes || {}).internacoes) || [], a)).filter(Boolean)
-    : internadosFn(b);
   const comEvolucao = new Set();
   for (const e of (((b.evolucoes_historico || {}).evolucoes) || []).concat(((b.evolucoes || {}).evolucoes) || [], op.evolucoesExtras || [])) if (String(e.Texto || '').trim()) comEvolucao.add(_np(e.Atendimento));
+  /* incluirAltas (treino): toda internação que tem evolução guardada, internada ou não. */
+  const base = op.atendimentos && op.atendimentos.length
+    ? op.atendimentos.map(a => internacaoDoAtendimento(((b.pacientes || {}).internacoes) || [], a)).filter(Boolean)
+    : op.incluirAltas ? [...comEvolucao].map(a => internacaoDoAtendimento(((b.pacientes || {}).internacoes) || [], a)).filter(Boolean)
+    : internadosFn(b);
   /* Pedido explícito por atendimento não exige evolução (o dossiê sai com o que houver). */
   const exigirEvolucao = !op.semExigirEvolucao && !(op.atendimentos && op.atendimentos.length);
   const saida = [];
@@ -841,13 +956,13 @@ function selecionarInternacoesParaDossie(bancos, opcoes) {
     vistos.add(atd);
     /* Quem já teve alta só entra quando pedido por atendimento (a passagem de setor pode ter
        ficado aberta no censo mesmo com a alta registrada). */
-    if (!op.atendimentos && _ehData(i.DataAlta)) continue;
+    if (!op.atendimentos && !op.incluirAltas && _ehData(i.DataAlta)) continue;
     const diaHoje = diaDaInternacao(hoje, i.DataInternacao);
     if (diaHoje === null || diaHoje < Math.ceil(DOSSIE_MINIMO_HORAS / 24) + 1) continue;   /* D3+ = passou de 48 h */
     if (exigirEvolucao && !comEvolucao.has(atd)) continue;
     const d = montarDossieInternacao(b, atd, { hoje, evolucoesExtras: op.evolucoesExtras, janelaEvolucoesDias: op.janelaEvolucoesDias });
     if (!d) continue;
-    if (!op.atendimentos && (d.alta || d.diaReferencia === null || d.diaReferencia < Math.ceil(DOSSIE_MINIMO_HORAS / 24) + 1)) continue;
+    if (!op.atendimentos && ((d.alta && !op.incluirAltas) || d.diaReferencia === null || d.diaReferencia < Math.ceil(DOSSIE_MINIMO_HORAS / 24) + 1)) continue;
     if (exigirEvolucao && !d.evolucoes.length) continue;
     saida.push({ atendimento: atd, prontuario: d.prontuario, dia: d.diaReferencia, setor: d.setorAtual, evolucoes: d.evolucoes.length, escore: d.escore,
       sinais: d.sinais.map(s => s.codigo), irasRegistrada: d.iras.length > 0, dossie: d });
@@ -1005,7 +1120,7 @@ if (typeof module !== 'undefined' && module.exports) {
     DOSSIE_RETENCAO_HISTORICO_DIAS, TAMANHO_EVOLUCAO_HISTORICO, acumularHistoricoEvolucoes,
     diaDaInternacao, rotuloDia, dataBR, internacaoDoAtendimento, numerosDaPessoa, anonimizarTexto, cegarDossie,
     ehHemocultura, ehContaminanteComum, sindromeDoMaterial, grupoSindrome, notaDaCultura, conferirTrechos,
-    gruposDoSitio, suspeitaJaNotificada, DOSSIE_JANELA_MESMA_IRAS_DIAS, linhaDoTempoPorDia, linhasPorDia, nomeDispositivo, categoriaEvolucao, dispositivosNoTexto, CATEGORIAS_EVOLUCAO,
+    gruposDoSitio, suspeitaJaNotificada, DOSSIE_JANELA_MESMA_IRAS_DIAS, linhaDoTempoPorDia, linhasPorDia, nomeDispositivo, fatiasParaClassificador, agregarFatias, estadoNoDia, FATIA_MAX_CARACTERES, categoriaEvolucao, dispositivosNoTexto, CATEGORIAS_EVOLUCAO,
     lerEvolucoesCompletasTasy, montarDossieInternacao, sinaisDoDossie, eventosDoDossie, renderizarDossie,
     selecionarInternacoesParaDossie, amostrarDossies, PROMPT_AVALIACAO_DOSSIE, VERSAO_PROMPT_DOSSIE
   };

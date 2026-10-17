@@ -16,6 +16,9 @@
      ... --saida=/pasta             destino (padrão: <pasta>/dossies/<carimbo>)
      Para cada internação saem também ATD-*.dias.txt e ATD-*.dias.json: uma linha por evento
      no eixo do dia ("D5 - Urocultura positiva: …"), entrada para classificador pequeno.
+     ... --treino                   fatias para classificador de 512 tokens (uma por dia, com o
+                                    rótulo da CCIH) em _treino.jsonl; inclui internações já com
+                                    alta (--n/--todos não se aplicam). --max-caracteres=1800
      ... --cego                     sem as decisões da CCIH (casos de IRAS, classificação das
                                     culturas) — para calibrar a IA; o gabarito vai em _gabarito.json */
 
@@ -76,12 +79,12 @@ for (const f of process.argv.filter(a => a.startsWith('--evolucoes=')).map(a => 
 }
 
 const atendimentos = arg('atendimentos') ? arg('atendimentos').split(',').map(s => s.trim()).filter(Boolean) : null;
-const candidatos = dossie.selecionarInternacoesParaDossie(bancos, { hoje, evolucoesExtras: extras, atendimentos, semExigirEvolucao: !!atendimentos });
+const candidatos = dossie.selecionarInternacoesParaDossie(bancos, { hoje, evolucoesExtras: extras, atendimentos, semExigirEvolucao: !!atendimentos, incluirAltas: flag('treino') });
 console.log(`Elegíveis (internados ≥48 h com evolução na janela): ${candidatos.length}`);
 if (!candidatos.length) { console.log('Nada a gerar.'); process.exit(0); }
 
 const n = Number(arg('n')) || 10;
-const escolhidos = (flag('todos') || atendimentos) ? candidatos : dossie.amostrarDossies(candidatos, n);
+const escolhidos = (flag('todos') || atendimentos || flag('treino')) ? candidatos : dossie.amostrarDossies(candidatos, n);
 
 const carimbo = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '');
 const destino = arg('saida') || path.join(PASTA, 'dossies', carimbo);
@@ -99,6 +102,10 @@ for (const c of escolhidos) {
   /* Formato por dia (D5 - urocultura positiva…), para classificador: texto e JSON. Sempre
      sem as decisões da CCIH. */
   fs.writeFileSync(path.join(destino, `ATD-${c.atendimento}.dias.txt`), dossie.linhasPorDia(c.dossie), 'utf-8');
+  /* Fatias de ~512 tokens (uma por dia), para classificador pequeno. */
+  const fatias = dossie.fatiasParaClassificador(c.dossie, { maxCaracteres: Number(arg('max-caracteres')) || undefined });
+  fs.writeFileSync(path.join(destino, `ATD-${c.atendimento}.fatias.json`), JSON.stringify(fatias, null, 1), 'utf-8');
+  if (flag('treino')) fs.appendFileSync(path.join(destino, '_treino.jsonl'), fatias.map(f => JSON.stringify({ atendimento: f.atendimento, dia: f.dia, evolucoes: f.evolucoes, texto: f.texto, iras: f.rotulo.iras, sitio: f.rotulo.sitio || '', diaInicio: f.rotulo.diaInicio || '', descartada: !!f.rotulo.descartada })).join('\n') + (fatias.length ? '\n' : ''), 'utf-8');
   fs.writeFileSync(path.join(destino, `ATD-${c.atendimento}.dias.json`), JSON.stringify({ atendimento: c.atendimento,
     idade: c.dossie.paciente.idade, sexo: c.dossie.paciente.sexo, admissao: c.dossie.admissao, diaReferencia: c.dossie.diaReferencia,
     eventos: dossie.linhaDoTempoPorDia(c.dossie) }, null, 1), 'utf-8');

@@ -5725,6 +5725,31 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       verificar('dossiê cego também tira a nota da CCIH; o completo mantém', !/Pelo SCIH/.test(dos.renderizarDossie(d4, { cego: true })) && /Pelo SCIH/.test(dos.renderizarDossie(d4)));
     }
 
+    verificar('boletim à família na evolução médica sai do grupo médico', dos.categoriaEvolucao('E', 'Forneço boletim médico ao esposo da paciente.').grupo === 'outra' && dos.categoriaEvolucao('E', 'Paciente febril, secreção purulenta').grupo === 'medica');
+    /* Fatias de ~512 tokens para classificador pequeno */
+    {
+      const b5 = JSON.parse(JSON.stringify(bancos));
+      const longo = 'UTI MANHÃ # Neurológico: sedado RASS -4. Hemodinâmica: noradrenalina 0,2. Respiratório: VM PCV FiO2 50% PEEP 10, secreção traqueal purulenta em grande quantidade. Tax 38,6. Abdome flácido. Diurese 1200 ml. ' + 'Plano mantido conforme rotina da unidade sem alterações. '.repeat(60);
+      for (const turno of ['MANHÃ', 'TARDE', 'NOITE']) b5.evolucoes_historico.evolucoes.push({ Atendimento: '5001', Prontuario: '777', Setor: 'UTI Adulto', Categoria: 'SUO', DataEvolucao: '2026-10-08', Texto: longo.replace('MANHÃ', turno) });
+      b5.evolucoes_historico.evolucoes.push({ Atendimento: '5001', Prontuario: '777', Setor: 'UTI Adulto', Categoria: 'N4', DataEvolucao: '2026-10-08', Texto: 'FISIOTERAPIA MANHA - ausculta com roncos difusos, aspirada secreção amarelada espessa' });
+      const d5 = dos.montarDossieInternacao(b5, '5001', { hoje });
+      const fat = dos.fatiasParaClassificador(d5);
+      const f8 = fat.find(f => f.dia === 8), f6 = fat.find(f => f.dia === 6), f16 = fat.find(f => f.dia === 16);
+      verificar('fatias: uma por dia com evento/evolução, todas dentro de 1.800 caracteres', fat.length >= 5 && fat.every(f => f.caracteres <= 1800), fat.map(f => [f.dia, f.caracteres]));
+      verificar('fatia D8: estado com CVC desde D3 (6 d) e antibióticos em curso; cultura positiva dos últimos 7 dias',
+        /cateter venoso central desde D3 \(6 d\)/.test(f8.texto) && /Antibióticos em curso: .*piperacilina-tazobactam desde D6/.test(f8.texto) && /Aspirado traqueal Klebsiella pneumoniae \(D6\)/.test(f8.texto), f8.texto.slice(0, 600));
+      verificar('fatia D8: três turnos quase iguais viram uma evolução; fisioterapia entra; trecho clínico priorizado',
+        f8.evolucoes === 2 && f8.evolucoesDescartadasPorRepeticao === 2 && /\[fisioterapia\] FISIOTERAPIA MANHA/.test(f8.texto) && /secreção traqueal purulenta/.test(f8.texto), [f8.evolucoes, f8.evolucoesDescartadasPorRepeticao]);
+      verificar('rótulo: caso PAV em D6 marca D6–D8 como iras; D16 negativo', f6.rotulo.iras && /PAV/.test(f6.rotulo.sitio) && f6.rotulo.diaInicio === 6 && f8.rotulo.iras && !f16.rotulo.iras, [f6.rotulo, f8.rotulo, f16.rotulo]);
+      verificar('fatia nunca leva decisão da CCIH', fat.every(f => !/Caso de IRAS|CCIH|em investigação/.test(f.texto)));
+      const menor = dos.fatiasParaClassificador(d5, { maxCaracteres: 900 });
+      verificar('orçamento configurável (900 caracteres)', menor.every(f => f.caracteres <= 900), menor.map(f => f.caracteres));
+    }
+    verificar('agregar fatias: 1ª positiva dá o dia, sítio pela maioria; sem positiva = sem infecção',
+      JSON.stringify((({ infeccao, sitio, dia }) => ({ infeccao, sitio, dia }))(dos.agregarFatias([{ dia: 5, infeccao: false, sitio: 'nenhum' }, { dia: 7, probabilidade: 0.7, sitio: 'pneumonia' }, { dia: 8, infeccao: true, sitio: 'IPCS' }, { dia: 9, infeccao: true, sitio: 'pneumonia' }])))
+        === '{"infeccao":true,"sitio":"pneumonia","dia":"D7"}'
+      && dos.agregarFatias([{ dia: 3, infeccao: false, probabilidade: 0.2 }]).infeccao === false);
+
     /* Suspeita da IA × IRAS já notificada na janela */
     const casosReg = [{ id: 'IRA-1', topografia: 'Pneumonia associada à ventilação mecânica (PAV)', dia: 8, status: 'confirmado' },
       { id: 'IRA-2', topografia: 'IPCS com confirmação laboratorial', dia: 12, status: 'descartado' },

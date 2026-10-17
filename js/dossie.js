@@ -1064,6 +1064,66 @@ function suspeitaJaNotificada(campos, casos, janelaDias) {
   return { situacao: 'nova', caso: null };
 }
 
+/* ---- Pré-anotação de FRAGMENTO SUSPEITO (pedido de 16/10/2026) ----
+   O alvo do classificador de 512 tokens, na 1ª fase, é SUSPEITA (não IRAS confirmada): cerca de
+   40% dos pacientes e 15–20% dos fragmentos. O modelo grande (Qwen) pré-anota, a CCIH corrige na
+   página de anotação, e a correção humana é o rótulo. A DEFINIÇÃO é a da CCIH — semente a ajustar.
+   Saída curta para rodar sem raciocínio (segundos por fragmento). */
+const VERSAO_PROMPT_SUSPEITA = 2;
+const PROMPT_SUSPEITA_FRAGMENTO = `Você recebe UM DIA de uma internação hospitalar: o estado do paciente naquele dia, os eventos do dia e trechos das evoluções. Responda se ESTE DIA traz SUSPEITA de infecção NOVA.
+
+É SUSPEITO quando aparece NESTE DIA pelo menos um sinal novo de infecção que não é explicado pela infecção já presente na admissão:
+- febre (temperatura ≥ 37,8 °C, "febril", "pico febril") ou hipotermia;
+- secreção purulenta nova ou piora da secreção (traqueal, ferida, cateter);
+- piora respiratória (dessaturação, aumento de O2, FiO2 ou PEEP);
+- instabilidade hemodinâmica nova (hipotensão, início ou aumento de noradrenalina/DVA);
+- antibiótico NOVO ou ESCALONADO neste dia (não profilaxia);
+- cultura colhida por suspeita ou cultura positiva de sítio estéril neste dia;
+- protocolo de sepse aberto;
+- o médico nomeia uma infecção nova (pneumonia, ITU, infecção de ferida, infecção de cateter, sepse).
+
+Leia a lista "Eventos do dia": "Início de <antibiótico>" (que não seja profilaxia) já é sinal de suspeita.
+
+NÃO é suspeito: cirurgia, internação ou transferência SOZINHAS (sem sinal de infecção); dia estável sem sinal novo; continuidade do tratamento de infecção da admissão; cultura de vigilância (colonização); contaminante de pele em hemocultura única; profilaxia cirúrgica; "afebril", "sem sinais flogísticos" e outras negações.
+
+Responda SOMENTE neste formato, em português, sem mais nada:
+SUSPEITO: sim ou não
+SÍTIO: pneumonia, IPCS, ITU, ISC, pele e partes moles, abdominal, outro, nenhum
+MOTIVO: uma frase curta com o sinal que justificou (ou "nenhum sinal novo")`;
+
+/* Sinais determinísticos de suspeita no fragmento (2ª fonte da pré-anotação, ao lado do
+   modelo): a partir de D3, antibiótico novo não profilático, cultura positiva que não é
+   contaminante único nem continuação da infecção da admissão, protocolo de sepse. Lê as linhas
+   "- …" de "Eventos do dia". NÃO entra no texto do fragmento (senão o classificador só aprenderia
+   a regra) — é só sugestão para quem anota. */
+function sinaisDeterministicosDoFragmento(texto, dia) {
+  if (!(Number(dia) >= DOSSIE_DIA_IRAS)) return [];
+  const bloco = (/Eventos do dia:\n([\s\S]*?)(?:\nEvoluções:|$)/.exec(String(texto || '')) || [])[1] || '';
+  const s = [];
+  for (const l of bloco.split('\n').map(x => x.replace(/^-\s*/, '').trim()).filter(Boolean)) {
+    if (/^Início de /.test(l)) s.push('antibiótico novo: ' + l.slice(10));
+    else if (/ positiva: /.test(l) && !/amostra ÚNICA|MESMA infecção|PRESENTE NA ADMISSÃO/.test(l)) s.push('cultura positiva: ' + l.split(':')[0].replace(/ positiva$/, '') + ' ' + l.split(': ')[1].split(';')[0]);
+    else if (/^Protocolo de sepse/.test(l)) s.push('protocolo de sepse');
+  }
+  return s;
+}
+
+/* Lê a resposta curta do pré-anotador. */
+function lerRespostaSuspeita(texto) {
+  const t = String(texto || '').replace(/\*\*/g, '');
+  const campo = rot => { const m = new RegExp('^\\s*' + rot + '\\s*:\\s*(.+)$', 'im').exec(t); return m ? m[1].trim() : ''; };
+  const s = _txt(campo('SUSPEITO'));
+  return { suspeito: /^sim/.test(s) ? true : /^n[aã]o/.test(s) ? false : null, sitio: campo('S[ÍI]TIO'), motivo: campo('MOTIVO') };
+}
+
+/* Treino × teste POR PACIENTE (fragmentos do mesmo atendimento nunca se dividem): hash estável
+   do atendimento; ~20% teste. */
+function particaoDoAtendimento(atendimento, fracaoTeste) {
+  let h = 2166136261;
+  for (const ch of String(atendimento)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
+  return (h % 1000) / 1000 < (fracaoTeste === undefined ? 0.2 : fracaoTeste) ? 'teste' : 'treino';
+}
+
 /* Instrução para o modelo: a pergunta, a convenção temporal e os critérios principais por
    sítio. Semente para a CCIH VALIDAR contra os critérios nacionais vigentes (ANVISA, Critérios
    Diagnósticos de IRAS) — não é documento oficial. A saída pedida é estruturada para a
@@ -1122,6 +1182,7 @@ if (typeof module !== 'undefined' && module.exports) {
     ehHemocultura, ehContaminanteComum, sindromeDoMaterial, grupoSindrome, notaDaCultura, conferirTrechos,
     gruposDoSitio, suspeitaJaNotificada, DOSSIE_JANELA_MESMA_IRAS_DIAS, linhaDoTempoPorDia, linhasPorDia, nomeDispositivo, fatiasParaClassificador, agregarFatias, estadoNoDia, FATIA_MAX_CARACTERES, categoriaEvolucao, dispositivosNoTexto, CATEGORIAS_EVOLUCAO,
     lerEvolucoesCompletasTasy, montarDossieInternacao, sinaisDoDossie, eventosDoDossie, renderizarDossie,
-    selecionarInternacoesParaDossie, amostrarDossies, PROMPT_AVALIACAO_DOSSIE, VERSAO_PROMPT_DOSSIE
+    selecionarInternacoesParaDossie, amostrarDossies, PROMPT_AVALIACAO_DOSSIE, VERSAO_PROMPT_DOSSIE,
+    PROMPT_SUSPEITA_FRAGMENTO, VERSAO_PROMPT_SUSPEITA, lerRespostaSuspeita, particaoDoAtendimento, sinaisDeterministicosDoFragmento
   };
 }

@@ -5750,6 +5750,17 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
         === '{"infeccao":true,"sitio":"pneumonia","dia":"D7"}'
       && dos.agregarFatias([{ dia: 3, infeccao: false, probabilidade: 0.2 }]).infeccao === false);
 
+    /* Pré-anotação de fragmento suspeito */
+    verificar('resposta do pré-anotador: SUSPEITO sim/não, sítio e motivo; resposta fora do formato = null',
+      dos.lerRespostaSuspeita('SUSPEITO: Sim\nSÍTIO: pneumonia\nMOTIVO: febre').suspeito === true && dos.lerRespostaSuspeita('**SUSPEITO:** não\nMOTIVO: nenhum sinal novo').suspeito === false
+      && dos.lerRespostaSuspeita('talvez').suspeito === null);
+    verificar('partição por paciente: estável e todos os dias do mesmo atendimento no mesmo lado; ~20% teste',
+      dos.particaoDoAtendimento('1444235') === dos.particaoDoAtendimento('1444235') && (() => { let t = 0; for (let i = 0; i < 2000; i++) if (dos.particaoDoAtendimento(String(1400000 + i)) === 'teste') t++; return t > 300 && t < 500; })());
+    verificar('sinais da regra no fragmento: ATB novo e cultura positiva a partir de D3; contaminante único, admissão e D1–D2 não',
+      JSON.stringify(dos.sinaisDeterministicosDoFragmento('D7\nEventos do dia:\n- Início de meropenem\n- Hemocultura positiva: Klebsiella pneumoniae; KPC\n- Hemocultura positiva: Staphylococcus coagulase-negativo [contaminante comum de pele em hemocultura de amostra ÚNICA: x]\n- Profilaxia cirúrgica com cefazolina\nEvoluções:\n[evolução médica] Início de vancomicina', 7))
+        === '["antibiótico novo: meropenem","cultura positiva: Hemocultura Klebsiella pneumoniae"]'
+      && dos.sinaisDeterministicosDoFragmento('Eventos do dia:\n- Início de ceftriaxona', 2).length === 0);
+
     /* Suspeita da IA × IRAS já notificada na janela */
     const casosReg = [{ id: 'IRA-1', topografia: 'Pneumonia associada à ventilação mecânica (PAV)', dia: 8, status: 'confirmado' },
       { id: 'IRA-2', topografia: 'IPCS com confirmação laboratorial', dia: 12, status: 'descartado' },

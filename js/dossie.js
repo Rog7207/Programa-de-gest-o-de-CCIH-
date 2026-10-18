@@ -228,7 +228,15 @@ const CATEGORIAS_EVOLUCAO = {
   HDU: ['plano multidisciplinar', 'outra'], RM: ['round multidisciplinar', 'outra'], TNU: ['triagem nutricional', 'outra'],
   EN: ['avaliação nutricional', 'outra'], TSF: ['nutrição', 'outra'], PCO: ['cuidados paliativos', 'outra'], FCH: ['farmácia clínica', 'outra'],
   SAC: ['aviso cirúrgico', 'outra'], C19: ['boletim à família', 'outra'], P: ['parecer (psicologia/serviço social)', 'outra'],
-  CME: ['anotação de exame de imagem', 'outra'], EAG: ['agência transfusional', 'outra']
+  CME: ['anotação de exame de imagem', 'outra'], EAG: ['agência transfusional', 'outra'],
+  /* mapeadas pelo conteúdo em 18/10/2026 (1º histórico de 2 dias) */
+  T: ['classificação de risco (emergência)', 'enfermagem'], CRM: ['classificação de risco (emergência)', 'enfermagem'],
+  TO: ['classificação de risco (emergência)', 'enfermagem'],
+  ISC: ['alerta de sepse (SBAR)', 'enfermagem'], IAC: ['alerta de sepse (SBAR)', 'enfermagem'],
+  CAT: ['avaliação por NEWS alterado', 'medica'],
+  PIC: ['solicitação de isolamento', 'enfermagem'], TRP: ['teste rápido', 'enfermagem'], TRC: ['teste rápido', 'enfermagem'],
+  EGO: ['admissão obstétrica', 'enfermagem'], 1: ['alta hospitalar (enfermagem)', 'enfermagem'],
+  BBL: ['banco de leite', 'outra']
 };
 function categoriaEvolucao(codigo, texto) {
   const cod = String(codigo || '').trim();

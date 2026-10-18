@@ -64,8 +64,11 @@ details summary { cursor:pointer; color:var(--azul); font-size:13px; }
   <h1>Anotação de fragmentos — suspeita de infecção</h1>
   <label class="suave">Anotador: <input id="anotador" size="16" placeholder="seu nome"></label>
   <label class="suave">Mostrar: <select id="filtro">
-    <option value="pendentes">não anotados</option><option value="sugeridos">sugeridos como suspeitos (modelo ou regra)</option>
-    <option value="divergentes">modelo e regra discordam</option><option value="todos">todos</option><option value="anotados">já anotados</option></select></label>
+    <option value="sugeridos">1. sugeridos como suspeitos (modelo ou regra)</option>
+    <option value="amostra">2. amostra dos NÃO sugeridos (mede o que escapa)</option>
+    <option value="divergentes">modelo e regra discordam</option><option value="pendentes">todos os não anotados</option>
+    <option value="todos">todos</option><option value="anotados">já anotados</option></select></label>
+  <label class="suave"><input type="checkbox" id="soEvolucao" checked> só com evolução</label>
   <span id="progresso" class="suave"></span>
   <button id="exportar">Exportar anotações</button>
   <label class="suave"><input type="file" id="importar" accept=".jsonl,.json" style="display:none"><button onclick="document.getElementById('importar').click()">Importar</button></label>
@@ -88,16 +91,23 @@ const salvar = () => { try { localStorage.setItem(CHAVE, JSON.stringify(anot)); 
 const k = f => f.a + '|' + f.d;
 const sugerido = f => f.ia === true || f.r.length > 0;
 let lista = [], pos = 0;
+/* ordem embaralhada mas FIXA (mesma para todos os anotadores): a amostra dos não sugeridos
+   não fica concentrada em poucos pacientes */
+const misturar = f => { let h = 2166136261; for (const ch of k(f)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } return h; };
 function filtrar() {
   const v = document.getElementById('filtro').value;
-  lista = DADOS.filter(f => v === 'todos' ? true : v === 'anotados' ? !!anot[k(f)] : v === 'sugeridos' ? sugerido(f) && !anot[k(f)]
-    : v === 'divergentes' ? (f.ia === true) !== (f.r.length > 0) && !anot[k(f)] : !anot[k(f)]);
+  const soEvo = document.getElementById('soEvolucao').checked;
+  lista = DADOS.filter(f => (!soEvo || f.e > 0) && (v === 'todos' ? true : v === 'anotados' ? !!anot[k(f)] : v === 'sugeridos' ? sugerido(f) && !anot[k(f)]
+    : v === 'amostra' ? !sugerido(f) && !anot[k(f)]
+    : v === 'divergentes' ? (f.ia === true) !== (f.r.length > 0) && !anot[k(f)] : !anot[k(f)]));
+  if (v === 'amostra') lista.sort((a, b) => misturar(a) - misturar(b));
   pos = Math.min(pos, Math.max(0, lista.length - 1));
   desenhar();
 }
 function contar() {
   const n = Object.keys(anot).length, s = Object.values(anot).filter(x => x.suspeito).length;
-  document.getElementById('progresso').textContent = n + ' de ' + DADOS.length + ' anotados · ' + s + ' suspeitos' + (n ? ' (' + Math.round(100 * s / n) + '%)' : '') + ' · nesta lista: ' + (lista.length ? pos + 1 : 0) + '/' + lista.length;
+  const amostraFeita = DADOS.filter(f => f.e > 0 && !sugerido(f) && anot[k(f)]).length;
+  document.getElementById('progresso').textContent = n + ' de ' + DADOS.length + ' anotados · ' + s + ' suspeitos' + (n ? ' (' + Math.round(100 * s / n) + '%)' : '') + ' · amostra dos não sugeridos: ' + amostraFeita + '/150' + ' · nesta lista: ' + (lista.length ? pos + 1 : 0) + '/' + lista.length;
 }
 function esc(s) { return String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]); }
 function desenhar() {
@@ -146,6 +156,7 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'ArrowLeft') { pos = Math.max(0, pos - 1); desenhar(); }
 });
 document.getElementById('filtro').onchange = () => { pos = 0; filtrar(); };
+document.getElementById('soEvolucao').onchange = () => { pos = 0; filtrar(); };
 document.getElementById('exportar').onclick = () => {
   const linhas = DADOS.filter(f => anot[k(f)]).map(f => JSON.stringify({ atendimento: f.a, dia: f.d, particao: f.p, texto: f.t,
     suspeito: anot[k(f)].suspeito, sitio: anot[k(f)].sitio, nota: anot[k(f)].nota, anotador: anot[k(f)].anotador, anotadoEm: anot[k(f)].em,

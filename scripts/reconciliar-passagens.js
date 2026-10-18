@@ -47,6 +47,8 @@ console.log(`  abertas fechadas pela alta: ${r.fechadasPorAlta}`);
 console.log(`Passagens abertas: ${abertasAntes} → ${abertasDepois.length} (${atdAbertos.size} atendimentos; com mais de uma aberta: ${Object.values(abertosPorAtd).filter(n => n > 1).length})`);
 console.log(`Internações sem alta no censo: ${internacoes.filter(i => !String(i.DataAlta || '').trim()).length}`);
 
+const mudancas = r.invalidas + r.repetidas + r.cobertasPelo2536 + r.fechadasPorPosterior + r.fechadasPorAlta;
+if (!mudancas) { console.log('\nNada a corrigir — o banco já está reconciliado (as importações com o app atualizado fazem isso sozinhas).'); process.exit(0); }
 if (!aplicar) { console.log('\nSIMULAÇÃO — nada gravado. Rode com --aplicar para gravar (com backup).'); process.exit(0); }
 const dirBackup = path.join(PASTA, 'backups');
 fs.mkdirSync(dirBackup, { recursive: true });

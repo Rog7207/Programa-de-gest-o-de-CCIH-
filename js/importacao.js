@@ -2020,6 +2020,100 @@ function aplicarFotoInternados(foto, dataFoto, bancos, usuario, agora) {
   return r;
 }
 
+/* ---- Reconciliação das passagens por setor (pedido de 18/10/2026) ----
+   Duas fontes alimentam denominadores.passagem_setor: a FOTO diária dos internados (2396), que
+   só sabe o DIA ("2026-10-07"), e a MOVIMENTAÇÃO de pacientes (2536), com entrada e saída por
+   unidade COM HORA ("2026-10-07 14:32:10"). Até aqui o 2536 só acrescentava, e a mesma estada
+   ficava duas vezes (no banco de 17/10: 1.724 passagens da foto cobertas pelo 2536), além de
+   passagens abertas esquecidas e linhas inválidas de uma importação com colunas trocadas
+   (setor = código "54", entrada = número do Excel). Regras:
+   1. inválida (entrada sem data ISO ou setor só com dígitos) sai;
+   2. repetida exata (atendimento + setor + entrada) fica uma;
+   3. no período coberto pelo 2536 de um atendimento (1ª entrada até a última saída), as
+      passagens da FOTO desse atendimento saem — o 2536 é mais preciso; depois do período, a
+      foto continua valendo. Passagem do 2536 ABERTA só diz "ainda estava lá quando o relatório
+      foi exportado": a cobertura vai até a data do export (a maior data do 2536 no banco), e
+      a foto de um dia posterior com outro setor é transferência real e fica (no dia do export,
+      só sai a foto do MESMO setor);
+   4. passagem aberta com outra passagem POSTERIOR do mesmo atendimento é fechada na entrada da
+      seguinte; aberta de internação com alta (e sem outra internação aberta com o mesmo
+      atendimento) é fechada na alta.
+   Devolve { passagens, invalidas, repetidas, cobertasPelo2536, fechadasPorPosterior,
+   fechadasPorAlta }. Não muda nada do que não se encaixa nas regras. */
+const _temHora = v => /\d{2}:\d{2}/.test(String(v || ''));
+function reconciliarPassagens(passagens, internacoes) {
+  const r = { invalidas: 0, repetidas: 0, cobertasPelo2536: 0, fechadasPorPosterior: 0, fechadasPorAlta: 0 };
+  const validas = [];
+  const vistas = new Set();
+  for (const p of (passagens || [])) {
+    const ent = String(p.EntradaSetor || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}/.test(ent) || /^\d+$/.test(String(p.Setor || '').trim()) || !String(p.Setor || '').trim()) { r.invalidas++; continue; }
+    const k = normalizarProntuario(p.Atendimento) + '|' + normalizarTexto(p.Setor) + '|' + ent;
+    if (vistas.has(k)) { r.repetidas++; continue; }
+    vistas.add(k);
+    validas.push(p);
+  }
+  const porAtd = new Map();
+  for (const p of validas) {
+    const a = normalizarProntuario(p.Atendimento);
+    if (!porAtd.has(a)) porAtd.set(a, []);
+    porAtd.get(a).push(p);
+  }
+  /* data do export do 2536 = a maior data (entrada ou saída) entre as passagens com hora */
+  let corte2536 = '';
+  /* só datas COM hora (do próprio 2536): a saída que esta função preenche não muda o corte */
+  for (const p of validas) if (_temHora(p.EntradaSetor)) {
+    for (const v of [p.EntradaSetor, p.SaidaSetor]) { const d = String(v || '').slice(0, 10); if (_temHora(v) && d > corte2536) corte2536 = d; }
+  }
+  const saida = [];
+  for (const [, lista] of porAtd) {
+    const do2536 = lista.filter(p => _temHora(p.EntradaSetor));
+    let manter = lista;
+    if (do2536.length) {
+      const ini = do2536.map(p => String(p.EntradaSetor).slice(0, 10)).sort()[0];
+      const abertas2536 = do2536.filter(p => !String(p.SaidaSetor || '').trim());
+      const fim = abertas2536.length ? corte2536 : do2536.map(p => String(p.SaidaSetor).slice(0, 10)).sort().pop();
+      /* no último dia coberto, só sai a foto do MESMO setor que o 2536 tinha naquele dia — foto
+         de outro setor nesse dia é a transferência seguinte */
+      const setoresNoFim = new Set(do2536.filter(p => !String(p.SaidaSetor || '').trim() || String(p.SaidaSetor).slice(0, 10) === fim).map(p => normalizarTexto(p.Setor)));
+      manter = lista.filter(p => {
+        if (_temHora(p.EntradaSetor)) return true;
+        const d = String(p.EntradaSetor).slice(0, 10);
+        const coberta = d >= ini && (d < fim || (d === fim && setoresNoFim.has(normalizarTexto(p.Setor))));
+        if (coberta) { r.cobertasPelo2536++; return false; }
+        return true;
+      });
+    }
+    manter.sort((x, y) => String(x.EntradaSetor).localeCompare(String(y.EntradaSetor)));
+    for (let i = 0; i < manter.length; i++) {
+      const p = manter[i];
+      if (String(p.SaidaSetor || '').trim()) continue;
+      const prox = manter.slice(i + 1).find(o => String(o.EntradaSetor).slice(0, 10) > String(p.EntradaSetor).slice(0, 10)
+        || (_temHora(o.EntradaSetor) && String(o.EntradaSetor) > String(p.EntradaSetor)));
+      if (prox) { p.SaidaSetor = prox.EntradaSetor; r.fechadasPorPosterior++; }
+    }
+    saida.push(...manter);
+  }
+  /* aberta de internação já com alta */
+  const altaPorAtd = new Map(), abertaPorAtd = new Set();
+  for (const i of (internacoes || [])) {
+    const a = normalizarProntuario(i.Atendimento);
+    if (!a) continue;
+    if (!String(i.DataAlta || '').trim()) abertaPorAtd.add(a);
+    else if (/^\d{4}-/.test(String(i.DataAlta))) { const d = String(i.DataAlta).slice(0, 10); if (!altaPorAtd.has(a) || d > altaPorAtd.get(a)) altaPorAtd.set(a, d); }
+  }
+  for (const p of saida) {
+    const a = normalizarProntuario(p.Atendimento);
+    if (String(p.SaidaSetor || '').trim() || abertaPorAtd.has(a) || !altaPorAtd.has(a)) continue;
+    const alta = altaPorAtd.get(a);
+    if (alta >= String(p.EntradaSetor).slice(0, 10)) { p.SaidaSetor = alta; r.fechadasPorAlta++; }
+  }
+  /* ordem estável: como estava (por ID) */
+  const ordem = new Map((passagens || []).map((p, i) => [p, i]));
+  saida.sort((x, y) => ordem.get(x) - ordem.get(y));
+  return { passagens: saida, ...r };
+}
+
 /* ---- Quem está internado AGORA (04/10/2026) ----
    "Internação sem alta" não é confiável: o censo (50023) abre internações e nem sempre as
    fecha — no banco real havia 747 abertas para ~200 leitos. A fonte confiável é a última
@@ -3718,6 +3812,17 @@ function montarLinhaImportada(registro, tipo, id, usuario, agora, tempoCorte) {
     const nota = String(registro.MotivoExclusao || '').trim();
     linha.ExcluidoIndicadores = /retirad|tirar do indicador/i.test(nota) ? 'S' : 'N';
     enriquecerSepse(linha, registro._justificativas);
+  } else if (tipo === 'passagem_setor') {
+    /* Data em número do Excel (46295,5 = 2026-10-01 12:00) vira ISO com hora — no banco de
+       07/10 entrou assim, e com o CÓDIGO do setor no lugar do nome (ver reconciliarPassagens). */
+    for (const campo of ['EntradaSetor', 'SaidaSetor']) {
+      const v = linha[campo];
+      const n = typeof v === 'number' ? v : (/^\d{5}(?:[.,]\d+)?$/.test(String(v || '').trim()) ? Number(String(v).replace(',', '.')) : NaN);
+      if (isFinite(n) && n > 40000 && n < 80000) {
+        const ms = Date.UTC(1899, 11, 30) + n * 864e5;
+        linha[campo] = new Date(ms).toISOString().slice(0, 19).replace('T', ' ');
+      } else if (v) linha[campo] = dataHoraISO(v) || String(v);
+    }
   } else if (tipo === 'culturas') {
     linha.Antibiograma = registro.Antibiograma || '';
     const classificacao = classificacaoCanonica(registro.AvaliacaoCCIH);
@@ -4683,7 +4788,7 @@ if (typeof module !== 'undefined' && module.exports) {
     descartarRegistroProvisorio, reverterDescarteProvisorio,
     analisarInvasivos, categoriaDispositivo, aplicarAltas, atualizarInternacoesExistentes, NAO_CIRURGIA, NAO_CULTURA, pareceNaoCirurgia, repararCirurgiasSemIdentificacao, resolverProntuarioPorAtendimento, resolverProntuarioPorNome, resolverProntuarioPorNomeEData, NAO_ANTIMICROBIANO, pareceNomeTruncado,
     enriquecerCirurgia, classificarProcedimentoNHSN, NHSN_CATEGORIAS, categoriasDeProcedimento, categoriaDoProcedimento, CATEGORIA_SEM_CLASSIFICACAO, contaminacaoPresumida, normalizarDispositivo, extrairAntibiogramaTexto, sugerirEquivalente,
-    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerImasOcorrencias, topografiaCanonicaImas, statusDaClassificacaoImas, lerMovimentacaoPacientes, ehAcomodacaoInternacao, lerEvolucoesTasy, filtrarEvolucoesRetidas, mesclarEvolucoes, sinaisDeInfeccaoNaEvolucao, extrairTemplateEvolucao, topografiaSugeridaPorSinais, EVOLUCAO_SILENCIO_DIAS, sinaisVitaisNaEvolucao, EVOLUCAO_UTI_HORAS, LIMITES_VITAIS, lerSinaisVitaisTasy, alteracoesDaMedida, mesclarSinaisVitais, SINAIS_VITAIS_RETENCAO_DIAS, internadosAgora, lerFotoInternados, aplicarFotoInternados, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
+    textoAntibiograma, classificacaoCanonica, mecanismoCanonico, condutaDoInfectologista, avaliacaoDaPrescricao, competenciaDoNome, ehLinhaDeTotais, analisarPDFCirurgias, cirurgiaDoPDF, agruparLinhasProximas, partirNasBordas, analisarPDFInternacoes, internacaoDoPDF, analisarPDFTransferencias, passagemDoPDF, bordasDoCabecalho, fatiarPorBordas, lerDispositivosDia, lerCensoNISS, lerImasOcorrencias, topografiaCanonicaImas, statusDaClassificacaoImas, lerMovimentacaoPacientes, ehAcomodacaoInternacao, lerEvolucoesTasy, filtrarEvolucoesRetidas, mesclarEvolucoes, sinaisDeInfeccaoNaEvolucao, extrairTemplateEvolucao, topografiaSugeridaPorSinais, EVOLUCAO_SILENCIO_DIAS, sinaisVitaisNaEvolucao, EVOLUCAO_UTI_HORAS, LIMITES_VITAIS, lerSinaisVitaisTasy, alteracoesDaMedida, mesclarSinaisVitais, SINAIS_VITAIS_RETENCAO_DIAS, internadosAgora, lerFotoInternados, aplicarFotoInternados, reconciliarPassagens, internacaoNaColeta, buscarPacientes, setorPadraoISC, dispositivoCanonico, estratoCanonico, mesDoNome, diaDaLinha, caminhosDasColunas, montarLinhaImportada, separarMecanismoDoNome, melhorGrafia,
     respostaSimNao, horaDeFracao, minutosEntre, setorDeSepse, desfechoDeSepse, focoDeSepse, enriquecerSepse,
     internacoesNaData, resolverPorNomeEData, indicePorNome, indiceDeIdentificacao, identificarPaciente,
     situacaoAntibiotico,

@@ -206,6 +206,10 @@ async function importarArquivoAutomatico(arquivo) {
     /* Regra D1–D3 (16/10/2026): cultura colhida até D3 = presente na admissão, salvo
        readmissão ≤30 d ou cirurgia ≤90 d (ficam pendentes com o motivo). */
     let regraAdmissao = null;
+    if (tipo === 'passagem_setor' && novos.length) {
+      const rec = reconciliarPassagens(existentes, ((await lerBanco('pacientes')).internacoes) || []);
+      banco[definicao.abaDestino] = rec.passagens;
+    }
     if (tipo === 'culturas' && novos.length) {
       const [bPacRegra, bCirRegra] = await Promise.all([lerBanco('pacientes'), lerBanco('cirurgias').catch(() => ({ cirurgias: [] }))]);
       regraAdmissao = aplicarRegraAdmissao(existentes.slice(existentes.length - novos.length), bPacRegra.internacoes || [], bCirRegra.cirurgias || []);
@@ -709,6 +713,10 @@ async function telaFotoInternados(arquivo, leitura) {
             const bPac = await lerBanco('pacientes');
             const bDen = await lerBanco('denominadores').catch(() => ({}));
             const resultado = aplicarFotoInternados(leitura.linhas, campoData.value, { pacientes: bPac, denominadores: bDen }, app.usuario, agora);
+            /* foto + 2536 sem duplicar estadas nem deixar passagem aberta esquecida */
+            const rec = reconciliarPassagens(bDen.passagem_setor || [], bPac.internacoes || []);
+            bDen.passagem_setor = rec.passagens;
+            resultado.reconciliacao = rec;
             await gravarBanco('pacientes', bPac);
             await gravarBanco('denominadores', bDen);
             return resultado;
@@ -727,6 +735,9 @@ async function telaFotoInternados(arquivo, leitura) {
             el('h2', {}, 'Importado'),
             el('p', {}, `Foto de ${campoData.value.split('-').reverse().join('/')}: ${fmtInt(r.setorAtualizado)} internações mudaram de setor, `
               + `${fmtInt(r.leitoAtualizado)} de leito; ${fmtInt(r.passagensNovas)} passagens abertas, ${fmtInt(r.transferencias)} transferências, ${fmtInt(r.encerradas)} encerradas.`),
+            r.reconciliacao && (r.reconciliacao.cobertasPelo2536 + r.reconciliacao.fechadasPorPosterior + r.reconciliacao.fechadasPorAlta + r.reconciliacao.invalidas + r.reconciliacao.repetidas)
+              ? el('p', { class: 'texto-suave' }, `Passagens conferidas com a movimentação (2536): ${fmtInt(r.reconciliacao.cobertasPelo2536)} da foto já cobertas pelo 2536 retiradas, `
+                + `${fmtInt(r.reconciliacao.fechadasPorPosterior + r.reconciliacao.fechadasPorAlta)} abertas esquecidas fechadas, ${fmtInt(r.reconciliacao.invalidas + r.reconciliacao.repetidas)} inválidas/repetidas retiradas.`) : null,
             r.desconhecidos ? el('p', { class: 'texto-suave' }, `${fmtInt(r.desconhecidos)} atendimentos sem internação no banco — entram na passagem por setores, mas o setor atual só aparece na internação depois do censo.`) : null,
             avisoInternados ? el('p', { class: 'texto-suave' }, avisoInternados) : null));
         } catch (e) {
@@ -833,18 +844,31 @@ async function telaMovimentacaoPacientes(arquivo, leitura) {
           const r = await comTrava(['denominadores', 'pacientes'], async () => {
             const bDen = await lerBanco('denominadores').catch(() => ({}));
             bDen.passagem_setor = bDen.passagem_setor || [];
-            const existentes = new Set(bDen.passagem_setor.map(p => p.Atendimento + '|' + normalizarTexto(p.Setor) + '|' + p.EntradaSetor));
+            /* Export diário (seg–sex; na segunda, sábado a segunda): a passagem que estava ABERTA
+               no export anterior volta com a SAÍDA preenchida — atualiza a saída em vez de
+               ignorar a linha como repetida (18/10/2026). */
+            const porChave = new Map(bDen.passagem_setor.map(p => [p.Atendimento + '|' + normalizarTexto(p.Setor) + '|' + p.EntradaSetor, p]));
             const gerar = proximoID(bDen.passagem_setor, 'ID_Passagem', 'PSS');
-            let novos = 0;
+            let novos = 0, saidasAtualizadas = 0;
             for (const l of internacoes) {
               const chave = l.Atendimento + '|' + normalizarTexto(l.Setor) + '|' + l.EntradaSetor;
-              if (existentes.has(chave)) continue;
-              existentes.add(chave);
-              bDen.passagem_setor.push({ ID_Passagem: gerar(), Atendimento: l.Atendimento, Setor: l.Setor,
-                EntradaSetor: l.EntradaSetor, SaidaSetor: l.SaidaSetor, CriadoPor: app.usuario, CriadoEm: agora });
+              const ja = porChave.get(chave);
+              if (ja) {
+                if (String(l.SaidaSetor || '').trim() && String(ja.SaidaSetor || '') !== String(l.SaidaSetor)) { ja.SaidaSetor = l.SaidaSetor; saidasAtualizadas++; }
+                continue;
+              }
+              const nova = { ID_Passagem: gerar(), Atendimento: l.Atendimento, Setor: l.Setor,
+                EntradaSetor: l.EntradaSetor, SaidaSetor: l.SaidaSetor, CriadoPor: app.usuario, CriadoEm: agora };
+              bDen.passagem_setor.push(nova);
+              porChave.set(chave, nova);
               novos++;
             }
             const bPac = await lerBanco('pacientes');
+            /* O 2536 é mais preciso (entrada e saída com hora): as passagens da foto que ele
+               cobre saem, as abertas esquecidas fecham (reconciliarPassagens). */
+            const rec = reconciliarPassagens(bDen.passagem_setor, bPac.internacoes || []);
+            bDen.passagem_setor = rec.passagens;
+            const mudouPassagens = saidasAtualizadas + rec.cobertasPelo2536 + rec.fechadasPorPosterior + rec.fechadasPorAlta + rec.invalidas + rec.repetidas;
             const atuais = new Map((bPac.pacientes || []).map(p => [normalizarProntuario(p.Prontuario), p]));
             let nomes = 0;
             for (const [pront, nome] of nomePorPront) {
@@ -853,14 +877,16 @@ async function telaMovimentacaoPacientes(arquivo, leitura) {
               /* Cria cadastro só para internados; ambulatorial só entra se já existir (acima). */
               else if (prontInternacao.has(pront)) { const n = { Prontuario: pront, Nome: nome, CriadoPor: app.usuario, CriadoEm: agora }; bPac.pacientes.push(n); atuais.set(pront, n); nomes++; }
             }
-            if (novos) await gravarBanco('denominadores', bDen);
+            if (novos || mudouPassagens) await gravarBanco('denominadores', bDen);
             if (nomes) await gravarBanco('pacientes', bPac);
-            return { novos, nomes };
+            return { novos, nomes, rec, saidasAtualizadas };
           });
           await arquivarOriginal(arquivo);
           imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
             el('h2', {}, 'Importado'),
-            el('p', {}, `${fmtInt(r.novos)} passagem(ns) de internação nova(s); ${fmtInt(r.nomes)} nome(s) completados.`),
+            el('p', {}, `${fmtInt(r.novos)} passagem(ns) de internação nova(s); ${fmtInt(r.saidasAtualizadas)} saída(s) preenchida(s) em passagens que estavam abertas; ${fmtInt(r.nomes)} nome(s) completados.`),
+            el('p', {}, `Conferência com a foto diária: ${fmtInt(r.rec.cobertasPelo2536)} passagem(ns) da foto já cobertas por este relatório retiradas; `
+              + `${fmtInt(r.rec.fechadasPorPosterior + r.rec.fechadasPorAlta)} abertas esquecidas fechadas; ${fmtInt(r.rec.invalidas + r.rec.repetidas)} inválidas/repetidas retiradas.`),
             el('p', { class: 'texto-suave' }, 'As taxas por setor passam a usar estes pacientes-dia quando o censo NISS não cobrir o período.')));
         } catch (e) {
           imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao gravar: ' + e.message));
@@ -1862,6 +1888,11 @@ async function renderPasso5() {
       banco[definicao.abaDestino] = existentes;
       if (definicao.permiteAntibiograma) {
         banco.sensibilidade = (banco.sensibilidade || []).concat(linhasSensibilidade);
+      }
+      if (imp.tipo === 'passagem_setor' && novos.length) {
+        const rec = reconciliarPassagens(banco[definicao.abaDestino], ((await lerBanco('pacientes')).internacoes) || []);
+        banco[definicao.abaDestino] = rec.passagens;
+        anotar(`Passagens conferidas: ${fmtInt(rec.invalidas)} inválida(s) (setor só com número ou entrada sem data) e ${fmtInt(rec.repetidas)} repetida(s) retiradas; ${fmtInt(rec.cobertasPelo2536)} da foto cobertas pela movimentação retiradas; ${fmtInt(rec.fechadasPorPosterior + rec.fechadasPorAlta)} abertas fechadas.`);
       }
       if (imp.tipo === 'culturas' && novos.length) {
         const [bPacRegra, bCirRegra] = await Promise.all([lerBanco('pacientes'), lerBanco('cirurgias').catch(() => ({ cirurgias: [] }))]);

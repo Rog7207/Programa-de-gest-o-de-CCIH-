@@ -5858,6 +5858,41 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     verificar('reaplicar não muda nada (idempotente)', (() => { const r2 = imp.aplicarRegraAdmissao(culturas, internacoes, cirurgias); return r2.classificadas === 0 && r2.excecoes === 2; })());
   }
 
+  /* == 104. Reconciliação das passagens por setor: foto (2396) × movimentação (2536) == */
+  {
+    console.log('\n== 104. Reconciliação das passagens por setor ==');
+    const P = (id, atd, setor, ent, sai) => ({ ID_Passagem: id, Atendimento: atd, Setor: setor, EntradaSetor: ent, SaidaSetor: sai || '' });
+    const passagens = [
+      /* atendimento 1: foto CTI aberta desde 18/09 + 2536 detalhado até 15/10 + foto Unidade 19 desde 15/10 */
+      P('F1', '1', 'CTI', '2026-09-18'), P('F2', '1', 'CTI', '2026-10-07'), P('F3', '1', 'Unidade 19', '2026-10-15'),
+      P('M1', '1', 'Emergência', '2026-09-16 21:29:55', '2026-09-17 00:23:22'), P('M2', '1', 'CTI', '2026-09-17 13:14:44', '2026-10-15'),
+      /* inválida: código do setor + data do Excel */
+      P('X1', '1', '54', '46281', '2026-10-07'),
+      /* atendimento 2: só foto, aberta esquecida (mudou de setor depois) */
+      P('F4', '2', 'Unidade 5', '2026-10-01'), P('F5', '2', 'Unidade 7', '2026-10-05'),
+      /* atendimento 3: só foto, aberta, internação já com alta */
+      P('F6', '3', 'Unidade 9', '2026-10-02'),
+      /* atendimento 4: 2536 ABERTO (export de 17/10) + foto de 18/10 em OUTRO setor = transferência real; foto de 17/10 no mesmo setor = coberta */
+      P('M3', '4', 'Unidade 3', '2026-10-10 08:00:00'), P('F7', '4', 'Unidade 3', '2026-10-17'), P('F8', '4', 'CTI', '2026-10-18'),
+      P('M4', '9', 'Unidade 1', '2026-10-01 10:00:00', '2026-10-17 09:00:00'),
+      /* repetida exata */
+      P('F9', '2', 'Unidade 5', '2026-10-01')];
+    const internacoes = [{ Atendimento: '1', DataAlta: '' }, { Atendimento: '2', DataAlta: '' }, { Atendimento: '3', DataAlta: '2026-10-06' }, { Atendimento: '4', DataAlta: '' }];
+    const r = imp.reconciliarPassagens(JSON.parse(JSON.stringify(passagens)), internacoes);
+    const ids = new Set(r.passagens.map(p => p.ID_Passagem));
+    const de = id => r.passagens.find(p => p.ID_Passagem === id);
+    verificar('inválida (setor "54", data do Excel) e repetida exata saem', !ids.has('X1') && r.invalidas === 1 && r.repetidas === 1 && !ids.has('F9'), [r.invalidas, r.repetidas]);
+    verificar('foto coberta pelo 2536 sai (CTI 18/09 e 07/10); a de 15/10 (fim do período, outro setor) fica', !ids.has('F1') && !ids.has('F2') && ids.has('F3') && ids.has('M1') && ids.has('M2'), [...ids]);
+    verificar('aberta esquecida fecha na entrada da seguinte', de('F4').SaidaSetor === '2026-10-05' && de('F5').SaidaSetor === '');
+    verificar('aberta de internação com alta fecha na alta', de('F6').SaidaSetor === '2026-10-06' && r.fechadasPorAlta === 1);
+    verificar('2536 aberto: foto do mesmo setor no dia do export sai; foto de outro setor depois do export fica e fecha o 2536',
+      !ids.has('F7') && ids.has('F8') && de('M3').SaidaSetor === '2026-10-18', [ids.has('F7'), ids.has('F8'), de('M3').SaidaSetor]);
+    verificar('contagens', r.cobertasPelo2536 === 3 && r.fechadasPorPosterior >= 2, [r.cobertasPelo2536, r.fechadasPorPosterior]);
+    verificar('reconciliar de novo não muda nada (idempotente)', (() => { const r2 = imp.reconciliarPassagens(r.passagens, internacoes); return r2.passagens.length === r.passagens.length && r2.cobertasPelo2536 + r2.invalidas + r2.repetidas + r2.fechadasPorPosterior + r2.fechadasPorAlta === 0; })());
+    const linha = imp.montarLinhaImportada({ Atendimento: '5', Setor: 'CTI', EntradaSetor: 46295.5, SaidaSetor: '' }, 'passagem_setor', 'PSS-1', 'x', '2026-10-18');
+    verificar('importação genérica: data do Excel na passagem vira ISO com hora (46295,5 = 30/09/2026 12h)', linha.EntradaSetor === '2026-09-30 12:00:00', linha.EntradaSetor);
+  }
+
   console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
   process.exit(falharam ? 1 : 0);
 })();

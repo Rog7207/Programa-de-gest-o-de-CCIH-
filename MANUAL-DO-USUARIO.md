@@ -168,7 +168,7 @@ prontuário fica em branco e o registro aparece **sem paciente** (é o que acont
 **Todo dia, nesta ordem:**
 
 1. **Internações — censo (Tasy 50023)** — cria a identidade atendimento ↔ prontuário ↔ nome ↔ setor.
-2. **Movimentação de pacientes / passagens entre setores (Tasy 2536)** — cada passagem por unidade com entrada e saída; completa a identidade (atendimento ↔ prontuário ↔ nome), inclusive de quem só passou pelo ambulatório.
+2. **Movimentação de pacientes / passagens entre setores (Tasy 2536)** — cada passagem por unidade com entrada e saída; completa a identidade (atendimento ↔ prontuário ↔ nome), inclusive de quem só passou pelo ambulatório. **De segunda a sexta**; na segunda, o período de sábado a segunda. É mais preciso que a foto (entrada e saída com hora): no período que ele cobre, as passagens da foto saem; a passagem que estava aberta no relatório anterior recebe a saída; passagens abertas esquecidas são fechadas.
 3. **Internados hoje, com leito (Tasy 2396)** — atualiza setor/leito atuais e registra a passagem por setores dia a dia. *Reimporte antes de cada visita ao setor, não só uma vez ao dia.*
 4. **Culturas** — do laboratório (ou do Tasy, se tiver prontuário).
 5. **Evoluções (Tasy 2394)** — colunas "Ie evolucao clinica", "Dt evolucao", "Ds evolucao". *Atenção: o 2362 é a análise de antibióticos, não as evoluções.*

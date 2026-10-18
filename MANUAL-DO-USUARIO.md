@@ -170,10 +170,10 @@ prontuário fica em branco e o registro aparece **sem paciente** (é o que acont
 1. **Internações — censo (Tasy 50023)** — cria a identidade atendimento ↔ prontuário ↔ nome ↔ setor. *(Se usar o relatório de transferências 2536, importe-o aqui também.)*
 2. **Internados hoje, com leito (Tasy 2396)** — atualiza setor/leito atuais e a passagem por setores. *Reimporte antes de cada visita ao setor, não só uma vez ao dia.*
 3. **Culturas** — do laboratório (ou do Tasy, se tiver prontuário).
-4. **Evoluções médicas (Tasy 2362)**.
+4. **Evoluções (Tasy 2394)** — colunas "Ie evolucao clinica", "Dt evolucao", "Ds evolucao". *Atenção: o 2362 é a análise de antibióticos, não as evoluções.*
 5. **Isolamentos (Tasy 1042)**.
 6. **Bundles — CVC/SVD (1116) e PAV (2166)**.
-7. **Análise de antibióticos (Tasy)** — vem por atendimento, por isso **depois** do censo.
+7. **Análise de antibióticos (Tasy 2362)** — vem por atendimento, por isso **depois** do censo.
 8. **IRAS para conciliação (Tasy 2485)** — por último: casa com os pacientes e casos já carregados.
 
 **No primeiro dia do mês, acrescente:**

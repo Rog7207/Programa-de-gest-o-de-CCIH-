@@ -494,7 +494,7 @@ const TIPOS_RELATORIO = {
      reimportação). Traz início/fim previsto, suspensão real e a análise da CCIH
      (dias solicitados × liberados, fim imposto). */
   analise_atb: {
-    rotulo: 'Análise de antibióticos (Tasy)',
+    rotulo: 'Análise de antibióticos (Tasy 2362)',
     destino: 'antibioticos',
     abaDestino: 'prescricoes',
     prefixoID: 'PRE',

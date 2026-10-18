@@ -58,5 +58,6 @@ fs.copyFileSync(arqCulturas, backup);
 const colunas = esquemas.ESQUEMAS.culturas.abas.culturas.slice();
 for (const c of culturas) for (const k of Object.keys(c)) if (!colunas.includes(k)) colunas.push(k);
 wbCul.Sheets.culturas = XLSX.utils.json_to_sheet(culturas, { header: colunas });
-XLSX.writeFile(wbCul, arqCulturas);
+/* XLSX.writeFile não acessa o disco nesta build carregada por require — grava o buffer. */
+fs.writeFileSync(arqCulturas, XLSX.write(wbCul, { type: 'buffer', bookType: 'xlsx', compression: true }));
 console.log(`\nGravado. Backup em ${backup}`);

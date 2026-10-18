@@ -57,5 +57,6 @@ fs.copyFileSync(arqDen, backup);
 const colunas = esquemas.ESQUEMAS.denominadores.abas.passagem_setor.slice();
 for (const p of r.passagens) for (const k of Object.keys(p)) if (!colunas.includes(k)) colunas.push(k);
 wbDen.Sheets.passagem_setor = XLSX.utils.json_to_sheet(r.passagens, { header: colunas });
-XLSX.writeFile(wbDen, arqDen);
+/* XLSX.writeFile não acessa o disco nesta build carregada por require — grava o buffer. */
+fs.writeFileSync(arqDen, XLSX.write(wbDen, { type: 'buffer', bookType: 'xlsx', compression: true }));
 console.log(`\nGravado. Backup em ${backup}`);

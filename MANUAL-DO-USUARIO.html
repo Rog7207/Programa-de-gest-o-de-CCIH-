@@ -98,8 +98,9 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 <p><strong>Regra de ouro:</strong> vários relatórios descobrem o paciente <strong>cruzando o número do atendimento com o censo de internações</strong>. Se o censo não foi importado antes, o prontuário fica em branco e o registro aparece <strong>sem paciente</strong> (é o que acontece com a <em>análise de antibióticos</em>, que vem por atendimento). Por isso: <strong>o censo de internações (50023) entra sempre primeiro</strong>, e a análise de antibióticos <strong>depois</strong> dele.</p>
 <p><strong>Todo dia, nesta ordem:</strong></p>
 <ol>
-<li><strong>Internações — censo (Tasy 50023)</strong> — cria a identidade atendimento ↔ prontuário ↔ nome ↔ setor. <em>(Se usar o relatório de transferências 2536, importe-o aqui também.)</em></li>
-<li><strong>Internados hoje, com leito (Tasy 2396)</strong> — atualiza setor/leito atuais e a passagem por setores. <em>Reimporte antes de cada visita ao setor, não só uma vez ao dia.</em></li>
+<li><strong>Internações — censo (Tasy 50023)</strong> — cria a identidade atendimento ↔ prontuário ↔ nome ↔ setor.</li>
+<li><strong>Movimentação de pacientes / passagens entre setores (Tasy 2536)</strong> — cada passagem por unidade com entrada e saída; completa a identidade (atendimento ↔ prontuário ↔ nome), inclusive de quem só passou pelo ambulatório.</li>
+<li><strong>Internados hoje, com leito (Tasy 2396)</strong> — atualiza setor/leito atuais e registra a passagem por setores dia a dia. <em>Reimporte antes de cada visita ao setor, não só uma vez ao dia.</em></li>
 <li><strong>Culturas</strong> — do laboratório (ou do Tasy, se tiver prontuário).</li>
 <li><strong>Evoluções (Tasy 2394)</strong> — colunas "Ie evolucao clinica", "Dt evolucao", "Ds evolucao". <em>Atenção: o 2362 é a análise de antibióticos, não as evoluções.</em></li>
 <li><strong>Sinais vitais (Tasy 2411)</strong> — uma linha por aferição (PA, FC, FR, temperatura, SatO2); alimenta a visita à UTI e os "vitais alterados" do dossiê.</li>

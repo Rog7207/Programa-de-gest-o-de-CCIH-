@@ -167,15 +167,16 @@ prontuário fica em branco e o registro aparece **sem paciente** (é o que acont
 
 **Todo dia, nesta ordem:**
 
-1. **Internações — censo (Tasy 50023)** — cria a identidade atendimento ↔ prontuário ↔ nome ↔ setor. *(Se usar o relatório de transferências 2536, importe-o aqui também.)*
-2. **Internados hoje, com leito (Tasy 2396)** — atualiza setor/leito atuais e a passagem por setores. *Reimporte antes de cada visita ao setor, não só uma vez ao dia.*
-3. **Culturas** — do laboratório (ou do Tasy, se tiver prontuário).
-4. **Evoluções (Tasy 2394)** — colunas "Ie evolucao clinica", "Dt evolucao", "Ds evolucao". *Atenção: o 2362 é a análise de antibióticos, não as evoluções.*
-5. **Sinais vitais (Tasy 2411)** — uma linha por aferição (PA, FC, FR, temperatura, SatO2); alimenta a visita à UTI e os "vitais alterados" do dossiê.
-6. **Isolamentos (Tasy 1042)**.
-7. **Bundles — CVC/SVD (1116) e PAV (2166)**.
-8. **Análise de antibióticos (Tasy 2362)** — vem por atendimento, por isso **depois** do censo.
-9. **IRAS para conciliação (Tasy 2485)** — por último: casa com os pacientes e casos já carregados.
+1. **Internações — censo (Tasy 50023)** — cria a identidade atendimento ↔ prontuário ↔ nome ↔ setor.
+2. **Movimentação de pacientes / passagens entre setores (Tasy 2536)** — cada passagem por unidade com entrada e saída; completa a identidade (atendimento ↔ prontuário ↔ nome), inclusive de quem só passou pelo ambulatório.
+3. **Internados hoje, com leito (Tasy 2396)** — atualiza setor/leito atuais e registra a passagem por setores dia a dia. *Reimporte antes de cada visita ao setor, não só uma vez ao dia.*
+4. **Culturas** — do laboratório (ou do Tasy, se tiver prontuário).
+5. **Evoluções (Tasy 2394)** — colunas "Ie evolucao clinica", "Dt evolucao", "Ds evolucao". *Atenção: o 2362 é a análise de antibióticos, não as evoluções.*
+6. **Sinais vitais (Tasy 2411)** — uma linha por aferição (PA, FC, FR, temperatura, SatO2); alimenta a visita à UTI e os "vitais alterados" do dossiê.
+7. **Isolamentos (Tasy 1042)**.
+8. **Bundles — CVC/SVD (1116) e PAV (2166)**.
+9. **Análise de antibióticos (Tasy 2362)** — vem por atendimento, por isso **depois** do censo.
+10. **IRAS para conciliação (Tasy 2485)** — por último: casa com os pacientes e casos já carregados.
 
 **No primeiro dia do mês, acrescente:**
 

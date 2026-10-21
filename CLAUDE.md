@@ -41,6 +41,12 @@ Autor: Rogério Sobroza de Mello (médico infectologista). Licença GPL-3.0.
   jun/2026 no banco).
 - Manual do usuário em `MANUAL-DO-USUARIO.md` (+ .html gerado).
 
+## Decisões e contexto
+
+`docs/decisoes.md` resume o que a CCIH decidiu (regras clínicas, fontes do Tasy, pendências) e
+como trabalhar de outro computador. Leia antes de mexer em regra clínica ou importação; atualize
+quando uma decisão nova for tomada. Trabalhe num ramo; o `main` recebe pelo merge na sessão local.
+
 ## Limitação das sessões na nuvem
 
 A pasta de dados real não está disponível: não é possível validar contra o banco. Nesses

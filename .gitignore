@@ -32,6 +32,11 @@ miniapps/publico/
 unimed/*
 !unimed/README.md
 
+# Pasta de dados colocada por engano dentro do repositório (sessão aberta na pasta errada)
+Dados CCIH*/
+/dossies/
+/*.xlsx
+
 # Diversos
 node_modules/
 *.trava.json

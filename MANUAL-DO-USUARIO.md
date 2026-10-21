@@ -619,6 +619,16 @@ a busca ativa, "Confirmar triagem" vale só para as cirurgias listadas.
 - **Painel** — alertas do dia (surtos, MDR 10 dias, antimicrobianos, suspeitas de IRAS,
   pendências), o cartão **Rotina da equipe** (ver seção 2) e gráficos rápidos.
 - **Pacientes** — cadastro, busca e unificação de registros provisórios do laboratório.
+- **Reunião da CCIH** — indicadores em formato de apresentação (um slide por tema, setas para
+  avançar). O slide **Consumo de antibióticos — 12 meses** traz, para a UTI adulto (CTI) e para
+  o hospital inteiro, **DOT** (dias de terapia) e **DDD** (dose diária definida, OMS) por 1.000
+  pacientes-dia, mês a mês. O DOT sai sempre; o DDD depende da dose, que só vem do relatório de
+  prescrições do Tasy (desde ago/2026) — o mês só mostra DDD quando ao menos metade dos dias de
+  terapia tem dose convertível, e a coluna "Dias com dose" diz a cobertura. Doses em frasco,
+  ampola, bolsa ou comprimido são convertidas pela apresentação da farmácia; a tabela de DDD e
+  apresentações fica no `config.xlsx`, aba `ddd_antibioticos` (semente da OMS, confirmada pela
+  CCIH para meropenem 1 g, vancomicina 500 mg, metronidazol comprimido 400 mg e sulfa 800/160;
+  edite no Excel para ajustar). Pacientes-dia da UTI: censo NISS; do hospital: censo individual.
 - **Ficha do paciente** — tudo sobre uma pessoa numa linha do tempo (internações, culturas,
   antibióticos por curso, cirurgias, dispositivos, sepse, isolamentos, óbito); abre
   clicando no nome em qualquer tela.

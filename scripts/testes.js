@@ -6016,6 +6016,49 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       && /anterior: Colonização/.test(culs[0].TriagemRegra) && imp.reclassificarCulturaComoAgente(culs[0], caso) === false, culs[0]);
   }
 
+  /* == 109. Consumo de antibióticos: DDD por prescrição e série mensal DOT/DDD (21/10/2026) == */
+  {
+    console.log('\n== 109. Consumo de antibióticos (DOT e DDD por 1.000 pacientes-dia) ==');
+    const rel = require(path.join(__dirname, '..', 'js', 'relatorios.js'));
+    const d = (atb, dose) => rel.dddDiarioDaPrescricao({ Antibiotico: atb, Dose: dose }).ddd;
+    const perto = (a, b) => a !== null && Math.abs(a - b) < 0.001;
+    verificar('mg: ceftriaxona 2000 mg 1x/dia = 1 DDD; 2000 mg 12/12h = 2 DDD', perto(d('Ceftriaxona', '2000 mg 1x ao dia IV'), 1) && perto(d('Ceftriaxona', '2000 mg 12/12h IV'), 2));
+    verificar('frasco: meropenem 1 fa 8/8h (1 g) = 1 DDD; vancomicina 2 fa 12/12h (500 mg) = 1 DDD', perto(d('Meropenem', '1 fa 8/8h IV'), 1) && perto(d('Vancomicina', '2 fa 12/12h IV'), 1));
+    verificar('g: pip-tazo 4,5 g 6/6h = 18 g / 14 g', perto(d('Piperacilina tazobactam', '4,5 g 6/6h IV'), 18 / 14));
+    verificar('comprimido e via oral: metronidazol 1 com 8/8h VO (400 mg, DDD oral 2 g) = 0,6; azitromicina 1 com 1x/dia VO (DDD oral 300 mg) = 1,667',
+      perto(d('Metronidazol', '1 com 8/8h VO'), 1200 / 2000) && perto(d('Azitromicina', '1 com 1x ao dia VO'), 500 / 300));
+    verificar('UI: penicilina 4.000.000 ui 4/4h = 24 MUI / 6 MUI = 4 DDD; polimixina 2 fa 12/12h (500.000 UI) = 2 MUI / 1,5 MUI', perto(d('Penicilina', '4000000 ui 4/4h IV'), 4) && perto(d('Polimixina B', '2 fa 12/12h IV'), 2 / 1.5));
+    verificar('"Agora" (dose única) conta 1 administração; sulfa 2 com 12/12h (960 mg) = 3840/1920 = 2', perto(d('Cefepima', '2 g Agora IV'), 0.5) && perto(d('Sulfametoxazol-Trimetoprima', '2 com 12/12h VO'), 2));
+    verificar('não convertível: sem dose, mL, antibiótico fora da tabela', d('Ceftriaxona', '') === null && d('Clindamicina', '4 ml 8/8h IV') === null && d('Drogaxina', '1 fa 8/8h') === null
+      && /sem concentra/.test(rel.dddDiarioDaPrescricao({ Antibiotico: 'Clindamicina', Dose: '4 ml 8/8h IV' }).motivo));
+    verificar('tabela do config vence a semente', perto(rel.dddDiarioDaPrescricao({ Antibiotico: 'Meropenem', Dose: '1 fa 8/8h IV' }, [{ Antibiotico: 'Meropenem', DDD_mg: 3000, MgPorUnidade: 500 }]).ddd, 0.5));
+
+    /* série mensal: 2 meses; paciente A no CTI (passagem) 10 dias de meropenem 1 fa 8/8h; paciente B na enfermaria 5 dias de ceftriaxona sem dose; renovação sobreposta não duplica */
+    const meses = [{ mes: '2026-08', inicio: '2026-08-01', fim: '2026-08-31' }, { mes: '2026-09', inicio: '2026-09-01', fim: '2026-09-30' }];
+    const bancos = {
+      antibioticos: { prescricoes: [
+        { ID_Prescricao: 'P1', Prontuario: 'A', Atendimento: '1', Antibiotico: 'Meropenem', Dose: '1 fa 8/8h IV', DataInicio: '2026-09-01', DataFim: '2026-09-05' },
+        { ID_Prescricao: 'P2', Prontuario: 'A', Atendimento: '1', Antibiotico: 'Meropenem', Dose: '1 fa 8/8h IV', DataInicio: '2026-09-04', DataFim: '2026-09-10' },   /* renovação sobreposta */
+        { ID_Prescricao: 'P3', Prontuario: 'B', Atendimento: '2', Antibiotico: 'Ceftriaxona', Dose: '', DataInicio: '2026-09-10', DataFim: '2026-09-14', Setor: 'Unidade 5' },
+        { ID_Prescricao: 'P4', Prontuario: 'C', Atendimento: '3', Antibiotico: 'Clindamicina', Dose: '4 ml 8/8h IV', DataInicio: '2026-09-20', DataFim: '2026-09-20', Setor: 'Unidade 5' },
+        { ID_Prescricao: 'P5', Prontuario: 'D', Atendimento: '4', Antibiotico: 'Cefazolina', Dose: '', DataInicio: '2026-08-10', DataFim: '2026-08-11' }] },
+      denominadores: { passagem_setor: [{ Atendimento: '1', Setor: 'CTI - Dr. Joaquim David Ferreira Lima', EntradaSetor: '2026-09-01 10:00:00', SaidaSetor: '2026-09-08 09:00:00' }, { Atendimento: '1', Setor: 'Unidade 5', EntradaSetor: '2026-09-08 09:00:00', SaidaSetor: '' }],
+        dispositivos_dia: [{ Setor: 'CTI - Dr. Joaquim David Ferreira Lima', Competencia: '2026-09', Dispositivo: 'Pacientes-dia', Contagem: '800' }] },
+      pacientes: { internacoes: [{ Prontuario: 'A', Atendimento: '1', DataInternacao: '2026-09-01', DataAlta: '2026-09-30' }, { Prontuario: 'B', Atendimento: '2', DataInternacao: '2026-09-01', DataAlta: '2026-09-30' }, { Prontuario: 'X', Atendimento: '9', DataInternacao: '2026-08-01', DataAlta: '2026-09-30' }] }
+    };
+    const c = rel.consumoAntibioticosMensal(bancos, meses, { hojeISO: '2026-10-21' });
+    const set = c.find(m => m.mes === '2026-09'), ago = c.find(m => m.mes === '2026-08');
+    verificar('DOT setembro: meropenem 10 dias (renovação sobreposta não duplica) + ceftriaxona 5 + clindamicina 1 = 16; UTI = 8 (o dia da transferência, 08/09, conta para o setor onde começou)', set.dot === 16 && set.dotUti === 8, [set.dot, set.dotUti]);
+    verificar('DDD setembro: meropenem 10 dias × 1 DDD = 10; UTI 8; ceftriaxona sem dose e clindamicina em mL ficam fora', perto(set.ddd, 10) && perto(set.dddUti, 8), [set.ddd, set.dddUti]);
+    verificar('pacientes-dia: UTI pelo NISS (800); hospital pelo censo (3 internações × 30 d = 90); por 1.000 = 8/800 e 16/90', set.pdUti === 800 && set.fonteUti === 'NISS' && set.pdHosp === 90 && perto(set.dotMilUti, 10) && perto(set.dotMil, 177.8), [set.pdUti, set.pdHosp, set.dotMilUti, set.dotMil]);
+    verificar('contagem de doses: 3 com dose, 1 sem; 1 não convertível (mL)', set.comDose === 3 && set.semDose === 1 && set.naoConvertida.length === 1 && set.naoConvertida[0][1] === 1, [set.comDose, set.semDose, set.naoConvertida]);
+    verificar('agosto sem nenhuma dose: DOT sai, DDD fica null (não é zero); cobertura 0%', ago.dot === 2 && ago.ddd === null && ago.dddMil === null && ago.coberturaDose === 0, [ago.dot, ago.ddd]);
+    verificar('setembro: cobertura de dose = 10 de 16 dias (63%)', set.coberturaDose === 63, set.coberturaDose);
+    const parcial = rel.consumoAntibioticosMensal(bancos, [{ mes: '2026-09', inicio: '2026-09-01', fim: '2026-09-30' }], { hojeISO: '2026-09-15' })[0];
+    verificar('mês em curso: pacientes-dia do hospital só até hoje (15 d × 3 = 45)', parcial.pdHosp === 45, parcial.pdHosp);
+    verificar('indicadoresReuniao traz consumoAtb com 12 meses', rel.indicadoresReuniao({ ...bancos, iras: { casos: [] }, culturas: { culturas: [], sensibilidade: [] }, isolamentos: { precaucoes: [] }, higiene_maos: { observacoes: [] }, sepse: { casos: [] }, cirurgias: { cirurgias: [] } }, '2026-10-21').consumoAtb.length === 12);
+  }
+
   console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
   process.exit(falharam ? 1 : 0);
 })();

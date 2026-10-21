@@ -21,6 +21,41 @@ function barrasMensais(serie, campo, formato) {
   }));
 }
 
+/* Gráfico de linhas em SVG, duas ou mais séries mensais, sem biblioteca; imprime bem.
+   series = [{ rotulo, campo, cor }]; valores null viram buraco na linha. */
+function linhasMensais(serie, series, opcoes) {
+  const op = opcoes || {};
+  const L = 56, T = 14, W = 760, H = 240, R = 16, B = 34;
+  const xs = serie.map((_, i) => L + (serie.length > 1 ? i * (W - L - R) / (serie.length - 1) : 0));
+  const valores = series.flatMap(s => serie.map(m => m[s.campo])).filter(v => v !== null && v !== undefined && isFinite(v));
+  const maximo = Math.max(...valores, 1) * 1.1;
+  const y = v => T + (H - T - B) * (1 - v / maximo);
+  const svgNs = 'http://www.w3.org/2000/svg';
+  const mk = (tag, attrs, texto) => { const e = document.createElementNS(svgNs, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (texto != null) e.textContent = texto; return e; };
+  const svg = mk('svg', { viewBox: `0 0 ${W} ${H}`, class: 'reuniao-grafico', role: 'img', 'aria-label': op.titulo || '' });
+  /* eixo y: 4 linhas de grade */
+  for (let i = 0; i <= 4; i++) {
+    const v = maximo / 1.1 * i / 4, yy = y(v);
+    svg.append(mk('line', { x1: L, x2: W - R, y1: yy, y2: yy, class: 'reuniao-grade' }));
+    svg.append(mk('text', { x: L - 6, y: yy + 4, 'text-anchor': 'end', class: 'reuniao-eixo' }, (op.formato || (n => Math.round(n)))(v)));
+  }
+  serie.forEach((m, i) => svg.append(mk('text', { x: xs[i], y: H - B + 16, 'text-anchor': 'middle', class: 'reuniao-eixo' }, m.mes.slice(5) + '/' + m.mes.slice(2, 4))));
+  series.forEach(s => {
+    let d = '', aberto = false;
+    serie.forEach((m, i) => {
+      const v = m[s.campo];
+      if (v === null || v === undefined || !isFinite(v)) { aberto = false; return; }
+      d += (aberto ? ' L' : ' M') + xs[i].toFixed(1) + ' ' + y(v).toFixed(1); aberto = true;
+      svg.append(mk('circle', { cx: xs[i], cy: y(v), r: 3.5, fill: s.cor }));
+      svg.append(mk('title', {}, `${s.rotulo} · ${m.mes}: ${v}`));
+    });
+    svg.append(mk('path', { d: d.trim(), fill: 'none', stroke: s.cor, 'stroke-width': 2.5, 'stroke-linejoin': 'round' }));
+  });
+  const legenda = el('div', { class: 'reuniao-legenda' }, ...series.map(s =>
+    el('span', {}, el('span', { class: 'reuniao-legenda-cor', style: `background:${s.cor}` }), ' ' + s.rotulo)));
+  return el('div', {}, svg, legenda);
+}
+
 function slideNumeros(pares) {
   return el('div', { class: 'grade-cartoes' }, ...pares.map(([rotulo, valor]) =>
     el('div', { class: 'cartao cartao-numero' },
@@ -76,6 +111,32 @@ async function montarReuniao(conteudo) {
           el('tbody', {}, dados.mdr.map(m => el('tr', {},
             [m.germe, m.mecanismo, m.setor, m.n].map(v => el('td', {}, String(v)))))))
       : el('p', { class: 'texto-suave' }, 'Nenhuma cepa multirresistente em IRAS no trimestre.') },
+
+    ...(dados.consumoAtb ? [{
+      titulo: 'Consumo de antibióticos — 12 meses',
+      corpo: () => {
+        const c = dados.consumoAtb;
+        const ultimo = c[c.length - 1] || {};
+        const comDDD = c.filter(m => m.dddMil !== null);
+        const semDose = c.reduce((s, m) => s + m.semDose, 0), naoConv = c.reduce((s, m) => s + m.naoConvertida.reduce((x, [, n]) => x + n, 0), 0);
+        const motivos = new Map(); c.forEach(m => m.naoConvertida.forEach(([mot, n]) => motivos.set(mot, (motivos.get(mot) || 0) + n)));
+        return el('div', {},
+          el('h3', {}, 'DOT (dias de terapia) por 1.000 pacientes-dia'),
+          linhasMensais(c, [{ rotulo: 'UTI adulto (CTI)', campo: 'dotMilUti', cor: '#b03a2e' }, { rotulo: 'Hospital', campo: 'dotMil', cor: '#0d3f7a' }], { titulo: 'DOT por 1.000 pacientes-dia' }),
+          el('h3', {}, 'DDD (dose diária definida, OMS) por 1.000 pacientes-dia'),
+          comDDD.length
+            ? linhasMensais(c, [{ rotulo: 'UTI adulto (CTI)', campo: 'dddMilUti', cor: '#b03a2e' }, { rotulo: 'Hospital', campo: 'dddMil', cor: '#0d3f7a' }], { titulo: 'DDD por 1.000 pacientes-dia' })
+            : el('p', { class: 'texto-suave' }, 'Sem dose nas prescrições do período — o DDD precisa do relatório de prescrições do Tasy (com dose) importado diariamente.'),
+          el('table', { class: 'tabela reuniao-tabela' },
+            el('thead', {}, el('tr', {}, ['Mês', 'DOT UTI', 'DOT hosp.', 'DDD UTI', 'DDD hosp.', 'Dias com dose', 'Pac.-dia UTI', 'Pac.-dia hosp.'].map(t => el('th', {}, t)))),
+            el('tbody', {}, c.map(m => el('tr', {}, [m.mes.slice(5) + '/' + m.mes.slice(2, 4), m.dotMilUti, m.dotMil, m.dddMilUti, m.dddMil, m.coberturaDose + '%', m.pdUti || '—', m.pdHosp].map(v => el('td', {}, _fmtIndicador(v))))))),
+          el('p', { class: 'texto-suave' },
+            `Pacientes-dia da UTI: ${ultimo.fonteUti === 'NISS' ? 'censo NISS' : ultimo.fonteUti === 'passagens' ? 'passagem por setores (foto diária)' : 'não disponível no último mês'}; do hospital: censo individual. `
+            + `DDD só nos meses em que ao menos ${Math.round(DDD_COBERTURA_MINIMA * 100)}% dos dias de terapia têm dose convertível${comDDD.length ? ' (desde ' + comDDD[0].mes.slice(5) + '/' + comDDD[0].mes.slice(2, 4) + ')' : ''}; com cobertura abaixo de 100% o DDD está subestimado na mesma proporção. `
+            + (semDose ? `${fmtInt(semDose)} prescrição(ões) sem dose no período (não entram no DDD). ` : '')
+            + (naoConv ? `${fmtInt(naoConv)} com dose não convertível (${[...motivos.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([m, n]) => m + ': ' + n).join('; ')}). ` : '')
+            + 'Tabela de DDD e apresentações: config.xlsx, aba ddd_antibioticos (OMS ATC/DDD, a conferir pela CCIH).'));
+      } }] : []),
 
     { titulo: `Antibióticos (stewardship) — ${rotuloMes}`, corpo: () => el('div', {},
       slideNumeros([

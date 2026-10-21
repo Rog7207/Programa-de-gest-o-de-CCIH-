@@ -1203,8 +1203,13 @@ function indicadoresReuniao(bancos, hoje) {
   const ativos = precaucoes.filter(p => !String(p.DataFim || '').trim());
   const porTipo = relContar(ativos, p => p.TipoPrecaucao);
 
+  /* Consumo de antibióticos em 12 meses (DOT e DDD por 1.000 pacientes-dia, UTI e hospital). */
+  const tabelaDDD = (bancos.dddAntibioticos && bancos.dddAntibioticos.length) ? bancos.dddAntibioticos
+    : (typeof config !== 'undefined' && config.dddAntibioticos && config.dddAntibioticos.length) ? config.dddAntibioticos : TABELA_DDD_PADRAO;
+  const consumoAtb = consumoAntibioticosMensal(bancos, meses, { tabela: tabelaDDD, hojeISO: hoje });
+
   return {
-    mesReferencia: mesRef.mes, trimestre: tri[0].mes + ' a ' + mesRef.mes, serie,
+    mesReferencia: mesRef.mes, trimestre: tri[0].mes + ' a ' + mesRef.mes, serie, consumoAtb,
     dispositivos, mdr,
     atb: { dot: doResumo(rAtb, 'DOT'), dotMil: doResumo(rAtb, 'DOT/1.000 pac-dia'),
       analisadas: doPanorama('analisadas no período'),
@@ -1215,6 +1220,176 @@ function indicadoresReuniao(bancos, hoje) {
     posAlta: { resumo: rPos.resumo || [] },
     isolamentos: { ativos: ativos.length, porTipo }
   };
+}
+
+/* ---- Consumo de antibióticos: DOT e DDD por 1.000 pacientes-dia (pedido de 21/10/2026) ----
+   DOT = dias de terapia (não depende da dose). DDD = dose diária definida da OMS (ATC/DDD
+   2024): a dose prescrita por dia dividida pela DDD; precisa da dose, que só entra no banco
+   pelo relatório de prescrições (desde ago/2026). Doses em frasco/ampola/bolsa/comprimido são
+   convertidas pela apresentação da farmácia (confirmada pela CCIH em 21/10/2026: meropenem 1 g,
+   vancomicina 500 mg, metronidazol comprimido 400 mg, sulfa comprimido 800/160). Valores a
+   CONFERIR pela CCIH; a tabela gravada em config.xlsx (aba ddd_antibioticos) vence esta. */
+const TABELA_DDD_PADRAO = [
+  { Antibiotico: 'Ceftriaxona', DDD_mg: 2000, MgPorUnidade: 1000 },
+  { Antibiotico: 'Vancomicina', DDD_mg: 2000, MgPorUnidade: 500 },
+  { Antibiotico: 'Meropenem', DDD_mg: 3000, MgPorUnidade: 1000 },
+  { Antibiotico: 'Metronidazol', DDD_mg: 1500, DDD_VO_mg: 2000, MgPorUnidade: 500, MgPorComprimido: 400 },
+  { Antibiotico: 'Clindamicina', DDD_mg: 1800, DDD_VO_mg: 1200, MgPorUnidade: 600, MgPorComprimido: 300 },
+  { Antibiotico: 'Piperacilina tazobactam', DDD_mg: 14000, MgPorUnidade: 4500 },
+  { Antibiotico: 'Cefepima', DDD_mg: 4000, MgPorUnidade: 1000 },
+  { Antibiotico: 'Azitromicina', DDD_mg: 500, DDD_VO_mg: 300, MgPorUnidade: 500, MgPorComprimido: 500 },
+  { Antibiotico: 'Cefazolina', DDD_mg: 3000, MgPorUnidade: 1000 },
+  { Antibiotico: 'Cefuroxima', DDD_mg: 3000, DDD_VO_mg: 500, MgPorUnidade: 750, MgPorComprimido: 500 },
+  { Antibiotico: 'Ceftazidima', DDD_mg: 4000, MgPorUnidade: 1000 },
+  { Antibiotico: 'Oxacilina', DDD_mg: 2000, MgPorUnidade: 500 },
+  { Antibiotico: 'Fluconazol', DDD_mg: 200, MgPorUnidade: 200, MgPorComprimido: 150 },
+  { Antibiotico: 'Ampicilina + Sulbactam', DDD_mg: 6000, MgPorUnidade: 3000 },
+  { Antibiotico: 'Penicilina', DDD_mg: 3600, UI_DDD: 6000000, UI_PorUnidade: 5000000 },
+  { Antibiotico: 'Gentamicina', DDD_mg: 240, MgPorUnidade: 80 },
+  { Antibiotico: 'Polimixina B', DDD_mg: 150, UI_DDD: 1500000, UI_PorUnidade: 500000 },
+  { Antibiotico: 'Linezolida', DDD_mg: 1200, MgPorComprimido: 600 },
+  { Antibiotico: 'Sulfametoxazol-Trimetoprima', DDD_mg: 1920, MgPorUnidade: 480, MgPorComprimido: 960 },
+  { Antibiotico: 'Levofloxacino', DDD_mg: 500, MgPorUnidade: 500, MgPorComprimido: 500 },
+  { Antibiotico: 'Ciprofloxacino', DDD_mg: 800, DDD_VO_mg: 1000, MgPorUnidade: 400, MgPorComprimido: 500 },
+  { Antibiotico: 'Ampicilina', DDD_mg: 6000, DDD_VO_mg: 2000, MgPorUnidade: 1000 },
+  { Antibiotico: 'Amicacina', DDD_mg: 1000, MgPorUnidade: 500 },
+  { Antibiotico: 'Aciclovir', DDD_mg: 4000, MgPorUnidade: 250, MgPorComprimido: 400 },
+  { Antibiotico: 'Cefoxitina', DDD_mg: 6000, MgPorUnidade: 1000 },
+  { Antibiotico: 'Tigeciclina', DDD_mg: 100, MgPorUnidade: 50 },
+  { Antibiotico: 'Oxitetraciclina', DDD_mg: 1000, MgPorComprimido: 500 },
+  { Antibiotico: 'Amoxicilina-clavulanato', DDD_mg: 3000, DDD_VO_mg: 1500, MgPorComprimido: 1000 },
+  { Antibiotico: 'Imipenem', DDD_mg: 2000, MgPorUnidade: 500 },
+  { Antibiotico: 'Doxiciclina', DDD_mg: 100, MgPorComprimido: 100 },
+  { Antibiotico: 'Micafungina', DDD_mg: 100, MgPorUnidade: 100 },
+  { Antibiotico: 'Amoxicilina', DDD_mg: 1500, MgPorComprimido: 500 },
+  { Antibiotico: 'Anfotericina B', DDD_mg: 35, MgPorUnidade: 50 },
+  { Antibiotico: 'Rifampicina', DDD_mg: 600, MgPorComprimido: 300 },
+  { Antibiotico: 'Nitrofurantoina', DDD_mg: 200, MgPorComprimido: 100 },
+  { Antibiotico: 'Tetraciclina', DDD_mg: 1000, MgPorComprimido: 500 },
+  { Antibiotico: 'Cefalexina', DDD_mg: 2000, MgPorComprimido: 500 },
+  { Antibiotico: 'Ertapenem', DDD_mg: 1000, MgPorUnidade: 1000 },
+  { Antibiotico: 'Daptomicina', DDD_mg: 280, MgPorUnidade: 500 },
+  { Antibiotico: 'Teicoplanina', DDD_mg: 400, MgPorUnidade: 400 }
+].map(l => ({ Fonte: 'OMS ATC/DDD 2024 (semente, a conferir)', ...l }));
+
+const _VIA_ORAL = /^(vo|sne|gt|sog|sne\/vo)$/i;
+const DDD_COBERTURA_MINIMA = 0.5;
+/* DDDs por dia de UMA prescrição, pela dose escrita ("2 fa 8/8h IV", "500 mg 6/6h VO",
+   "4000000 ui 4/4h", "1 com 1x ao dia"). Devolve { ddd, motivo } — ddd null quando não dá
+   para converter (sem dose, antibiótico fora da tabela, unidade sem apresentação, "ml"). */
+function dddDiarioDaPrescricao(prescricao, tabela) {
+  const nome = normalizarTexto(prescricao.Antibiotico);
+  const linha = (tabela || TABELA_DDD_PADRAO).find(l => normalizarTexto(l.Antibiotico) === nome)
+    || (tabela || TABELA_DDD_PADRAO).find(l => nome && (nome.includes(normalizarTexto(l.Antibiotico)) || normalizarTexto(l.Antibiotico).includes(nome)));
+  const bruto = String(prescricao.Dose || '').trim();
+  if (!bruto) return { ddd: null, motivo: 'sem dose' };
+  if (!linha) return { ddd: null, motivo: 'antibiótico fora da tabela de DDD' };
+  const m = /^([\d.,]+)\s*(mg|g|mcg|ui|fa|amp|com|cp|cap|caps|bols|bolsa|ml|gts)\b/i.exec(bruto);
+  if (!m) return { ddd: null, motivo: 'dose ilegível' };
+  const quantidade = Number(m[1].replace(/\.(?=\d{3}\b)/g, '').replace(',', '.'));
+  const unidade = m[2].toLowerCase();
+  const intervalo = /(\d{1,2})\s*\/\s*\d{1,2}\s*h/i.exec(bruto);
+  const aoDia = /(\d)\s*x\s*(ao dia|dia|\/dia)/i.exec(bruto);
+  const vezesDia = intervalo ? Math.round(24 / Number(intervalo[1])) : aoDia ? Number(aoDia[1]) : /\d{1,2}h\s+\d{1,2}h/.test(bruto) ? (bruto.match(/\d{1,2}h/g) || []).length : 1;
+  const via = (/\b(iv|ev|vo|im|sne|sc|gt|sog)\b/i.exec(bruto) || [])[1] || '';
+  const oral = _VIA_ORAL.test(via);
+  const dddMg = oral && Number(linha.DDD_VO_mg) ? Number(linha.DDD_VO_mg) : Number(linha.DDD_mg);
+  let mgDia = null;
+  if (unidade === 'mg') mgDia = quantidade * vezesDia;
+  else if (unidade === 'g') mgDia = quantidade * 1000 * vezesDia;
+  else if (unidade === 'mcg') mgDia = quantidade / 1000 * vezesDia;
+  else if (unidade === 'ui') {
+    if (!Number(linha.UI_DDD)) return { ddd: null, motivo: 'dose em UI sem DDD em UI na tabela' };
+    return { ddd: quantidade * vezesDia / Number(linha.UI_DDD), motivo: '' };
+  } else if (/^(fa|amp|bols|bolsa)$/.test(unidade)) {
+    if (Number(linha.UI_PorUnidade) && Number(linha.UI_DDD)) return { ddd: quantidade * Number(linha.UI_PorUnidade) * vezesDia / Number(linha.UI_DDD), motivo: '' };
+    if (!Number(linha.MgPorUnidade)) return { ddd: null, motivo: 'frasco/ampola sem apresentação na tabela' };
+    mgDia = quantidade * Number(linha.MgPorUnidade) * vezesDia;
+  } else if (/^(com|cp|cap|caps)$/.test(unidade)) {
+    if (!Number(linha.MgPorComprimido)) return { ddd: null, motivo: 'comprimido/cápsula sem apresentação na tabela' };
+    mgDia = quantidade * Number(linha.MgPorComprimido) * vezesDia;
+  } else return { ddd: null, motivo: 'dose em ' + unidade + ' (sem concentração)' };
+  if (!dddMg || !isFinite(mgDia)) return { ddd: null, motivo: 'DDD não definida na tabela' };
+  return { ddd: mgDia / dddMg, motivo: '' };
+}
+
+/* Série mensal de consumo: DOT e DDD por 1.000 pacientes-dia, para o hospital inteiro e para
+   a UTI adulto. Dia a dia: cada dia de cada prescrição conta 1 DOT (mesmo paciente + mesmo
+   antibiótico no mesmo dia conta uma vez) e os DDDs do dia (a maior dose entre renovações
+   sobrepostas); o setor do dia vem da passagem por setores do atendimento (fallback: o setor
+   escrito na prescrição). Pacientes-dia: hospital pelo censo individual; UTI pelo censo NISS
+   (linha "Pacientes-dia") e, sem ele, pelas passagens. opcoes: { tabela, setorUTI (regex ou
+   função), hojeISO }. */
+function consumoAntibioticosMensal(bancos, meses, opcoes) {
+  const op = opcoes || {};
+  const tabela = op.tabela || TABELA_DDD_PADRAO;
+  const ehUTI = typeof op.setorUTI === 'function' ? op.setorUTI
+    : (s => (op.setorUTI instanceof RegExp ? op.setorUTI : /\bcti\b/i).test(String(s || '')) && !/neonat|pedi/i.test(String(s || '')));
+  const prescricoes = ((bancos.antibioticos || {}).prescricoes || []);
+  const passagens = ((bancos.denominadores || {}).passagem_setor || []);
+  const internacoes = ((bancos.pacientes || {}).internacoes || []);
+  const hoje = String(op.hojeISO || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const porAtd = new Map();
+  for (const p of passagens) {
+    const a = normalizarProntuario(p.Atendimento);
+    if (!a || !/^\d{4}-/.test(String(p.EntradaSetor || ''))) continue;
+    if (!porAtd.has(a)) porAtd.set(a, []);
+    porAtd.get(a).push({ setor: String(p.Setor || '').trim(), de: String(p.EntradaSetor).slice(0, 10), ate: /^\d{4}-/.test(String(p.SaidaSetor || '')) ? String(p.SaidaSetor).slice(0, 10) : '9999-12-31' });
+  }
+  const setorNoDia = (p, dia) => {
+    const lista = porAtd.get(normalizarProntuario(p.Atendimento));
+    if (lista) { const x = lista.find(q => q.de <= dia && dia <= q.ate); if (x) return x.setor; }
+    return String(p.Setor || '').trim();
+  };
+  const addDias = (iso, n) => new Date(Date.parse(iso + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+  /* acumuladores por mês */
+  const acc = new Map(meses.map(m => [m.mes, { dot: new Set(), dotUti: new Set(), ddd: new Map(), dddUti: new Map(), comDose: 0, semDose: 0, naoConvertida: new Map() }]));
+  const inicioSerie = meses[0].inicio, fimSerie = meses[meses.length - 1].fim;
+  for (const p of prescricoes) {
+    const ini = String(p.DataInicio || '').slice(0, 10);
+    if (!/^\d{4}-/.test(ini) || !String(p.Antibiotico || '').trim()) continue;
+    let fim = String(p.DataSuspensao || p.DataFim || p.DataInicio).slice(0, 10);
+    if (!/^\d{4}-/.test(fim) || fim < ini) fim = ini;
+    if (fim > hoje) fim = hoje;
+    if (fim < inicioSerie || ini > fimSerie) continue;
+    const quem = normalizarProntuario(p.Prontuario) || ('atd:' + normalizarProntuario(p.Atendimento));
+    const chaveAtb = quem + '|' + normalizarTexto(p.Antibiotico);
+    const { ddd, motivo } = dddDiarioDaPrescricao(p, tabela);
+    const mesIni = ini.slice(0, 7);
+    const a0 = acc.get(mesIni);
+    if (a0) { if (String(p.Dose || '').trim()) a0.comDose++; else a0.semDose++; if (ddd === null && String(p.Dose || '').trim()) a0.naoConvertida.set(motivo, (a0.naoConvertida.get(motivo) || 0) + 1); }
+    for (let dia = ini < inicioSerie ? inicioSerie : ini; dia <= fim && dia <= fimSerie; dia = addDias(dia, 1)) {
+      const a = acc.get(dia.slice(0, 7));
+      if (!a) continue;
+      const k = chaveAtb + '|' + dia;
+      a.dot.add(k);
+      if (ddd !== null) a.ddd.set(k, Math.max(a.ddd.get(k) || 0, ddd));
+      if (ehUTI(setorNoDia(p, dia))) { a.dotUti.add(k); if (ddd !== null) a.dddUti.set(k, Math.max(a.dddUti.get(k) || 0, ddd)); }
+    }
+  }
+  /* pacientes-dia da UTI: NISS (linhas "Pacientes-dia" dos setores de UTI) por competência */
+  const niss = ((bancos.denominadores || {}).dispositivos_dia || []).filter(l => /pacientes.?dia/i.test(String(l.Dispositivo || '')) && ehUTI(l.Setor));
+  const setoresUTI = [...new Set(((bancos.denominadores || {}).passagem_setor || []).map(p => String(p.Setor || '').trim()).filter(ehUTI))];
+  return meses.map(m => {
+    const a = acc.get(m.mes);
+    const soma = mapa => [...mapa.values()].reduce((s, v) => s + v, 0);
+    /* mês em curso: internação aberta conta só até hoje, não até o fim do mês */
+    const fimPd = m.fim > hoje ? hoje : m.fim;
+    const pdHosp = fimPd >= m.inicio ? pacientesDia(internacoes, m.inicio, fimPd) : 0;
+    let pdUti = niss.filter(l => String(l.Competencia || '').slice(0, 7) === m.mes).reduce((s, l) => s + (Number(String(l.Contagem).replace(',', '.')) || 0), 0);
+    let fonteUti = pdUti ? 'NISS' : '';
+    if (!pdUti && setoresUTI.length) { const r = pacientesDiaDasPassagens(bancos, m.inicio, m.fim, setoresUTI); if (r && r.dias) { pdUti = r.dias; fonteUti = 'passagens'; } }
+    const dot = a.dot.size, dotUti = a.dotUti.size, ddd = soma(a.ddd), dddUti = soma(a.dddUti);
+    /* cobertura = fração dos dias de terapia que tinham dose convertível; abaixo de
+       DDD_COBERTURA_MINIMA o DDD do mês sai nulo (subestimaria), mas a cobertura é mostrada */
+    const cobertura = dot ? a.ddd.size / dot : 0;
+    const temDose = cobertura >= DDD_COBERTURA_MINIMA;
+    const mil = (n, pd) => pd ? Math.round(n / pd * 1000 * 10) / 10 : null;
+    return { mes: m.mes, dot, dotUti, ddd: temDose ? Math.round(ddd * 10) / 10 : null, dddUti: temDose ? Math.round(dddUti * 10) / 10 : null,
+      pdHosp: Math.round(pdHosp), pdUti: Math.round(pdUti), fonteUti, coberturaDose: Math.round(cobertura * 100),
+      dotMil: mil(dot, pdHosp), dotMilUti: mil(dotUti, pdUti), dddMil: temDose ? mil(ddd, pdHosp) : null, dddMilUti: temDose ? mil(dddUti, pdUti) : null,
+      comDose: a.comDose, semDose: a.semDose, naoConvertida: [...a.naoConvertida.entries()].sort((x, y) => y[1] - x[1]) };
+  });
 }
 
 /* Intervalo do mês anterior fechado — o período padrão dos relatórios. */
@@ -1274,6 +1449,7 @@ if (typeof module !== 'undefined' && module.exports) {
     relatorioResumoExecutivo, RELATORIOS_PADRAO, BANCOS_RELATORIOS, setoresEmUso, pacientesDia, pacientesDiaDoCenso,
     relMediana, relDiasEntre, mesAnteriorIntervalo,
     diasDeDispositivo, taxasPorDispositivo, grupoDoDispositivo, grupoDispositivoDaIRAS, indicadoresReuniao,
+    TABELA_DDD_PADRAO, dddDiarioDaPrescricao, consumoAntibioticosMensal, DDD_COBERTURA_MINIMA,
     perfilMicrobiologico, cruzarIRAScomCulturas, culturasDaIRAS, melhorCulturaDaIRAS, indiceCulturasPorProntuario,
     sitioDaIRAS, materialCasaSitio, colunasDoPerfil, classificarGram, especieEnterobacteria,
     especieNaoFermentador, especieStaphAureus, especieEnterococo, GRUPOS_ANTIBIOGRAMA, tabelaResistencia,

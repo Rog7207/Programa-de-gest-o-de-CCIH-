@@ -15,6 +15,9 @@ const config = {
   rotina: { atbAvaliados: [], mdrMonitorados: [], vigilanciaCategorias: [], germesSoComResistencia: [] },
   /* Equipe: [{Nome, Funcao (chave de FUNCOES_CCIH), CadaDias}] — uma linha por função. */
   profissionais: [],
+  /* DDD e apresentações por antibiótico (consumo em DDD/1.000 pacientes-dia). Vazio = semente
+     TABELA_DDD_PADRAO (relatorios.js); a tabela gravada no config.xlsx vence. */
+  dddAntibioticos: [],
   /* Grupos de setores para os relatórios padrão: [{Grupo, Setor}] — uma linha por membro
      (ex.: "UTIs" reúne o CTI e a UTI Neonatal). */
   gruposSetores: [],
@@ -31,6 +34,8 @@ const config = {
     this.antimicrobianos = dados.antimicrobianos || [];
     this.profissionais = dados.profissionais || [];
     this.gruposSetores = dados.grupos_setores || [];
+    this.dddAntibioticos = (dados.ddd_antibioticos || []).filter(l => String(l.Antibiotico || '').trim());
+    if (!this.dddAntibioticos.length && typeof TABELA_DDD_PADRAO !== 'undefined') this.dddAntibioticos = TABELA_DDD_PADRAO.map(l => ({ ...l }));
     this.rotina = {
       atbAvaliados: (dados.atb_avaliados || []).map(l => l.Nome).filter(Boolean),
       mdrMonitorados: (dados.mdr_monitorados || []).map(l => l.Nome).filter(Boolean),
@@ -112,7 +117,8 @@ const config = {
          edição é uma só, e a fusão impediria excluir alguém (o disco ressuscitaria a
          linha apagada). Vale a regra de quem salvou por último. */
       profissionais: this.profissionais,
-      grupos_setores: this.gruposSetores };
+      grupos_setores: this.gruposSetores,
+      ddd_antibioticos: this.dddAntibioticos };
     for (const v of Object.keys(this.vocabulario)) {
       if (v === 'procedimentos_nhsn') continue;
       abas[v] = this.vocabulario[v].map(nome => ({ Nome: nome }));

@@ -198,6 +198,11 @@ const ESQUEMAS = {
       topografias: ['Nome'],
       focos_sepse: ['Nome'],
       procedimentos_nhsn: ['Nome', 'Codigo', 'TempoCorteHoras'],
+      /* DDD (dose diária definida, OMS ATC/DDD) e apresentação da farmácia por antibiótico
+         (21/10/2026): DDD_mg = DDD parenteral em mg (DDD_VO_mg quando a oral difere);
+         MgPorUnidade = mg de um frasco/ampola/bolsa; MgPorComprimido; UI_* para penicilina
+         e polimixina. Semente em TABELA_DDD_PADRAO (relatorios.js); editável no Excel. */
+      ddd_antibioticos: ['Antibiotico', 'DDD_mg', 'DDD_VO_mg', 'MgPorUnidade', 'MgPorComprimido', 'UI_DDD', 'UI_PorUnidade', 'Fonte'],
       antimicrobianos: ['Nome', 'Classe', 'Grupo', 'Apresentacao', 'Codigo', 'Padronizado'],
       categorias_profissionais: ['Nome'],
       momentos_higiene: ['Nome'],

@@ -316,10 +316,12 @@ async function montarInfeccoes(conteudo) {
       el('div', { class: 'alerta-titulo' },
         `${fmtInt(grupos.length)} episódio(s) com casos duplicados — ${fmtInt(redundantes)} caso(s) redundante(s)`),
       el('div', { class: 'texto-suave' },
-        'Mesmo paciente, mesma topografia (contando siglas equivalentes) e datas até '
-        + `${IRAS_JANELA_DUPLICATA_DIAS} dias entre si: o episódio foi detectado por mais de um caminho. `
-        + 'Fundir mantém o caso mais forte (decisão da segunda assinatura vale mais que suspeita aberta), '
-        + 'completa os campos vazios com o que os outros sabiam e registra a fusão nas observações.'),
+        'Mesmo paciente, mesmo sítio e datas até '
+        + `${IRAS_JANELA_DUPLICATA_DIAS} dias entre si: o episódio foi registrado mais de uma vez, às vezes com nomes diferentes `
+        + '(ISC superficial e profunda; traqueobronquite e pneumonia; IPCS clínica e laboratorial; ITU com e sem cateter). '
+        + 'Fundir mantém o caso mais forte (digitado no Tasy > confirmado > descartado > em investigação), '
+        + 'fica com a topografia MAIS PROFUNDA ou MAIS GRAVE do grupo, completa os campos vazios com o que os outros '
+        + 'sabiam e registra a fusão nas observações.'),
       el('table', { class: 'tabela' },
         el('thead', {}, el('tr', {}, ['Paciente', 'Topografia', 'Datas', 'Casos'].map(c => el('th', {}, c)))),
         el('tbody', {}, grupos.slice(0, 12).map(linhaDoGrupo))),

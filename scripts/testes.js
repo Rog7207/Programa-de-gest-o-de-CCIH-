@@ -1234,8 +1234,8 @@ console.log('\n== 84b. Classificador ligado à importação, à dedup e ao vocab
   verificar('IMAS: ISC-OC vira ISC de órgão/espaço e guarda o procedimento', oIsc.Topografia === 'ISC de órgão/espaço' && oIsc.Procedimento === 'NEFRECTOMIA TOTAL EM ONCOLOGIA', oIsc);
   const oItu = imas.linhas[2];
   verificar('IMAS: Suspeita → em investigação', oItu.StatusInvestigacao === 'em investigação' && oItu.Topografia === 'ITU associada a cateter vesical', oItu);
-  verificar('IMAS: grupoTopografia reconhece a topografia canônica (PAV→pneumonia, ISC→isc)',
-    imp.grupoTopografia(o0.Topografia) === 'pneumonia' && imp.grupoTopografia(oIsc.Topografia) === 'isc', { a: imp.grupoTopografia(o0.Topografia), b: imp.grupoTopografia(oIsc.Topografia) });
+  verificar('IMAS: grupoTopografia reconhece a topografia canônica (PAV→respiratoria, ISC→isc)',
+    imp.grupoTopografia(o0.Topografia) === 'respiratoria' && imp.grupoTopografia(oIsc.Topografia) === 'isc', { a: imp.grupoTopografia(o0.Topografia), b: imp.grupoTopografia(oIsc.Topografia) });
   verificar('IMAS: topografiaCanonicaImas mapeia ISC superficial e profunda',
     imp.topografiaCanonicaImas('ISC-S- Infecção do Sítio Cirúrgico Superficial', 'Sítio Cirúrgico') === 'ISC incisional superficial'
     && imp.topografiaCanonicaImas('ISC- P- Infecção do Sítio Cirúrgico Profunda', '') === 'ISC incisional profunda');
@@ -5917,6 +5917,42 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     verificar('dígitos: telefone formatado e prontuário com zeros', b('99990000') && b('48999990000'.slice(2)) && b('12345') && b('1440176'));
     verificar('data em dd/mm/aaaa e parcial', b('15/09/2026') && b('15/09') && b('2026-09'));
     verificar('o que não está em campo nenhum não casa', !b('maria') && !b('777'));
+  }
+
+  /* == 106. Mesmo sítio com nomes diferentes: agrupa e fica o mais profundo/grave (21/10/2026) == */
+  {
+    console.log('\n== 106. Duplicatas de IRAS: sítio, profundidade e gravidade ==');
+    const g = imp.grupoTopografia;
+    verificar('ISC superficial, profunda e órgão/espaço no mesmo grupo', g('ISC incisional superficial') === g('ISC incisional profunda') && g('ISC de órgão/espaço') === g('Sítio cirúrgico'));
+    verificar('traqueobronquite, pneumonia, PAV e "Pulmonar / PAV" no grupo respiratório', ['Traqueobronquite', 'Pneumonia não associada à VM', 'Pneumonia associada à ventilação mecânica (PAV)', 'Pulmonar / PAV'].every(t => g(t) === 'respiratoria'));
+    verificar('IPCS laboratorial e clínica juntas; bacteremia secundária à parte', g('IPCS com confirmação laboratorial') === g('IPCS clínica') && g('Corrente sanguínea (bacteremia secundária)') !== g('IPCS clínica'));
+    verificar('ITU associada e não associada a cateter juntas', g('ITU não associada a cateter') === g('ITU associada a cateter vesical') && g('ITU') === 'itu');
+    verificar('conjuntivite com e sem sigla juntas; pele e partes moles com e sem "infecção de"', g('CONJ-Conjuntivite') === g('Conjuntivite') && g('Infecção de pele e partes moles') === g('Pele e partes moles'));
+    const gr = imp.gravidadeTopografia;
+    verificar('gravidade: órgão/espaço > profunda > superficial; pneumonia > traqueobronquite; PAV > pneumonia não associada; IPCS lab > clínica; ITU com cateter > sem',
+      gr('ISC de órgão/espaço') > gr('ISC incisional profunda') && gr('ISC incisional profunda') > gr('ISC incisional superficial')
+      && gr('Pneumonia não associada à VM') > gr('Traqueobronquite') && gr('Pneumonia associada à ventilação mecânica (PAV)') > gr('Pneumonia não associada à VM')
+      && gr('IPCS com confirmação laboratorial') > gr('IPCS clínica') && gr('ITU associada a cateter vesical') > gr('ITU não associada a cateter'));
+    const casos = [
+      { ID_IRAS: 'A1', Prontuario: '10', DataInfeccao: '2026-09-01', Topografia: 'ISC incisional superficial', StatusInvestigacao: 'confirmado', ConfirmadoPor: 'Dr' },
+      { ID_IRAS: 'A2', Prontuario: '10', DataInfeccao: '2026-09-06', Topografia: 'ISC de órgão/espaço', StatusInvestigacao: 'em investigação' },
+      { ID_IRAS: 'B1', Prontuario: '20', DataInfeccao: '2026-09-01', Topografia: 'Traqueobronquite', StatusInvestigacao: 'digitado', ID_Tasy: 'T9' },
+      { ID_IRAS: 'B2', Prontuario: '20', DataInfeccao: '2026-09-04', Topografia: 'Pneumonia associada à ventilação mecânica (PAV)', DispositivoAssociado: 'VM', StatusInvestigacao: 'confirmado' },
+      { ID_IRAS: 'C1', Prontuario: '30', DataInfeccao: '2026-09-01', Topografia: 'ITU não associada a cateter', StatusInvestigacao: 'confirmado' },
+      { ID_IRAS: 'C2', Prontuario: '30', DataInfeccao: '2026-10-20', Topografia: 'ITU associada a cateter vesical', StatusInvestigacao: 'confirmado' }];
+    const r = imp.deduplicarCasosIras(JSON.parse(JSON.stringify(casos)));
+    const de = id => r.casos.find(c => c.ID_IRAS === id);
+    verificar('ISC superficial + órgão/espaço em 5 dias: um caso, o confirmado fica, topografia órgão/espaço, com nota',
+      de('A1') && !de('A2') && de('A1').Topografia === 'ISC de órgão/espaço' && /órgão\/espaço/.test(de('A1').Observacoes) && de('A1').StatusInvestigacao === 'confirmado', de('A1'));
+    verificar('traqueobronquite (digitada no Tasy) + PAV: fica o digitado, com topografia PAV e dispositivo VM',
+      de('B1') && !de('B2') && de('B1').Topografia === 'Pneumonia associada à ventilação mecânica (PAV)' && de('B1').DispositivoAssociado === 'VM' && de('B1').ID_Tasy === 'T9', de('B1'));
+    verificar('ITUs a 49 dias: episódios diferentes, não fundem', de('C1') && de('C2'));
+    const base = [{ ID_IRAS: 'X1', Prontuario: '40', DataInfeccao: '2026-09-10', Topografia: 'ISC incisional superficial', StatusInvestigacao: 'confirmado' }];
+    const reg = imp.registrarCasoIras(base, { Prontuario: '40', DataInfeccao: '2026-09-12', Topografia: 'ISC incisional profunda', StatusInvestigacao: 'confirmado' }, () => 'X2');
+    verificar('importação: mesmo episódio chegando como mais profundo atualiza a topografia (com rastro) e não cria caso',
+      !reg.novo && base.length === 1 && base[0].Topografia === 'ISC incisional profunda' && /ajustada/.test(base[0].Observacoes));
+    const reg2 = imp.registrarCasoIras(base, { Prontuario: '40', DataInfeccao: '2026-09-11', Topografia: 'ISC incisional superficial' }, () => 'X3');
+    verificar('importação: chegando como MENOS profundo não rebaixa', !reg2.novo && base[0].Topografia === 'ISC incisional profunda');
   }
 
   console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);

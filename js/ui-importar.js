@@ -1048,6 +1048,10 @@ function telaImasOcorrencias(arquivo, leitura) {
             }
             await gravarBanco('iras', bIras);
             if (mudouPac) await gravarBanco('pacientes', bPac);
+            /* Episódios que continuam duplicados no banco (de antes, ou com nome diferente do
+               mesmo sítio): a fusão remove linhas, então só acontece na aba Infecções, com
+               confirmação — aqui só contamos para avisar. */
+            r.duplicados = agruparCasosIrasDuplicados(bIras.casos, undefined, identidadePorNome(bPac.pacientes || [])).length;
             return r;
           });
           await arquivarOriginal(arquivo);
@@ -1055,7 +1059,9 @@ function telaImasOcorrencias(arquivo, leitura) {
             el('h2', {}, 'Importado'),
             el('p', {}, `${fmtInt(resumo.novos)} caso(s) novo(s); ${fmtInt(resumo.vinculados)} já existiam (completados sem duplicar)`
               + (resumo.digitados ? `; ${fmtInt(resumo.digitados)} confirmado(s) marcado(s) como digitado(s)` : '') + '.'),
-            el('p', { class: 'texto-suave' }, 'Confira na aba Infecções. Casos confirmados no IMAS entram como confirmados; suspeitos vão para a fila de confirmação.')));
+            resumo.duplicados ? el('p', { class: 'aviso-erro-texto' }, `⚠ ${fmtInt(resumo.duplicados)} episódio(s) seguem com casos duplicados no banco (mesmo paciente e mesmo sítio em até ${IRAS_JANELA_DUPLICATA_DIAS} dias) — use "Fundir duplicatas" na aba Infecções.`) : null,
+            el('p', { class: 'texto-suave' }, 'Confira na aba Infecções. Casos confirmados no IMAS entram como confirmados; suspeitos vão para a fila de confirmação. '
+              + 'Quando o IMAS traz o mesmo episódio com um nome mais profundo ou mais grave (ISC profunda em vez de superficial, pneumonia em vez de traqueobronquite), o caso daqui é atualizado para ele.')));
         } catch (e) {
           imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao gravar: ' + e.message));
         }

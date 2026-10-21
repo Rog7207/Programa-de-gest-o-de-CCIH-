@@ -1232,7 +1232,7 @@ function lerCensoNISS(matriz) {
    a classificação específica da topografia (PAV, ISC-S/P/OC…) e, nas ISC, o procedimento.
    É texto tabulado paginado, com título no topo e rodapé "Impresso em". Devolve casos já
    prontos para registrarCasoIras — a topografia específica vira o vocabulário canônico e o
-   grupoTopografia continua reconhecendo (PAV→pneumonia, ISC→isc). */
+   grupoTopografia continua reconhecendo (PAV→respiratoria, ISC→isc). */
 function statusDaClassificacaoImas(classif) {
   const c = normalizarTexto(classif);
   if (!c) return 'confirmado';
@@ -2721,16 +2721,40 @@ function deduplicar(registros, existentes, tipo, opcoes) {
 
 const IRAS_JANELA_DUPLICATA_DIAS = 14;
 
-/* Grupo canônico da topografia: "ITU" e "Infecção do trato urinário" são a mesma coisa,
-   assim como as variações de profundidade da ISC do mesmo episódio. */
+/* Grupo canônico da topografia = o SÍTIO. Nomes diferentes do mesmo sítio no mesmo episódio
+   são a mesma infecção (pedido de 21/10/2026): ISC superficial/profunda/órgão-cavidade;
+   traqueobronquite, pneumonia e PAV; IPCS laboratorial e clínica; ITU associada ou não a
+   cateter. No banco real os grupos antigos deixavam escapar "IPCS com confirmação
+   laboratorial" (225 casos), as duas ITU, traqueobronquite e "Pulmonar / PAV".
+   Bacteremia SECUNDÁRIA fica em grupo próprio: é atribuída a outro sítio, não é IPCS. */
 function grupoTopografia(topografia) {
   const t = normalizarTexto(topografia);
   if (!t) return '';
-  if (t === 'itu' || /urinari/.test(t)) return 'itu';
-  if (t === 'pav' || t === 'pnm' || /pneumonia/.test(t)) return 'pneumonia';
-  if (t === 'ipcs' || t === 'ipcsl' || t === 'ipcsc' || /correntesanguinea|bacteremia/.test(t)) return 'ipcs';
+  if (/secundaria/.test(t)) return 'bacteremiasecundaria';
+  if (/^itu|urinari|^cistite|pielonefrit/.test(t)) return 'itu';
+  if (/^pav$|^pnm$|pneumonia|traqueobronq|^pulmonar|respiratori/.test(t)) return 'respiratoria';
+  if (/^ipcs|correntesanguinea|bacteremia/.test(t)) return 'ipcs';
   if (/^isc|sitiocirurgic|feridaoperatoria/.test(t)) return 'isc';
+  if (/conjuntivit/.test(t)) return 'conjuntivite';
+  if (/peleepartesmoles|celulite/.test(t)) return 'pele';
   return t;
+}
+
+/* Gravidade/profundidade DENTRO do sítio: na fusão de duplicatas e quando o mesmo episódio
+   chega com outro nome, fica a mais profunda (ISC órgão/espaço > profunda > superficial) ou
+   a mais grave (pneumonia > traqueobronquite; PAV, a associada ao dispositivo, acima da
+   não associada); IPCS laboratorial > clínica; ITU associada a cateter > não associada.
+   Maior número = vence. Nome genérico ("Sítio cirúrgico", "IPCS") fica com 0. */
+function gravidadeTopografia(topografia) {
+  const t = normalizarTexto(topografia);
+  switch (grupoTopografia(topografia)) {
+    case 'isc': return /orgao|espaco|cavidade/.test(t) ? 3 : /profund/.test(t) ? 2 : /superfic/.test(t) ? 1 : 0;
+    case 'respiratoria': return /pav|associadaaventilacao|ventilacaomecanica/.test(t) && !/naoassociada/.test(t) ? 4
+      : /pneumonia|^pnm$/.test(t) ? 3 : /traqueobronq/.test(t) ? 1 : 2;
+    case 'ipcs': return /laborat/.test(t) ? 2 : /clinica/.test(t) ? 1 : 0;
+    case 'itu': return /naoassociada/.test(t) ? 1 : /associada|cateter|svd/.test(t) ? 2 : 0;
+    default: return 0;
+  }
 }
 
 /* Identidade do paciente pelo NOME do cadastro: o mesmo paciente aparece com vários números
@@ -2776,6 +2800,15 @@ function registrarCasoIras(casos, candidato, gerarID, identidadeDe) {
   if (String(candidato.DataInfeccao || '').trim()
     && (!String(existente.DataInfeccao || '').trim() || String(candidato.DataInfeccao) < String(existente.DataInfeccao))) {
     existente.DataInfeccao = candidato.DataInfeccao;
+  }
+  /* Mesmo episódio com nome mais profundo/grave (Tasy diz "ISC profunda", aqui estava
+     "superficial"): fica o mais profundo, com o rastro nas observações. */
+  if (String(candidato.Topografia || '').trim() && gravidadeTopografia(candidato.Topografia) > gravidadeTopografia(existente.Topografia)) {
+    const antes = existente.Topografia;
+    existente.Topografia = candidato.Topografia;
+    if (!String(existente.DispositivoAssociado || '').trim() && String(candidato.DispositivoAssociado || '').trim()) existente.DispositivoAssociado = candidato.DispositivoAssociado;
+    existente.Observacoes = [String(existente.Observacoes || '').trim(),
+      `Topografia ajustada de "${antes}" para "${candidato.Topografia}" (mesmo episódio; fica a mais profunda/grave).`].filter(Boolean).join('\n');
   }
   return { caso: existente, novo: false };
 }
@@ -3036,7 +3069,8 @@ function fundirCasosIras(grupo) {
     'Microrganismo', 'AgenteOriginal', 'ID_CulturaAgente', 'Desfecho', 'NotificadoANVISA',
     'ConfirmadoPor', 'ConfirmadoEm', 'Observacoes'];
   const preenchidos = c => CAMPOS_FUNDIVEIS.filter(campo => String(c[campo] || '').trim()).length;
-  const forca = c => (c.StatusInvestigacao === 'confirmado' ? 200
+  /* digitado (já está no Tasy) > confirmado > descartado > em investigação */
+  const forca = c => (c.StatusInvestigacao === 'digitado' ? 300 : c.StatusInvestigacao === 'confirmado' ? 200
     : c.StatusInvestigacao === 'descartado' ? 100 : 0) + preenchidos(c);
   const ordenado = grupo.slice().sort((a, b) => forca(b) - forca(a)
     || String(a.CriadoEm || '').localeCompare(String(b.CriadoEm || '')));
@@ -3052,9 +3086,19 @@ function fundirCasosIras(grupo) {
       principal.DataInfeccao = outro.DataInfeccao;
     }
   }
+  /* Nomes diferentes do mesmo sítio: fica a topografia mais profunda/grave do grupo (e o
+     dispositivo que veio com ela, se o principal não tinha). */
+  const maisGrave = grupo.filter(c => String(c.Topografia || '').trim())
+    .sort((a, b) => gravidadeTopografia(b.Topografia) - gravidadeTopografia(a.Topografia))[0];
+  let notaTopo = '';
+  if (maisGrave && gravidadeTopografia(maisGrave.Topografia) > gravidadeTopografia(principal.Topografia)) {
+    notaTopo = ` Topografia: "${maisGrave.Topografia}" (a mais profunda/grave; era "${principal.Topografia}").`;
+    principal.Topografia = maisGrave.Topografia;
+    if (String(maisGrave.DispositivoAssociado || '').trim()) principal.DispositivoAssociado = maisGrave.DispositivoAssociado;
+  }
   const removidos = ordenado.slice(1).map(c => c.ID_IRAS);
   /* Rastro da fusão fica no caso que sobrou — nada some sem explicação. */
-  const nota = `Fundido com ${removidos.join(', ')} (duplicata do mesmo episódio).`;
+  const nota = `Fundido com ${removidos.join(', ')} (duplicata do mesmo episódio).` + notaTopo;
   principal.Observacoes = [String(principal.Observacoes || '').trim(), nota].filter(Boolean).join('\n');
   return { principal, removidos };
 }
@@ -4823,7 +4867,7 @@ if (typeof module !== 'undefined' && module.exports) {
     classificarParaVigilancia, categoriaDeVigilancia, CATEGORIAS_VIGILANCIA, CATEGORIAS_VIGILANCIA_PADRAO,
     diasDesde, telefoneWhatsApp, casaBuscaLivre, mensagemVigilancia, linkWhatsApp, JANELA_VIGILANCIA,
     prescricaoAtiva, analisarDose, cursosDeAntibiotico, alertasDeAntibioticos, DIAS_CURSO_PROLONGADO, TETO_DOSE_DIARIA_MG,
-    grupoTopografia, mesmoCasoIras, registrarCasoIras, agruparCasosIrasDuplicados, identidadePorNome, conciliarComTasy, aplicarConciliacao, culturasDoEpisodio, SEM_CULTURA_VALIDA, fichaDeNotificacao, htmlDasFichas,
+    grupoTopografia, gravidadeTopografia, mesmoCasoIras, registrarCasoIras, agruparCasosIrasDuplicados, identidadePorNome, conciliarComTasy, aplicarConciliacao, culturasDoEpisodio, SEM_CULTURA_VALIDA, fichaDeNotificacao, htmlDasFichas,
     fundirCasosIras, deduplicarCasosIras, IRAS_JANELA_DUPLICATA_DIAS
   };
 }

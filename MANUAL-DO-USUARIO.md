@@ -496,11 +496,17 @@ de digitação** (há um visto, ligado por padrão, para isso). E cada item da f
 
 **Sem duplicatas**: o mesmo episódio costuma ser detectado por mais de um caminho (uma
 cultura revisada, o contato da pós-alta, uma planilha importada). O app reconhece o
-episódio — mesmo paciente, mesma topografia (contando siglas como ITU, PAV, IPCS e ISC)
-e datas até 14 dias entre si — e, em vez de abrir um caso novo, completa os campos
-vazios do existente. Duplicatas antigas aparecem no topo da aba Infecções com o botão
-**Fundir duplicatas**: fica o caso mais forte (decisão da segunda assinatura vale mais),
-e a fusão fica registrada nas observações.
+episódio — mesmo paciente, mesmo **sítio** e datas até 14 dias entre si — e, em vez de abrir
+um caso novo, completa os campos vazios do existente. Nomes diferentes do mesmo sítio contam
+como o mesmo episódio: ISC superficial, profunda e de órgão/cavidade; traqueobronquite,
+pneumonia e PAV; IPCS clínica e laboratorial; ITU com e sem cateter. Fica sempre a
+topografia **mais profunda ou mais grave** (órgão/cavidade > profunda > superficial; PAV >
+pneumonia > traqueobronquite; IPCS laboratorial > clínica) — inclusive quando o IMAS do Tasy
+traz o episódio com um nome mais profundo que o daqui. Bacteremia secundária fica à parte
+(é atribuída a outro sítio). Duplicatas antigas aparecem no topo da aba Infecções com o botão
+**Fundir duplicatas**: fica o caso mais forte (digitado no Tasy > confirmado > descartado >
+em investigação), com a topografia mais profunda/grave do grupo, e a fusão fica registrada
+nas observações.
 
 ---
 

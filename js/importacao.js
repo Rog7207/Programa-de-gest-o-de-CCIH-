@@ -2962,6 +2962,10 @@ function culturasDoEpisodio(culturas, caso, opcoes) {
   const idDe = opcoes.identidadeDe || (p => p);
   const alvo = idDe(normalizarProntuario(caso.Prontuario));
   const data = Date.parse(String(caso.DataInfeccao || '').slice(0, 10) + 'T00:00:00Z');
+  /* ISC: a data do caso é a da CIRURGIA, e a cultura da infecção vem semanas depois — a janela
+     vai até ISC_CANDIDATAS_DIAS para a frente (e os 14 dias habituais para trás). */
+  const ehIsc = grupoTopografia((caso || {}).Topografia) === 'isc';
+  const limiteFrente = ehIsc ? Math.max(janela, ISC_CANDIDATAS_DIAS) : janela;
   const foraDeInfeccao = /^(contamina|negativa|agua|leite|controle|nao e cultura|naoecultura)/;
   return (culturas || []).filter(c => {
     if (idDe(normalizarProntuario(c.Prontuario)) !== alvo) return false;
@@ -2969,7 +2973,8 @@ function culturasDoEpisodio(culturas, caso, opcoes) {
     if (foraDeInfeccao.test(normalizarTexto(c.AvaliacaoCCIH).replace(/\s+/g, ''))) return false;
     const d = Date.parse(String(c.DataColeta || '').slice(0, 10) + 'T00:00:00Z');
     if (!isFinite(d) || !isFinite(data)) return false;
-    return Math.abs(d - data) / 86400000 <= janela;
+    const dif = (d - data) / 86400000;
+    return dif >= -janela && dif <= limiteFrente;
   }).sort((a, b) => Math.abs(Date.parse(a.DataColeta) - data) - Math.abs(Date.parse(b.DataColeta) - data));
 }
 const SEM_CULTURA_VALIDA = 'Sem cultura positiva válida';
@@ -2981,19 +2986,23 @@ const SEM_CULTURA_VALIDA = 'Sem cultura positiva válida';
    antes da infecção; "na janela" = até 30 dias, ou até 90 com prótese/implante (critério de
    ISC). Ordem: na janela primeiro, depois a mais próxima da infecção. */
 const ISC_JANELA_DIAS = 30, ISC_JANELA_IMPLANTE_DIAS = 90;
+/* Candidatas até 180 dias antes (pedido de 21/10/2026): a ISC às vezes é detectada tarde. */
+const ISC_CANDIDATAS_DIAS = 180;
 function cirurgiasDoEpisodio(cirurgias, caso, opcoes) {
   const op = opcoes || {};
   const idDe = op.identidadeDe || (p => p);
   const alvo = idDe(normalizarProntuario(caso.Prontuario));
-  const dataInf = String(caso.DataInfeccao || '').slice(0, 10);
+  /* Caso já ligado a uma cirurgia tem DataInfeccao = data da cirurgia; a referência para
+     procurar candidatas é a data da DETECÇÃO (DataDeteccao), quando existe. */
+  const dataInf = String(caso.DataDeteccao || caso.DataInfeccao || '').slice(0, 10);
   if (!/^\d{4}-/.test(dataInf)) return [];
   const saida = [];
   for (const c of (cirurgias || [])) {
     if (idDe(normalizarProntuario(c.Prontuario)) !== alvo) continue;
     const dias = diasDesde(c.DataCirurgia, dataInf);
-    if (dias === null || dias < 0 || dias > ISC_JANELA_IMPLANTE_DIAS) continue;
+    if (dias === null || dias < 0 || dias > ISC_CANDIDATAS_DIAS) continue;
     const implante = classificarParaVigilancia(c, []).implante;
-    saida.push({ cirurgia: c, dias, implante, naJanela: dias <= ISC_JANELA_DIAS || implante });
+    saida.push({ cirurgia: c, dias, implante, naJanela: dias <= ISC_JANELA_DIAS || (implante && dias <= ISC_JANELA_IMPLANTE_DIAS) });
   }
   return saida.sort((a, b) => (b.naJanela - a.naJanela) || a.dias - b.dias);
 }
@@ -3021,7 +3030,36 @@ function vincularCirurgiaIsc(cirurgias, caso, idCirurgia, opcoes) {
     }
   }
   caso.ID_CirurgiaAssociada = idCirurgia || '';
+  /* Padrão da CCIH (há anos): a data da infecção da ISC é a DATA DA CIRURGIA. A data em que
+     a infecção foi vista fica em DataDeteccao, com nota. */
+  if (vinculada && /^\d{4}-/.test(String(vinculada.DataCirurgia || ''))) {
+    const dataCir = String(vinculada.DataCirurgia).slice(0, 10);
+    const atual = String(caso.DataInfeccao || '').slice(0, 10);
+    if (atual !== dataCir) {
+      if (!String(caso.DataDeteccao || '').trim() && atual) caso.DataDeteccao = atual;
+      caso.DataInfeccao = dataCir;
+      caso.Observacoes = acrescentarObservacao(caso.Observacoes, 'Data',
+        `data da infecção = data da cirurgia (${dataCir}); detectada em ${caso.DataDeteccao || atual || '?'}.`, op.usuario || '', op.agora || '');
+    }
+  }
   return { vinculada, desvinculadas };
+}
+
+/* A cultura escolhida como AGENTE de uma IRAS confirmada passa a ser classificada como essa
+   IRAS (pedido de 21/10/2026): se estava com outra classe, era classificação errada. A
+   anterior fica em TriagemRegra. Devolve true se mudou. */
+function reclassificarCulturaComoAgente(cultura, caso, opcoes) {
+  if (!cultura) return false;
+  const topo = String((caso || {}).Topografia || '').trim();
+  const nova = topo ? `IRAS — ${topo}` : 'IRAS';
+  const antes = String(cultura.AvaliacaoCCIH || '').trim();
+  if (antes === nova && cultura.StatusRevisao === 'avaliada') return false;
+  if (antes && antes !== nova && !/^IRAS/.test(antes)) {
+    cultura.TriagemRegra = `classificação anterior: ${antes} (reclassificada ao confirmar a IRAS ${(caso || {}).ID_IRAS || ''}${(opcoes || {}).usuario ? ' por ' + opcoes.usuario : ''})`;
+  }
+  cultura.AvaliacaoCCIH = nova;
+  cultura.StatusRevisao = 'avaliada';
+  return true;
 }
 
 /* ---- Ficha de notificação (para digitar no Tasy) ----
@@ -4975,7 +5013,7 @@ if (typeof module !== 'undefined' && module.exports) {
     classificarParaVigilancia, categoriaDeVigilancia, CATEGORIAS_VIGILANCIA, CATEGORIAS_VIGILANCIA_PADRAO,
     diasDesde, telefoneWhatsApp, casaBuscaLivre, mensagemVigilancia, linkWhatsApp, JANELA_VIGILANCIA,
     prescricaoAtiva, analisarDose, cursosDeAntibiotico, alertasDeAntibioticos, DIAS_CURSO_PROLONGADO, TETO_DOSE_DIARIA_MG,
-    grupoTopografia, gravidadeTopografia, mesmoCasoIras, casoIndeterminado, marcarIndeterminados, resolverIndeterminado, STATUS_INDETERMINADO, CLASSE_INDETERMINADA, registrarCasoIras, agruparCasosIrasDuplicados, identidadePorNome, conciliarComTasy, aplicarConciliacao, culturasDoEpisodio, SEM_CULTURA_VALIDA, cirurgiasDoEpisodio, tipoIscDaTopografia, vincularCirurgiaIsc, ISC_JANELA_DIAS, ISC_JANELA_IMPLANTE_DIAS, fichaDeNotificacao, htmlDasFichas,
+    grupoTopografia, gravidadeTopografia, mesmoCasoIras, casoIndeterminado, marcarIndeterminados, resolverIndeterminado, STATUS_INDETERMINADO, CLASSE_INDETERMINADA, registrarCasoIras, agruparCasosIrasDuplicados, identidadePorNome, conciliarComTasy, aplicarConciliacao, culturasDoEpisodio, SEM_CULTURA_VALIDA, cirurgiasDoEpisodio, tipoIscDaTopografia, vincularCirurgiaIsc, reclassificarCulturaComoAgente, ISC_JANELA_DIAS, ISC_JANELA_IMPLANTE_DIAS, ISC_CANDIDATAS_DIAS, fichaDeNotificacao, htmlDasFichas,
     fundirCasosIras, deduplicarCasosIras, IRAS_JANELA_DUPLICATA_DIAS
   };
 }

@@ -439,8 +439,10 @@ async function montarVigilancia(conteudo) {
              profissional valida — é a dupla assinatura que o processo pede. Episódio
              que já tem caso aberto por outro caminho não duplica — a cirurgia aponta
              para o caso existente. */
+          /* Padrão da CCIH: a data da ISC é a da CIRURGIA; a data informada é a da detecção. */
           const { caso } = registrarCasoIras(atualIras.casos, {
-            Prontuario: alvo.Prontuario, DataInfeccao: campoData.value,
+            Prontuario: alvo.Prontuario, DataInfeccao: String(alvo.DataCirurgia || '').slice(0, 10) || campoData.value,
+            DataDeteccao: campoData.value, ID_CirurgiaAssociada: alvo.ID_Cirurgia,
             Topografia: TIPOS_ISC[selTipo.value], CriterioDiagnostico: 'Vigilância pós-alta (contato telefônico)',
             Setor: setorPadraoISC(alvo.Procedimento), DispositivoAssociado: '', Microrganismo: '',
             Desfecho: '', StatusInvestigacao: 'em investigação', NotificadoANVISA: '',
@@ -465,8 +467,8 @@ async function montarVigilancia(conteudo) {
       el('label', {}, 'Avaliação da enfermagem: ', campoAvaliacao),
       el('div', { class: 'linha-campos' },
         el('label', {}, 'Tipo de ISC: ', selTipo),
-        el('label', {}, 'Data da infecção: ', campoData),
-        el('span', { class: 'texto-suave' }, '(só usados ao abrir investigação)')),
+        el('label', {}, 'Data da detecção: ', campoData),
+        el('span', { class: 'texto-suave' }, '(só usados ao abrir investigação; a data da infecção fica como a da cirurgia)')),
       el('div', { class: 'linha-botoes' },
         el('button', { class: 'botao-secundario', onclick: semInfeccao }, '✓ Sem infecção'),
         el('button', { class: 'botao-primario', onclick: abrirInvestigacao }, '⚠ Abrir investigação'),

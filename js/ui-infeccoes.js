@@ -366,10 +366,10 @@ async function montarInfeccoes(conteudo) {
     const naJanela = candidatas.filter(x => x.naJanela);
     const preSel = atual || (naJanela.length === 1 ? naJanela[0].cirurgia.ID_Cirurgia : '');
     return el('select', {},
-      el('option', { value: '' }, candidatas.length ? '— escolher a cirurgia —' : '— nenhuma cirurgia até 90 dias antes —'),
+      el('option', { value: '' }, candidatas.length ? '— escolher a cirurgia —' : `— nenhuma cirurgia até ${ISC_CANDIDATAS_DIAS} dias antes —`),
       ...candidatas.map(x => el('option', { value: x.cirurgia.ID_Cirurgia, selected: x.cirurgia.ID_Cirurgia === preSel ? '' : null },
         `${x.cirurgia.DataCirurgia} · ${String(x.cirurgia.Procedimento || '').slice(0, 50)} · ${x.dias} dia(s) antes`
-        + (x.implante ? ' · prótese/implante' : '') + (x.naJanela ? '' : ' · fora da janela de 30 dias'))));
+        + (x.implante ? ' · prótese/implante' : '') + (x.naJanela ? '' : ` · fora da janela (${x.implante ? ISC_JANELA_IMPLANTE_DIAS : ISC_JANELA_DIAS} dias)`))));
   }
   /* Grava o vínculo (cirurgias + campo do caso já mutado pelo chamador). */
   async function gravarVinculoCirurgia(alvo, idCirurgia) {
@@ -489,10 +489,12 @@ async function montarInfeccoes(conteudo) {
           await gravarBanco('iras', atualIras);
           const atualCul = await lerBanco('culturas');
           let mudou = false;
+          const casoFirme = ['confirmado', 'digitado'].includes(String(alvo.StatusInvestigacao || ''));
           for (const c of atualCul.culturas || []) {
             const deve = c.ID_Cultura === alvo.ID_CulturaAgente;
             if (deve && c.ID_IRAS !== alvo.ID_IRAS) { c.ID_IRAS = alvo.ID_IRAS; mudou = true; }
             else if (!deve && c.ID_IRAS === alvo.ID_IRAS) { c.ID_IRAS = ''; mudou = true; }
+            if (deve && casoFirme && reclassificarCulturaComoAgente(c, alvo, { usuario: app.usuario })) mudou = true;
           }
           if (mudou) await gravarBanco('culturas', atualCul);
         });
@@ -536,7 +538,8 @@ async function montarInfeccoes(conteudo) {
     const campoCriterio = el('input', { type: 'text', value: caso.CriterioDiagnostico || '', style: 'width:320px' });
     const selCirurgia = seletorCirurgia(caso);
     const linhaCirurgia = el('div', { class: 'linha-campos', style: ehISC(selTopo.value) ? '' : 'display:none' },
-      el('label', {}, 'Cirurgia da ISC: ', selCirurgia));
+      el('label', {}, 'Cirurgia da ISC: ', selCirurgia),
+      el('span', { class: 'texto-suave' }, 'a data da infecção passa a ser a data da cirurgia'));
     selTopo.addEventListener('change', () => { linhaCirurgia.style.display = ehISC(selTopo.value) ? '' : 'none'; });
     const campoNovaObs = el('textarea', { rows: 2, style: 'width:100%',
       placeholder: 'observação da segunda análise (opcional) — entra no diário do caso' });
@@ -579,6 +582,8 @@ async function montarInfeccoes(conteudo) {
               const deveApontar = c.ID_Cultura === alvo.ID_CulturaAgente;
               if (deveApontar && c.ID_IRAS !== alvo.ID_IRAS) { c.ID_IRAS = alvo.ID_IRAS; mudou = true; }
               else if (!deveApontar && c.ID_IRAS === alvo.ID_IRAS) { c.ID_IRAS = ''; mudou = true; }
+              /* a cultura que definiu a IRAS passa a ser classificada como ela (21/10/2026) */
+              if (deveApontar && reclassificarCulturaComoAgente(c, alvo, { usuario: app.usuario })) mudou = true;
             }
             if (mudou) await gravarBanco('culturas', atualCul);
           }

@@ -511,10 +511,17 @@ nas observações.
 **ISC ligada à cirurgia certa**: quem tem mais de uma cirurgia precisa que a infecção de
 sítio cirúrgico aponte para a cirurgia de origem. Na segunda análise (e ao editar um caso já
 registrado), quando a topografia é ISC, aparece a lista das cirurgias do paciente feitas até
-90 dias antes da infecção — as que estão **na janela** (até 30 dias, ou até 90 com
+180 dias antes da detecção — as que estão **na janela** (até 30 dias, ou até 90 com
 prótese/implante) vêm primeiro, com quantos dias antes foram. A escolhida fica ligada ao caso
 e marcada como ISC na própria cirurgia (a mesma ligação que a pós-alta já fazia). Se só uma
-cirurgia está na janela, ela já vem selecionada.
+cirurgia está na janela, ela já vem selecionada. Ao ligar, **a data da infecção passa a ser a
+data da cirurgia** (padrão da CCIH há anos); a data em que a infecção foi vista fica guardada
+como data da detecção, com nota no diário.
+
+**A cultura do agente vira a classificação da IRAS**: ao confirmar uma IRAS e escolher a
+cultura que a definiu (ou ao trocar o agente de um caso confirmado/digitado), essa cultura é
+reclassificada como "IRAS — topografia" — se estava como colonização ou presente na admissão,
+era classificação errada. A classificação anterior fica guardada na cultura.
 
 **Casos indeterminados**: casos que um sistema antigo classificou como IRAS sem verificação
 (sem topografia; no sistema antigo a suspeita só durava até a alta) ficam no quadro **Casos

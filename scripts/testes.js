@@ -5996,14 +5996,24 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       { ID_Cirurgia: 'S6', Prontuario: '5', DataCirurgia: '2026-05-01', Procedimento: 'ARTROPLASTIA DE JOELHO' }];
     const caso = { ID_IRAS: 'IR1', Prontuario: '5', DataInfeccao: '2026-10-10', Topografia: 'ISC incisional profunda' };
     const cand = imp.cirurgiasDoEpisodio(cirurgias, caso);
-    verificar('candidatas: só do paciente, até 90 dias ANTES; na janela (≤30 d, ou ≤90 com prótese) primeiro, mais próxima antes',
-      cand.map(c => c.cirurgia.ID_Cirurgia).join() === 'S1,S2,S3' && cand[0].naJanela && cand[1].implante && cand[1].naJanela && !cand[2].naJanela, cand.map(c => [c.cirurgia.ID_Cirurgia, c.dias, c.naJanela, c.implante]));
+    verificar('candidatas: só do paciente, até 180 dias ANTES; na janela (≤30 d, ou ≤90 com prótese) primeiro, mais próxima antes',
+      cand.map(c => c.cirurgia.ID_Cirurgia).join() === 'S1,S2,S3,S6' && cand[0].naJanela && cand[1].implante && cand[1].naJanela && !cand[2].naJanela && !cand[3].naJanela && cand[3].dias === 162, cand.map(c => [c.cirurgia.ID_Cirurgia, c.dias, c.naJanela, c.implante]));
     verificar('tipo de ISC pela topografia', imp.tipoIscDaTopografia('ISC de órgão/espaço') === 'órgão/espaço' && imp.tipoIscDaTopografia('ISC incisional profunda') === 'profunda' && imp.tipoIscDaTopografia('Pneumonia') === '');
     cirurgias[2].ID_IRAS = 'IR1'; cirurgias[2].ISC = 'S';
     const v = imp.vincularCirurgiaIsc(cirurgias, caso, 'S1', { usuario: 'Dra', agora: '2026-10-21 10:00' });
     verificar('vincular: a escolhida ganha ID_IRAS/ISC/tipo; a que apontava antes é desligada com nota; o caso guarda a cirurgia',
       cirurgias[0].ID_IRAS === 'IR1' && cirurgias[0].ISC === 'S' && cirurgias[0].TipoISC === 'profunda' && cirurgias[2].ID_IRAS === '' && cirurgias[2].ISC === ''
       && /reassociada/.test(cirurgias[2].ObservacoesVigilancia) && caso.ID_CirurgiaAssociada === 'S1' && v.desvinculadas === 1);
+    verificar('vincular: data da infecção vira a data da cirurgia; a detecção fica em DataDeteccao, com nota',
+      caso.DataInfeccao === '2026-09-25' && caso.DataDeteccao === '2026-10-10' && /data da infecção = data da cirurgia/.test(caso.Observacoes), caso);
+    const cand2 = imp.cirurgiasDoEpisodio(cirurgias, caso);
+    verificar('depois de ligada, as candidatas continuam sendo buscadas pela data da DETECÇÃO', cand2.map(c => c.cirurgia.ID_Cirurgia).join() === 'S1,S2,S3,S6');
+    const culs = [{ ID_Cultura: 'Q1', Prontuario: '5', DataColeta: '2026-10-09', Microrganismo: 'Staphylococcus aureus', StatusRevisao: 'avaliada', AvaliacaoCCIH: 'Colonização' },
+      { ID_Cultura: 'Q2', Prontuario: '5', DataColeta: '2027-05-01', Microrganismo: 'E. coli', StatusRevisao: 'pendente' }];
+    verificar('culturas do episódio de ISC: até 180 dias DEPOIS da cirurgia entram (a de 7 meses não)', imp.culturasDoEpisodio(culs, caso).map(c => c.ID_Cultura).join() === 'Q1');
+    verificar('agente de IRAS confirmada: cultura reclassificada como "IRAS — topografia", anterior guardada; repetir não muda',
+      imp.reclassificarCulturaComoAgente(culs[0], caso, { usuario: 'Dra' }) === true && culs[0].AvaliacaoCCIH === 'IRAS — ISC incisional profunda' && culs[0].StatusRevisao === 'avaliada'
+      && /anterior: Colonização/.test(culs[0].TriagemRegra) && imp.reclassificarCulturaComoAgente(culs[0], caso) === false, culs[0]);
   }
 
   console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);

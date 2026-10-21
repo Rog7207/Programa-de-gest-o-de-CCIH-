@@ -124,7 +124,10 @@ const ESQUEMAS = {
       casos: ['ID_IRAS', 'Prontuario', 'DataInfeccao', 'Topografia', 'CriterioDiagnostico', 'Setor', 'DispositivoAssociado', 'Microrganismo', 'AgenteOriginal', 'ID_CulturaAgente', 'Desfecho', 'StatusInvestigacao', 'NotificadoANVISA', 'Observacoes', 'ConfirmadoPor', 'ConfirmadoEm', 'ID_Tasy', 'DigitadoPor', 'DigitadoEm', 'FichaEm', 'ForaDigitacaoPor', 'ForaDigitacaoEm', 'CriadoPor', 'CriadoEm',
         /* ISC: a cirurgia a que a infecção pertence (21/10/2026) — o paciente pode ter feito
            mais de uma; a pós-alta já sabia (ID_IRAS na cirurgia), as outras detecções não. */
-        'ID_CirurgiaAssociada'],
+        'ID_CirurgiaAssociada',
+        /* ISC: a data da infecção passa a ser a DATA DA CIRURGIA (padrão da CCIH há anos);
+           a data em que a infecção foi detectada fica aqui. */
+        'DataDeteccao'],
       /* Fichas de notificação impressas: o arquivo fica em fichas/ dentro da pasta de dados
          (registro do que foi usado na digitação); Casos = IDs separados por ';'. */
       fichas: ['ID_Ficha', 'Arquivo', 'Casos', 'CriadoPor', 'CriadoEm']

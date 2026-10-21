@@ -121,7 +121,10 @@ const ESQUEMAS = {
       /* Ciclo (CCIH do HNSC, 22/09/2026): em investigação → confirmado → DIGITADO no Tasy.
          ID_Tasy é o id da linha no export do Tasy (conciliação sem duplicar na reentrada);
          FichaEm é quando a ficha de notificação foi impressa. */
-      casos: ['ID_IRAS', 'Prontuario', 'DataInfeccao', 'Topografia', 'CriterioDiagnostico', 'Setor', 'DispositivoAssociado', 'Microrganismo', 'AgenteOriginal', 'ID_CulturaAgente', 'Desfecho', 'StatusInvestigacao', 'NotificadoANVISA', 'Observacoes', 'ConfirmadoPor', 'ConfirmadoEm', 'ID_Tasy', 'DigitadoPor', 'DigitadoEm', 'FichaEm', 'ForaDigitacaoPor', 'ForaDigitacaoEm', 'CriadoPor', 'CriadoEm'],
+      casos: ['ID_IRAS', 'Prontuario', 'DataInfeccao', 'Topografia', 'CriterioDiagnostico', 'Setor', 'DispositivoAssociado', 'Microrganismo', 'AgenteOriginal', 'ID_CulturaAgente', 'Desfecho', 'StatusInvestigacao', 'NotificadoANVISA', 'Observacoes', 'ConfirmadoPor', 'ConfirmadoEm', 'ID_Tasy', 'DigitadoPor', 'DigitadoEm', 'FichaEm', 'ForaDigitacaoPor', 'ForaDigitacaoEm', 'CriadoPor', 'CriadoEm',
+        /* ISC: a cirurgia a que a infecção pertence (21/10/2026) — o paciente pode ter feito
+           mais de uma; a pós-alta já sabia (ID_IRAS na cirurgia), as outras detecções não. */
+        'ID_CirurgiaAssociada'],
       /* Fichas de notificação impressas: o arquivo fica em fichas/ dentro da pasta de dados
          (registro do que foi usado na digitação); Casos = IDs separados por ';'. */
       fichas: ['ID_Ficha', 'Arquivo', 'Casos', 'CriadoPor', 'CriadoEm']
@@ -264,7 +267,11 @@ const VOCAB_APLICACAO = {
    revisão de culturas, página remota dos médicos e importação de relatórios já classificados. */
 const CLASSIFICACOES_CULTURA = [
   'Presente na admissão', 'IRAS', 'Bacteremia secundária', 'Colonização', 'Contaminação',
-  'Repetição', 'Informativa', 'Negativa', 'Água', 'Leite', 'Controle ambiental/alimentar', 'Não é cultura'
+  'Repetição', 'Informativa', 'Negativa', 'Água', 'Leite', 'Controle ambiental/alimentar', 'Não é cultura',
+  /* Indeterminada (21/10/2026): classificada como IRAS por um sistema antigo SEM verificação
+     (as suspeitas só duravam até a alta). Fica para checagem e NÃO conta nem como IRAS nem
+     como presente na admissão. */
+  'Indeterminada'
 ];
 
 /* Classificações que o app atribui sozinho na triagem (ver preClassificarCultura) e que,
@@ -288,7 +295,8 @@ const SINONIMOS_CLASSIFICACAO = {
   'leitehumanocontrole': 'Leite', 'controledeleite': 'Leite',
   /* Gram/BAAR é resultado preliminar, não lixo: fica visível (perfil, ficha) fora da fila —
      decisão da CCIH em 23/09/2026 (antes caía em "Não é cultura" e sumia). */
-  'bacterioscopia': 'Informativa', 'baar': 'Informativa', 'naoecultura': 'Não é cultura'
+  'bacterioscopia': 'Informativa', 'baar': 'Informativa', 'naoecultura': 'Não é cultura',
+  'indeterminada': 'Indeterminada', 'indeterminado': 'Indeterminada'
 };
 
 const VOCAB_ROTULOS = {

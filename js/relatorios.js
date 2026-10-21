@@ -201,6 +201,9 @@ function taxasPorDispositivo(bancos, casos, inicio, fim, setoresEscopo) {
    início da conciliação com o Tasy só conta o caso DIGITADO lá — é o que impede os dois
    sistemas de divergirem; antes dela, o confirmado (sistema anterior) vale. Sem data, o
    comportamento antigo (confirmado ou digitado). */
+/* Caso indeterminado (sistema antigo, não verificado — 21/10/2026) fica fora de toda contagem. */
+function _indeterminado(k) { return normalizarTexto((k || {}).StatusInvestigacao) === 'indeterminado'; }
+
 function casosParaRelatorio(casos, conciliacaoDesde) {
   const desde = String(conciliacaoDesde || '').slice(0, 10);
   return (casos || []).filter(k => {
@@ -214,7 +217,9 @@ function casosParaRelatorio(casos, conciliacaoDesde) {
 
 /* ---- 1. IRAS do período ---- */
 function relatorioIRAS(bancos, setoresEscopo, inicio, fim) {
+  /* Indeterminados (sistema antigo, não verificados) ficam fora de toda contagem. */
   const casos = ((bancos.iras || {}).casos || [])
+    .filter(k => !_indeterminado(k))
     .filter(k => relPeriodo(k.DataInfeccao, inicio, fim) && relEscopo(k.Setor, setoresEscopo));
   const validas = casosParaRelatorio(casos, bancos.conciliacaoDesde);
   const status = k => normalizarTexto(k.StatusInvestigacao);
@@ -889,7 +894,7 @@ function melhorCulturaDaIRAS(caso, indice, janela, sensPorCultura) {
    ligada) e ausências reais (IPCS/pneumonia sem cultura). Núcleo puro, testável. */
 function cruzarIRAScomCulturas(bancos, inicio, fim, janela, sensPorCultura) {
   janela = janela == null ? JANELA_IRAS_CULTURA : janela;
-  const casos = ((bancos.iras || {}).casos || []).filter(k => relPeriodo(k.DataInfeccao, inicio, fim));
+  const casos = ((bancos.iras || {}).casos || []).filter(k => !_indeterminado(k) && relPeriodo(k.DataInfeccao, inicio, fim));
   const indice = indiceCulturasPorProntuario((bancos.culturas || {}).culturas || []);
   const porSitio = new Map();
   const divergencias = [], ausencias = [];
@@ -952,7 +957,7 @@ function perfilMicrobiologico(bancos, anoInicial, anoFinal, porSemestre) {
   };
 
   /* 1. Panorama das IRAS. */
-  const casos = ((bancos.iras || {}).casos || []).filter(k => relPeriodo(k.DataInfeccao, inicio, fim));
+  const casos = ((bancos.iras || {}).casos || []).filter(k => !_indeterminado(k) && relPeriodo(k.DataInfeccao, inicio, fim));
   const internacoes = ((bancos.pacientes || {}).internacoes || []);
   const panorama = tabelaCruzada(casos, k => k.DataInfeccao, k => k.Setor, 'Setor');
   const linhaInternacoes = ['Internações iniciadas', ...colunas.map(col =>
@@ -1137,7 +1142,7 @@ function _mesesFechados(hoje, quantos) {
 function indicadoresReuniao(bancos, hoje) {
   const meses = _mesesFechados(hoje, 12);
   const mesRef = meses[meses.length - 1];
-  const casosIras = ((bancos.iras || {}).casos || []);
+  const casosIras = ((bancos.iras || {}).casos || []).filter(k => !_indeterminado(k));
   const internacoes = ((bancos.pacientes || {}).internacoes || []);
 
   /* Série mensal: IRAS, internações, IRAS/100, óbitos e permanência média (pelo mês da ALTA). */

@@ -2757,6 +2757,61 @@ function gravidadeTopografia(topografia) {
   }
 }
 
+/* ---- Casos INDETERMINADOS (decisão da CCIH, 21/10/2026) ----
+   658 casos criados em 23/09/2026 a partir de culturas que o sistema antigo marcava "IRAS",
+   sem topografia, de set/2021 a jun/2026: suspeitas que nunca foram checadas (no sistema
+   antigo a suspeita só durava até a alta). Ficam no banco com status "indeterminado" para
+   checagem posterior e NÃO contam nas estatísticas — nem como IRAS, nem como presentes na
+   admissão. A cultura vinculada vira "Indeterminada" e guarda a classificação anterior em
+   TriagemRegra, para poder voltar. */
+const STATUS_INDETERMINADO = 'indeterminado';
+const CLASSE_INDETERMINADA = 'Indeterminada';
+function casoIndeterminado(k) { return normalizarTexto((k || {}).StatusInvestigacao) === STATUS_INDETERMINADO; }
+/* Critério padrão: confirmado, sem topografia, aberto pela classificação retroativa das
+   culturas. Devolve { casos, culturas } marcados (muta as listas recebidas). */
+function marcarIndeterminados(casos, culturas, opcoes) {
+  const op = opcoes || {};
+  const hoje = String(op.hoje || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const usuario = op.usuario || '';
+  const seleciona = op.seleciona || (k => normalizarTexto(k.StatusInvestigacao) === 'confirmado'
+    && !String(k.Topografia || '').trim() && /retroativ/.test(normalizarTexto(k.CriterioDiagnostico)));
+  const porId = new Map((culturas || []).map(c => [c.ID_Cultura, c]));
+  const marcados = [], culturasMarcadas = [];
+  for (const k of (casos || [])) {
+    if (!seleciona(k)) continue;
+    k.StatusInvestigacao = STATUS_INDETERMINADO;
+    k.Observacoes = [String(k.Observacoes || '').trim(),
+      `[${hoje}${usuario ? ' ' + usuario : ''}] Indeterminado: aberto pela classificação de um sistema antigo, sem topografia e sem verificação. Fora das estatísticas até ser checado.`].filter(Boolean).join('\n');
+    marcados.push(k);
+    const c = porId.get(String(k.ID_CulturaAgente || '').trim());
+    if (c && String(c.AvaliacaoCCIH || '').trim() !== CLASSE_INDETERMINADA) {
+      c.TriagemRegra = `classificação anterior: ${c.AvaliacaoCCIH || '(vazia)'} (sistema antigo, não verificada; caso ${k.ID_IRAS})`;
+      c.AvaliacaoCCIH = CLASSE_INDETERMINADA;
+      culturasMarcadas.push(c);
+    }
+  }
+  return { casos: marcados, culturas: culturasMarcadas };
+}
+/* Decisão da checagem: "confirmado" devolve a cultura à classificação anterior; "descartado"
+   deixa a cultura sem classificação e pendente, para a CCIH classificá-la como deve. */
+function resolverIndeterminado(caso, culturas, decisao, opcoes) {
+  const op = opcoes || {};
+  const hoje = String(op.hoje || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const c = (culturas || []).find(x => x.ID_Cultura === String(caso.ID_CulturaAgente || '').trim());
+  caso.StatusInvestigacao = decisao === 'confirmado' ? 'confirmado' : 'descartado';
+  if (decisao === 'confirmado') { caso.ConfirmadoPor = op.usuario || caso.ConfirmadoPor || ''; caso.ConfirmadoEm = hoje; if (op.topografia) caso.Topografia = op.topografia; }
+  caso.Observacoes = [String(caso.Observacoes || '').trim(),
+    `[${hoje}${op.usuario ? ' ' + op.usuario : ''}] Checado: ${decisao === 'confirmado' ? 'IRAS confirmada' + (op.topografia ? ' — ' + op.topografia : '') : 'não é IRAS'}.`].filter(Boolean).join('\n');
+  if (c && String(c.AvaliacaoCCIH || '').trim() === CLASSE_INDETERMINADA) {
+    if (decisao === 'confirmado') {
+      const anterior = (/classificação anterior: ([^(]+?) \(/.exec(String(c.TriagemRegra || '')) || [])[1];
+      c.AvaliacaoCCIH = op.topografia ? `IRAS — ${op.topografia}` : (anterior && anterior !== '(vazia)' ? anterior.trim() : 'IRAS');
+      c.StatusRevisao = 'avaliada';
+    } else { c.AvaliacaoCCIH = ''; c.StatusRevisao = 'pendente'; }
+  }
+  return caso;
+}
+
 /* Identidade do paciente pelo NOME do cadastro: o mesmo paciente aparece com vários números
    de prontuário/atendimento (identidade fragmentada), e por prontuário a duplicata escapa —
    no banco real, 4–5 casos de IRAS em 987 (22/09/2026). Prontuário sem nome cai nele mesmo. */
@@ -2767,6 +2822,9 @@ function identidadePorNome(pacientes) {
 
 /* identidadeDe(prontuarioNormalizado) → identidade; sem ela, vale o prontuário. */
 function mesmoCasoIras(a, b, janelaDias, identidadeDe) {
+  /* Caso INDETERMINADO (sistema antigo, não verificado) não é episódio conhecido: uma IRAS
+     nova no mesmo período não pode ser engolida por ele, nem ele entrar em fusão. */
+  if (casoIndeterminado(a) || casoIndeterminado(b)) return false;
   const idDe = identidadeDe || (p => p);
   if (idDe(normalizarProntuario(a.Prontuario)) !== idDe(normalizarProntuario(b.Prontuario))) return false;
   const grupo = grupoTopografia(a.Topografia);
@@ -2835,7 +2893,7 @@ function conciliarComTasy(casos, linhasTasy, opcoes) {
     if (id) porIdTasy.set(id, k);
   }
   const mesmoEpisodio = (caso, linha) => {
-    if (normalizarTexto(caso.StatusInvestigacao) === 'descartado') return false;
+    if (normalizarTexto(caso.StatusInvestigacao) === 'descartado' || casoIndeterminado(caso)) return false;
     if (idDe(normalizarProntuario(caso.Prontuario)) !== idDe(normalizarProntuario(linha.Prontuario))) return false;
     const gA = grupoTopografia(caso.Topografia), gB = grupoTopografia(linha.Topografia);
     if (gA && gB && gA !== gB) return false;
@@ -2915,6 +2973,56 @@ function culturasDoEpisodio(culturas, caso, opcoes) {
   }).sort((a, b) => Math.abs(Date.parse(a.DataColeta) - data) - Math.abs(Date.parse(b.DataColeta) - data));
 }
 const SEM_CULTURA_VALIDA = 'Sem cultura positiva válida';
+
+/* ---- ISC × cirurgia (pedido de 21/10/2026) ----
+   O paciente pode ter feito mais de uma cirurgia; na pós-alta a ISC já nasce ligada à cirurgia
+   vigiada, mas na detecção durante a internação (cultura, evolução, visita) não. Mesmo molde
+   das culturas do episódio: candidatas = cirurgias do paciente (identidade) feitas ATÉ 90 dias
+   antes da infecção; "na janela" = até 30 dias, ou até 90 com prótese/implante (critério de
+   ISC). Ordem: na janela primeiro, depois a mais próxima da infecção. */
+const ISC_JANELA_DIAS = 30, ISC_JANELA_IMPLANTE_DIAS = 90;
+function cirurgiasDoEpisodio(cirurgias, caso, opcoes) {
+  const op = opcoes || {};
+  const idDe = op.identidadeDe || (p => p);
+  const alvo = idDe(normalizarProntuario(caso.Prontuario));
+  const dataInf = String(caso.DataInfeccao || '').slice(0, 10);
+  if (!/^\d{4}-/.test(dataInf)) return [];
+  const saida = [];
+  for (const c of (cirurgias || [])) {
+    if (idDe(normalizarProntuario(c.Prontuario)) !== alvo) continue;
+    const dias = diasDesde(c.DataCirurgia, dataInf);
+    if (dias === null || dias < 0 || dias > ISC_JANELA_IMPLANTE_DIAS) continue;
+    const implante = classificarParaVigilancia(c, []).implante;
+    saida.push({ cirurgia: c, dias, implante, naJanela: dias <= ISC_JANELA_DIAS || implante });
+  }
+  return saida.sort((a, b) => (b.naJanela - a.naJanela) || a.dias - b.dias);
+}
+/* Tipo de ISC (chave de TIPOS_ISC) a partir da topografia. */
+function tipoIscDaTopografia(topografia) {
+  const t = normalizarTexto(topografia);
+  return /orgao|espaco|cavidade/.test(t) ? 'órgão/espaço' : /profund/.test(t) ? 'profunda' : /superfic/.test(t) ? 'superficial' : '';
+}
+/* Liga o caso à cirurgia escolhida (ou desliga, com idCirurgia vazio): a escolhida ganha
+   ID_IRAS/ISC/TipoISC; outra cirurgia que apontava para este caso é desligada (com nota no
+   diário). Muta as listas; devolve { vinculada, desvinculadas }. */
+function vincularCirurgiaIsc(cirurgias, caso, idCirurgia, opcoes) {
+  const op = opcoes || {};
+  const tipo = tipoIscDaTopografia(caso.Topografia);
+  let vinculada = null, desvinculadas = 0;
+  for (const c of (cirurgias || [])) {
+    if (idCirurgia && c.ID_Cirurgia === idCirurgia) {
+      c.ID_IRAS = caso.ID_IRAS; c.ISC = 'S'; if (tipo) c.TipoISC = tipo;
+      vinculada = c;
+    } else if (String(c.ID_IRAS || '') === String(caso.ID_IRAS)) {
+      c.ID_IRAS = ''; c.ISC = ''; c.TipoISC = '';
+      c.ObservacoesVigilancia = acrescentarObservacao(c.ObservacoesVigilancia, '',
+        `ISC ${caso.ID_IRAS} reassociada a outra cirurgia${idCirurgia ? ' (' + idCirurgia + ')' : ''}.`, op.usuario || '', op.agora || '');
+      desvinculadas++;
+    }
+  }
+  caso.ID_CirurgiaAssociada = idCirurgia || '';
+  return { vinculada, desvinculadas };
+}
 
 /* ---- Ficha de notificação (para digitar no Tasy) ----
    Dados principais de UM caso confirmado, tirados do banco: identificação, internação em
@@ -4867,7 +4975,7 @@ if (typeof module !== 'undefined' && module.exports) {
     classificarParaVigilancia, categoriaDeVigilancia, CATEGORIAS_VIGILANCIA, CATEGORIAS_VIGILANCIA_PADRAO,
     diasDesde, telefoneWhatsApp, casaBuscaLivre, mensagemVigilancia, linkWhatsApp, JANELA_VIGILANCIA,
     prescricaoAtiva, analisarDose, cursosDeAntibiotico, alertasDeAntibioticos, DIAS_CURSO_PROLONGADO, TETO_DOSE_DIARIA_MG,
-    grupoTopografia, gravidadeTopografia, mesmoCasoIras, registrarCasoIras, agruparCasosIrasDuplicados, identidadePorNome, conciliarComTasy, aplicarConciliacao, culturasDoEpisodio, SEM_CULTURA_VALIDA, fichaDeNotificacao, htmlDasFichas,
+    grupoTopografia, gravidadeTopografia, mesmoCasoIras, casoIndeterminado, marcarIndeterminados, resolverIndeterminado, STATUS_INDETERMINADO, CLASSE_INDETERMINADA, registrarCasoIras, agruparCasosIrasDuplicados, identidadePorNome, conciliarComTasy, aplicarConciliacao, culturasDoEpisodio, SEM_CULTURA_VALIDA, cirurgiasDoEpisodio, tipoIscDaTopografia, vincularCirurgiaIsc, ISC_JANELA_DIAS, ISC_JANELA_IMPLANTE_DIAS, fichaDeNotificacao, htmlDasFichas,
     fundirCasosIras, deduplicarCasosIras, IRAS_JANELA_DUPLICATA_DIAS
   };
 }

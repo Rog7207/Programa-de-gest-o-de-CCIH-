@@ -353,6 +353,96 @@ async function montarInfeccoes(conteudo) {
   }
   desenharDuplicatas();
 
+  /* ---- ISC × cirurgia (21/10/2026): o paciente pode ter mais de uma cirurgia. Mesmo molde
+     da escolha da cultura: lista as cirurgias do paciente até 90 dias antes da infecção (na
+     janela: ≤30 dias, ou ≤90 com prótese) e a escolhida fica ligada ao caso. ---- */
+  const cirurgiasTodas = bancoCirurgias.cirurgias || [];
+  const ehISC = topo => grupoTopografia(topo) === 'isc';
+  function seletorCirurgia(caso) {
+    const candidatas = cirurgiasDoEpisodio(cirurgiasTodas, caso, { identidadeDe });
+    const atual = String(caso.ID_CirurgiaAssociada || '').trim()
+      || ((cirurgiasTodas.find(c => c.ID_IRAS === caso.ID_IRAS) || {}).ID_Cirurgia || '');
+    /* sem escolha anterior: pré-seleciona a candidata na janela, se só houver uma */
+    const naJanela = candidatas.filter(x => x.naJanela);
+    const preSel = atual || (naJanela.length === 1 ? naJanela[0].cirurgia.ID_Cirurgia : '');
+    return el('select', {},
+      el('option', { value: '' }, candidatas.length ? '— escolher a cirurgia —' : '— nenhuma cirurgia até 90 dias antes —'),
+      ...candidatas.map(x => el('option', { value: x.cirurgia.ID_Cirurgia, selected: x.cirurgia.ID_Cirurgia === preSel ? '' : null },
+        `${x.cirurgia.DataCirurgia} · ${String(x.cirurgia.Procedimento || '').slice(0, 50)} · ${x.dias} dia(s) antes`
+        + (x.implante ? ' · prótese/implante' : '') + (x.naJanela ? '' : ' · fora da janela de 30 dias'))));
+  }
+  /* Grava o vínculo (cirurgias + campo do caso já mutado pelo chamador). */
+  async function gravarVinculoCirurgia(alvo, idCirurgia) {
+    const atualCir = await lerBanco('cirurgias');
+    const r = vincularCirurgiaIsc(atualCir.cirurgias || [], alvo, idCirurgia, { usuario: app.usuario, agora: agoraCurto() });
+    if (r.vinculada || r.desvinculadas) await gravarBanco('cirurgias', atualCir);
+    if (idCirurgia && r.vinculada) alvo.Observacoes = acrescentarObservacao(alvo.Observacoes, 'Cirurgia',
+      `ISC associada à cirurgia ${r.vinculada.DataCirurgia} · ${r.vinculada.Procedimento} (${idCirurgia})`, app.usuario, agoraCurto());
+  }
+
+  /* ---- Indeterminados (decisão da CCIH, 21/10/2026): casos que um sistema antigo marcou como
+     IRAS sem verificação. Fora das estatísticas até serem checados aqui. ---- */
+  const areaIndeterminados = el('div', {});
+  conteudo.insertBefore(areaIndeterminados, area);
+  function desenharIndeterminados() {
+    const indet = casos.filter(casoIndeterminado).sort((a, b) => String(b.DataInfeccao).localeCompare(String(a.DataInfeccao)));
+    const aMarcar = marcarIndeterminados(JSON.parse(JSON.stringify(casos)), []).casos.length;
+    if (!indet.length && !aMarcar) { areaIndeterminados.replaceChildren(); return; }
+    const marcar = async () => {
+      if (!confirm(`Marcar ${aMarcar} caso(s) como INDETERMINADOS? Eles saem das estatísticas (nem IRAS, nem presentes na admissão) até serem checados aqui. A classificação anterior da cultura fica guardada.`)) return;
+      try {
+        await comTrava(['iras', 'culturas'], async () => {
+          const atualIras = await lerBanco('iras'), atualCul = await lerBanco('culturas');
+          const r = marcarIndeterminados(atualIras.casos, atualCul.culturas, { usuario: app.usuario, hoje: hojeISO() });
+          if (r.casos.length) await gravarBanco('iras', atualIras);
+          if (r.culturas.length) await gravarBanco('culturas', atualCul);
+        });
+        navegar('iras', { historico: 'substituir' });
+      } catch (e) { alert(e.message); }
+    };
+    const checar = (caso, tr) => {
+      const topografias = (config.vocabulario.topografias || []);
+      const selTopo = el('select', {}, el('option', { value: '' }, '— topografia —'), topografias.map(t => el('option', { value: t }, t)));
+      const msg = el('p', { class: 'aviso-erro-texto' });
+      const cul = culturas.find(c => c.ID_Cultura === caso.ID_CulturaAgente) || {};
+      const decidirIndet = async decisao => {
+        if (decisao === 'confirmado' && !selTopo.value) { msg.textContent = 'Escolha a topografia para confirmar.'; return; }
+        try {
+          await comTrava(['iras', 'culturas'], async () => {
+            const atualIras = await lerBanco('iras'), atualCul = await lerBanco('culturas');
+            const alvo = atualIras.casos.find(k => k.ID_IRAS === caso.ID_IRAS);
+            if (!alvo) throw new Error('Caso não encontrado no banco.');
+            resolverIndeterminado(alvo, atualCul.culturas, decisao, { usuario: app.usuario, hoje: hojeISO(), topografia: selTopo.value });
+            await gravarBanco('iras', atualIras);
+            await gravarBanco('culturas', atualCul);
+          });
+          navegar('iras', { historico: 'substituir' });
+        } catch (e) { msg.textContent = e.message; }
+      };
+      detalharNaLinha(tr, el('div', { class: 'cartao cartao-detalhe' },
+        el('h2', {}, `${caso.ID_IRAS} — indeterminado`),
+        el('p', { class: 'texto-suave' }, `${nomes.get(normalizarProntuario(caso.Prontuario)) || caso.Prontuario} · ${caso.Setor || ''} · ${caso.DataInfeccao} · cultura: ${cul.Material || '?'} — ${cul.Microrganismo || caso.Microrganismo || '?'} (${cul.DataColeta || ''})`),
+        el('div', { class: 'linha-campos' }, el('label', {}, 'Topografia (para confirmar): ', selTopo)),
+        el('div', { class: 'linha-botoes' },
+          el('button', { class: 'botao-secundario', onclick: e => { e.stopPropagation(); abrirPaciente(caso.Prontuario); } }, 'Ver ficha do paciente'),
+          el('button', { class: 'botao-primario', onclick: () => decidirIndet('confirmado') }, '✓ É IRAS'),
+          el('button', { class: 'botao-secundario', onclick: () => decidirIndet('descartado') }, 'Não é IRAS')),
+        el('p', { class: 'texto-suave' }, '"Não é IRAS" devolve a cultura para a fila de revisão, sem classificação, para ser classificada como deve.'),
+        msg));
+    };
+    areaIndeterminados.replaceChildren(el('details', { class: 'cartao' },
+      el('summary', {}, `Casos indeterminados — a checar (${fmtInt(indet.length)})` + (aMarcar ? ` · ${fmtInt(aMarcar)} a marcar` : '')),
+      el('p', { class: 'texto-suave' }, 'Casos que um sistema antigo classificou como IRAS sem verificação (sem topografia; as suspeitas só duravam até a alta). '
+        + 'Não contam nas estatísticas — nem como IRAS, nem como presentes na admissão — até serem checados. Clique na linha para decidir.'),
+      aMarcar ? el('div', { class: 'linha-botoes' }, el('button', { class: 'botao-primario', onclick: marcar }, `Marcar ${fmtInt(aMarcar)} caso(s) como indeterminados`)) : null,
+      indet.length ? el('table', { class: 'tabela' },
+        el('thead', {}, el('tr', {}, ['Data', 'Paciente', 'Setor', 'Agente'].map(c => el('th', {}, c)))),
+        el('tbody', {}, indet.slice(0, 300).map(k => el('tr', { class: 'linha-clicavel', onclick: e => checar(k, e.currentTarget) },
+          [k.DataInfeccao, nomes.get(normalizarProntuario(k.Prontuario)) || k.Prontuario, k.Setor, k.Microrganismo].map(v => el('td', {}, String(v || ''))))))) : null,
+      indet.length > 300 ? el('p', { class: 'texto-suave' }, `… mostrando os 300 mais recentes de ${fmtInt(indet.length)}.`) : null));
+  }
+  desenharIndeterminados();
+
   function desenharSuspeitas() {
     const suspeitas = casos.filter(k => k.StatusInvestigacao === 'em investigação')
       .sort((a, b) => String(b.DataInfeccao).localeCompare(String(a.DataInfeccao)));
@@ -382,9 +472,10 @@ async function montarInfeccoes(conteudo) {
     const campo = el('input', { type: 'text', value: caso.ID_CulturaAgente ? '' : (caso.Microrganismo === SEM_CULTURA_VALIDA ? '' : caso.Microrganismo || ''), placeholder: 'microrganismo', style: 'display:none' });
     sel.addEventListener('change', () => { campo.style.display = sel.value === '__outro__' ? '' : 'none'; });
     const msg = el('p', { class: 'aviso-erro-texto' });
+    const selCirurgia = ehISC(caso.Topografia) ? seletorCirurgia(caso) : null;
     const salvar = async () => {
       try {
-        await comTrava(['iras', 'culturas'], async () => {
+        await comTrava(['iras', 'culturas', 'cirurgias'], async () => {
           const atualIras = await lerBanco('iras');
           const alvo = atualIras.casos.find(k => k.ID_IRAS === caso.ID_IRAS);
           if (!alvo) throw new Error('Caso não encontrado no banco.');
@@ -394,6 +485,7 @@ async function montarInfeccoes(conteudo) {
           else { const cul = culturas.find(c => c.ID_Cultura === escolha); alvo.Microrganismo = cul ? cul.Microrganismo : alvo.Microrganismo; alvo.ID_CulturaAgente = escolha; }
           if (!String(alvo.AgenteOriginal || '').trim() && String(alvo.Microrganismo || '').trim()) alvo.AgenteOriginal = alvo.Microrganismo;
           alvo.Observacoes = acrescentarObservacao(alvo.Observacoes, 'Agente', `agente definido: ${alvo.Microrganismo || '—'}${alvo.ID_CulturaAgente ? ' (' + alvo.ID_CulturaAgente + ')' : ''}`, app.usuario, agoraCurto());
+          if (selCirurgia && selCirurgia.value !== String(alvo.ID_CirurgiaAssociada || '')) await gravarVinculoCirurgia(alvo, selCirurgia.value);
           await gravarBanco('iras', atualIras);
           const atualCul = await lerBanco('culturas');
           let mudou = false;
@@ -412,8 +504,9 @@ async function montarInfeccoes(conteudo) {
       el('p', { class: 'texto-suave' }, `${nomes.get(normalizarProntuario(caso.Prontuario)) || ''} (${caso.Prontuario}) · ${caso.Setor || ''} · ${caso.DataInfeccao}`
         + (caso.Microrganismo ? ` · agente atual: ${caso.Microrganismo}${caso.ID_CulturaAgente ? ' (' + caso.ID_CulturaAgente + ')' : ' (sem cultura vinculada)'}` : ' · sem agente')),
       el('div', { class: 'linha-campos' }, el('label', {}, 'Agente (cultura do episódio, ±14 dias): ', sel), campo),
+      selCirurgia ? el('div', { class: 'linha-campos' }, el('label', {}, 'Cirurgia da ISC: ', selCirurgia)) : null,
       el('div', { class: 'linha-botoes' },
-        el('button', { class: 'botao-primario', onclick: salvar }, 'Salvar agente'),
+        el('button', { class: 'botao-primario', onclick: salvar }, selCirurgia ? 'Salvar agente e cirurgia' : 'Salvar agente'),
         el('button', { class: 'botao-secundario', onclick: e => { e.stopPropagation(); abrirPaciente(caso.Prontuario); } }, 'Ver ficha do paciente')),
       msg));
   }
@@ -441,6 +534,10 @@ async function montarInfeccoes(conteudo) {
       placeholder: 'microrganismo', style: selAgente.value === '__outro__' ? '' : 'display:none' });
     selAgente.addEventListener('change', () => { campoMicro.style.display = selAgente.value === '__outro__' ? '' : 'none'; });
     const campoCriterio = el('input', { type: 'text', value: caso.CriterioDiagnostico || '', style: 'width:320px' });
+    const selCirurgia = seletorCirurgia(caso);
+    const linhaCirurgia = el('div', { class: 'linha-campos', style: ehISC(selTopo.value) ? '' : 'display:none' },
+      el('label', {}, 'Cirurgia da ISC: ', selCirurgia));
+    selTopo.addEventListener('change', () => { linhaCirurgia.style.display = ehISC(selTopo.value) ? '' : 'none'; });
     const campoNovaObs = el('textarea', { rows: 2, style: 'width:100%',
       placeholder: 'observação da segunda análise (opcional) — entra no diário do caso' });
     const msg = el('p', { class: 'aviso-erro-texto' });
@@ -469,6 +566,8 @@ async function montarInfeccoes(conteudo) {
           alvo.StatusInvestigacao = statusNovo;
           alvo.ConfirmadoPor = app.usuario;
           alvo.ConfirmadoEm = hojeISO();
+          /* ISC confirmada: liga à cirurgia escolhida (antes de gravar o caso, que guarda o ID). */
+          if (statusNovo === 'confirmado' && ehISC(alvo.Topografia)) await gravarVinculoCirurgia(alvo, selCirurgia.value);
           await gravarBanco('iras', atualIras);
           /* Corpus: a decisão final chega às linhas da evolução que abriu este caso. */
           if (typeof atualizarCorpusDecisao === 'function') await atualizarCorpusDecisao(caso.ID_IRAS, statusNovo);
@@ -514,6 +613,7 @@ async function montarInfeccoes(conteudo) {
       el('div', { class: 'linha-campos' },
         el('label', {}, 'Agente (cultura): ', selAgente), campoMicro,
         el('label', {}, 'Critério: ', campoCriterio)),
+      linhaCirurgia,
       vigilanciaPorIras.has(caso.ID_IRAS)
         ? el('div', { style: 'border-left:3px solid #2e7d32;padding-left:8px;margin:4px 0' },
             el('p', { class: 'texto-suave', style: 'margin:0 0 2px' }, el('strong', {}, '🔎 Observação da vigilância pós-alta')),

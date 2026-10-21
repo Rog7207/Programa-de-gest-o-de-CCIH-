@@ -742,6 +742,7 @@ function resumoParaVisitaUTI(bancos, setor, hoje, mecanismosMonitorados) {
 
   /* IRAS confirmadas no mês. */
   const iras = ((bancos.iras || {}).casos || [])
+    .filter(k => normalizarTexto(k.StatusInvestigacao) !== 'indeterminado')
     .filter(k => doSetor(k.Setor) && String(k.DataInfeccao) >= corte);
   if (iras.length) {
     const porTopografia = {};

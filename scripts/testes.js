@@ -5955,6 +5955,57 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     verificar('importação: chegando como MENOS profundo não rebaixa', !reg2.novo && base[0].Topografia === 'ISC incisional profunda');
   }
 
+  /* == 107. Casos indeterminados (sistema antigo, não verificados — 21/10/2026) == */
+  {
+    console.log('\n== 107. Casos indeterminados ==');
+    const casos = [
+      { ID_IRAS: 'I1', Prontuario: '1', DataInfeccao: '2022-05-01', Topografia: '', StatusInvestigacao: 'confirmado', CriterioDiagnostico: 'Cultura classificada pela CCIH (retroativo)', ID_CulturaAgente: 'K1' },
+      { ID_IRAS: 'I2', Prontuario: '2', DataInfeccao: '2022-05-01', Topografia: 'ITU', StatusInvestigacao: 'confirmado', CriterioDiagnostico: 'Cultura classificada pela CCIH (retroativo)', ID_CulturaAgente: 'K2' },
+      { ID_IRAS: 'I3', Prontuario: '3', DataInfeccao: '2022-05-01', Topografia: '', StatusInvestigacao: 'descartado', CriterioDiagnostico: 'Cultura classificada pela CCIH (retroativo)' },
+      { ID_IRAS: 'I4', Prontuario: '4', DataInfeccao: '2026-09-01', Topografia: '', StatusInvestigacao: 'confirmado', CriterioDiagnostico: 'Revisão de culturas' }];
+    const culturas = [{ ID_Cultura: 'K1', AvaliacaoCCIH: 'IRAS', StatusRevisao: 'avaliada' }, { ID_Cultura: 'K2', AvaliacaoCCIH: 'IRAS', StatusRevisao: 'avaliada' }];
+    const r = imp.marcarIndeterminados(casos, culturas, { hoje: '2026-10-21', usuario: 'Teste' });
+    verificar('marca só confirmado + sem topografia + retroativo; a cultura vira "Indeterminada" guardando a anterior',
+      r.casos.length === 1 && casos[0].StatusInvestigacao === 'indeterminado' && casos[1].StatusInvestigacao === 'confirmado' && casos[2].StatusInvestigacao === 'descartado'
+      && casos[3].StatusInvestigacao === 'confirmado' && culturas[0].AvaliacaoCCIH === 'Indeterminada' && /anterior: IRAS/.test(culturas[0].TriagemRegra) && culturas[1].AvaliacaoCCIH === 'IRAS', casos.map(c => c.StatusInvestigacao));
+    verificar('reaplicar não remarca nada', imp.marcarIndeterminados(casos, culturas).casos.length === 0);
+    const rel = require(path.join(__dirname, '..', 'js', 'relatorios.js'));
+    const rIras = rel.relatorioIRAS({ iras: { casos: [{ ...casos[0] }, { ID_IRAS: 'Z', Prontuario: '9', DataInfeccao: '2022-05-02', Topografia: 'ITU', StatusInvestigacao: 'confirmado', Setor: 'X' }] }, pacientes: { internacoes: [] } }, null, '2022-01-01', '2022-12-31');
+    verificar('relatório de IRAS não conta o indeterminado', JSON.stringify(rIras).includes('"IRAS",1') || (rIras.resumo && rIras.resumo[0][1] === 1), JSON.stringify(rIras.resumo || rIras).slice(0, 200));
+    verificar('cultura "Indeterminada" não é IRAS nem admissão; continua no perfil como cultura',
+      !/^IRAS/.test('Indeterminada') && imp.classificacaoCanonica('indeterminado') === 'Indeterminada' && imp.culturaDoPainel({ AvaliacaoCCIH: 'Indeterminada', StatusRevisao: 'avaliada', Microrganismo: 'Klebsiella pneumoniae' }));
+    const novo = imp.registrarCasoIras(casos, { Prontuario: '1', DataInfeccao: '2022-05-03', Topografia: 'ITU', StatusInvestigacao: 'em investigação' }, () => 'I9');
+    verificar('IRAS nova no mesmo período NÃO é engolida pelo indeterminado', novo.novo && novo.caso.ID_IRAS === 'I9');
+    imp.resolverIndeterminado(casos[0], culturas, 'confirmado', { usuario: 'Dra', hoje: '2026-10-22', topografia: 'ITU associada a cateter vesical' });
+    verificar('checagem "confirmado": caso confirmado com topografia; cultura volta para IRAS — topografia', casos[0].StatusInvestigacao === 'confirmado' && casos[0].Topografia === 'ITU associada a cateter vesical' && culturas[0].AvaliacaoCCIH === 'IRAS — ITU associada a cateter vesical' && /Checado/.test(casos[0].Observacoes));
+    const c2 = { ID_IRAS: 'I7', StatusInvestigacao: 'indeterminado', ID_CulturaAgente: 'K7' }, k7 = [{ ID_Cultura: 'K7', AvaliacaoCCIH: 'Indeterminada', StatusRevisao: 'avaliada' }];
+    imp.resolverIndeterminado(c2, k7, 'descartado', { usuario: 'Dra' });
+    verificar('checagem "não é IRAS": caso descartado; cultura volta sem classificação e pendente', c2.StatusInvestigacao === 'descartado' && k7[0].AvaliacaoCCIH === '' && k7[0].StatusRevisao === 'pendente');
+  }
+
+  /* == 108. ISC × cirurgia: candidatas e vínculo (21/10/2026) == */
+  {
+    console.log('\n== 108. ISC associada à cirurgia ==');
+    global.classificarParaVigilancia = imp.classificarParaVigilancia;
+    const cirurgias = [
+      { ID_Cirurgia: 'S1', Prontuario: '5', DataCirurgia: '2026-09-25', Procedimento: 'COLECISTECTOMIA' },
+      { ID_Cirurgia: 'S2', Prontuario: '5', DataCirurgia: '2026-08-10', Procedimento: 'ARTROPLASTIA TOTAL DE QUADRIL' },
+      { ID_Cirurgia: 'S3', Prontuario: '5', DataCirurgia: '2026-08-05', Procedimento: 'HERNIORRAFIA INGUINAL' },
+      { ID_Cirurgia: 'S4', Prontuario: '5', DataCirurgia: '2026-10-15', Procedimento: 'LAPAROTOMIA' },
+      { ID_Cirurgia: 'S5', Prontuario: '6', DataCirurgia: '2026-09-30', Procedimento: 'CESARIANA' },
+      { ID_Cirurgia: 'S6', Prontuario: '5', DataCirurgia: '2026-05-01', Procedimento: 'ARTROPLASTIA DE JOELHO' }];
+    const caso = { ID_IRAS: 'IR1', Prontuario: '5', DataInfeccao: '2026-10-10', Topografia: 'ISC incisional profunda' };
+    const cand = imp.cirurgiasDoEpisodio(cirurgias, caso);
+    verificar('candidatas: só do paciente, até 90 dias ANTES; na janela (≤30 d, ou ≤90 com prótese) primeiro, mais próxima antes',
+      cand.map(c => c.cirurgia.ID_Cirurgia).join() === 'S1,S2,S3' && cand[0].naJanela && cand[1].implante && cand[1].naJanela && !cand[2].naJanela, cand.map(c => [c.cirurgia.ID_Cirurgia, c.dias, c.naJanela, c.implante]));
+    verificar('tipo de ISC pela topografia', imp.tipoIscDaTopografia('ISC de órgão/espaço') === 'órgão/espaço' && imp.tipoIscDaTopografia('ISC incisional profunda') === 'profunda' && imp.tipoIscDaTopografia('Pneumonia') === '');
+    cirurgias[2].ID_IRAS = 'IR1'; cirurgias[2].ISC = 'S';
+    const v = imp.vincularCirurgiaIsc(cirurgias, caso, 'S1', { usuario: 'Dra', agora: '2026-10-21 10:00' });
+    verificar('vincular: a escolhida ganha ID_IRAS/ISC/tipo; a que apontava antes é desligada com nota; o caso guarda a cirurgia',
+      cirurgias[0].ID_IRAS === 'IR1' && cirurgias[0].ISC === 'S' && cirurgias[0].TipoISC === 'profunda' && cirurgias[2].ID_IRAS === '' && cirurgias[2].ISC === ''
+      && /reassociada/.test(cirurgias[2].ObservacoesVigilancia) && caso.ID_CirurgiaAssociada === 'S1' && v.desvinculadas === 1);
+  }
+
   console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
   process.exit(falharam ? 1 : 0);
 })();

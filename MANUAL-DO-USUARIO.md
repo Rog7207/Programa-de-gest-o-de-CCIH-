@@ -508,6 +508,24 @@ traz o episódio com um nome mais profundo que o daqui. Bacteremia secundária f
 em investigação), com a topografia mais profunda/grave do grupo, e a fusão fica registrada
 nas observações.
 
+**ISC ligada à cirurgia certa**: quem tem mais de uma cirurgia precisa que a infecção de
+sítio cirúrgico aponte para a cirurgia de origem. Na segunda análise (e ao editar um caso já
+registrado), quando a topografia é ISC, aparece a lista das cirurgias do paciente feitas até
+90 dias antes da infecção — as que estão **na janela** (até 30 dias, ou até 90 com
+prótese/implante) vêm primeiro, com quantos dias antes foram. A escolhida fica ligada ao caso
+e marcada como ISC na própria cirurgia (a mesma ligação que a pós-alta já fazia). Se só uma
+cirurgia está na janela, ela já vem selecionada.
+
+**Casos indeterminados**: casos que um sistema antigo classificou como IRAS sem verificação
+(sem topografia; no sistema antigo a suspeita só durava até a alta) ficam no quadro **Casos
+indeterminados — a checar**, na aba Infecções. Eles **não contam nas estatísticas** — nem como
+IRAS, nem como presentes na admissão — e não se misturam com IRAS novas do mesmo paciente. A
+cultura vinculada fica com a classificação **Indeterminada** (a anterior é guardada). Para
+checar, clique na linha: **É IRAS** (escolhendo a topografia) confirma o caso e devolve a
+classificação à cultura; **Não é IRAS** descarta o caso e manda a cultura de volta à fila de
+revisão, sem classificação. O botão **Marcar como indeterminados** aparece enquanto houver casos
+nessa situação ainda não marcados.
+
 ---
 
 ## 9. Notificáveis (doenças de notificação compulsória)

@@ -620,7 +620,19 @@ a busca ativa, "Confirmar triagem" vale só para as cirurgias listadas.
   pendências), o cartão **Rotina da equipe** (ver seção 2) e gráficos rápidos.
 - **Pacientes** — cadastro, busca e unificação de registros provisórios do laboratório.
 - **Reunião da CCIH** — indicadores em formato de apresentação (um slide por tema, setas para
-  avançar). O slide **Consumo de antibióticos — 12 meses** traz, para a UTI adulto (CTI) e para
+  avançar), na ordem decidida pela CCIH em 21/10/2026: (1) **IRAS do mês** — taxa por 1.000
+  pacientes-dia, número de casos e barras por sítio; (2) **IRAS por mês** nos últimos 12 meses
+  (colunas); (3) **Dispositivos** no CTI — taxa de utilização (dias de dispositivo ÷
+  pacientes-dia do NISS) e densidade de IRAS por 1.000 dias, o mês ao lado dos 6 meses
+  anteriores; (4) **multirresistentes** do trimestre; (5) **consumo de antibióticos** desde
+  janeiro do ano; (6) **avaliações de antibióticos na UTI adulto** feitas na visita (miniapp):
+  pacientes avaliados, antibióticos avaliados/modificados/suspensos, retiradas de sonda vesical
+  e de cateter central recomendadas; (7) **higiene das mãos** do trimestre, pelos 5 momentos e
+  por setor; (8) **vigilância pós-alta** das cirurgias do **mês anterior** ao de referência (o
+  contato é feito aos 30 dias): cirurgias sob vigilância, contatos realizados, respostas e
+  ISC; depois isolamentos ativos e óbitos/permanência. Só contam IRAS **confirmadas** ou
+  **digitadas no Tasy** (descartadas, em investigação e indeterminadas ficam fora).
+  O slide de **consumo** traz, para a UTI adulto (CTI) e para
   o hospital inteiro, **DOT** (dias de terapia) e **DDD** (dose diária definida, OMS) por 1.000
   pacientes-dia, mês a mês. O DOT sai sempre; o DDD depende da dose, que só vem do relatório de
   prescrições do Tasy (desde ago/2026) — o mês só mostra DDD quando ao menos metade dos dias de

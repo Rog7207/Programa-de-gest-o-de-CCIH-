@@ -598,7 +598,13 @@ function relatorioPosAlta(bancos, setoresEscopo, inicio, fim) {
     secoes.push({ titulo: 'Nota', tipo: 'texto',
       corpo: 'O relatório do centro cirúrgico não traz setor de internação — este relatório sempre cobre o hospital inteiro.' });
   }
-  return { titulo: 'ISC e vigilância pós-alta', secoes,
+  /* Números crus para a reunião: contato realizado = houve tentativa (mensagem enviada,
+     resposta obtida ou encerrada sem contato). */
+  const indicadores = { cirurgias: cirurgias.length,
+    sobVigilancia: cirurgias.filter(c => ENTROU_NA_VIGILANCIA.includes(st(c))).length,
+    contatos: contatosTentados + cirurgias.filter(c => st(c) === 'mensagem enviada').length,
+    respostas: respostas.length, isc: isc.length, taxaISC: relPct(isc.length, comDesfecho) };
+  return { titulo: 'ISC e vigilância pós-alta', secoes, indicadores,
     resumo: [['Cirurgias', cirurgias.length], ['ISC', isc.length],
       ['Sucesso do contato pós-alta', relPct(respostas.length, contatosTentados)],
       ['Taxa de ISC', relPct(isc.length, comDesfecho)]] };
@@ -1139,35 +1145,117 @@ function _mesesFechados(hoje, quantos) {
   return meses;
 }
 
+/* Caso de IRAS que CONTA na reunião: confirmado (dupla assinatura) ou digitado no Tasy.
+   Descartados, em investigação e indeterminados ficam fora — a reunião mostra o que a CCIH
+   fechou, não a fila de trabalho (pedido de 21/10/2026). */
+function _casoValeReuniao(k) {
+  if (_indeterminado(k)) return false;
+  const s = normalizarTexto(k.StatusInvestigacao);
+  return s === 'confirmado' || s === 'digitado' || (!s && String(k.ConfirmadoPor || '').trim() !== '');
+}
+
+/* Rótulo curto do sítio, para o gráfico de barras da reunião (agrupa pelos mesmos grupos da
+   desduplicação: ISC, respiratória, IPCS, ITU...). */
+const _ROTULO_SITIO = { isc: 'Sítio cirúrgico', respiratoria: 'Respiratória (PAV/PNM/TQB)', ipcs: 'Corrente sanguínea (IPCS)',
+  bacteremiasecundaria: 'Bacteremia secundária', itu: 'Trato urinário', conjuntivite: 'Conjuntivite', pele: 'Pele e partes moles' };
+function _sitioDaIRAS(k) {
+  const g = typeof grupoTopografia === 'function' ? grupoTopografia(k.Topografia) : normalizarTexto(k.Topografia);
+  if (!g) return '(sem topografia)';
+  if (_ROTULO_SITIO[g]) return _ROTULO_SITIO[g];
+  const t = String(k.Topografia || '').trim();
+  return t.length > 32 ? t.slice(0, 30) + '…' : t;
+}
+
+/* Utilização de dispositivos (dias de dispositivo ÷ pacientes-dia do censo NISS) e densidade
+   de IRAS por 1.000 dias de dispositivo, no período e nos setores pedidos. Devolve null sem
+   censo NISS. linhas: { dispositivo, dias, pacientesDia, utilizacao (0–1), iras, densidade }. */
+function utilizacaoDispositivos(bancos, casos, inicio, fim, setoresEscopo) {
+  const linhasNISS = ((bancos.denominadores || {}).dispositivos_dia || []);
+  let pacientesDiaNISS = 0;
+  for (const l of linhasNISS) {
+    const data = String(l.Data || '').slice(0, 10);
+    if (!/^\d{4}-/.test(data) || data < inicio || data > fim || !relEscopo(l.Setor, setoresEscopo)) continue;
+    if (!/pacientes.?dia/i.test(String(l.Dispositivo || ''))) continue;
+    const n = Number(String(l.Contagem == null ? '' : l.Contagem).replace(',', '.'));
+    if (isFinite(n) && n > 0) pacientesDiaNISS += n;
+  }
+  const denominador = diasDeDispositivo(bancos, inicio, fim, setoresEscopo);
+  if (!denominador) return null;
+  const linhas = [];
+  for (const [grupo, dias] of [...denominador.porGrupo.entries()].sort()) {
+    const iras = casos.filter(k => grupoDispositivoDaIRAS(k) === grupo).length;
+    linhas.push({ dispositivo: grupo, dias: Math.round(dias), pacientesDia: Math.round(pacientesDiaNISS),
+      utilizacao: pacientesDiaNISS ? +(dias / pacientesDiaNISS).toFixed(2) : null,
+      iras, densidade: dias ? +(iras / dias * 1000).toFixed(2) : null });
+  }
+  return { linhas, pacientesDia: Math.round(pacientesDiaNISS), diasContados: denominador.diasContados };
+}
+
+/* Setor de UTI adulto para a reunião: o CTI (não neonatal nem pediátrico) — decisão de 21/10/2026. */
+function _setorUTIAdulto(setor) { const s = String(setor || ''); return /\bcti\b/i.test(s) && !/neonat|pedi/i.test(s); }
+
+/* Apanhado das avaliações de antibiótico feitas na visita da UTI adulto (miniapp): pacientes
+   avaliados, antibióticos avaliados/modificados/suspensos e retiradas de SVD e CVC
+   recomendadas. Substitui o relatório de avaliações do Tasy enquanto ele não funciona. */
+function avaliacoesUTIReuniao(bancos, inicio, fim) {
+  const aval = (((bancos.uti || {}).avaliacoes_atb) || []).filter(a => relPeriodo(a.Data || a.CriadoEm, inicio, fim) && _setorUTIAdulto(a.Setor));
+  const visitas = (((bancos.uti || {}).visitas) || []).filter(v => relPeriodo(v.Data || v.CriadoEm, inicio, fim) && _setorUTIAdulto(v.Setor));
+  const rec = a => normalizarTexto(a.Recomendacao);
+  const pacientes = new Set(aval.map(a => normalizarProntuario(a.Prontuario)).filter(Boolean));
+  visitas.forEach(v => { const p = normalizarProntuario(v.Prontuario); if (p) pacientes.add(p); });
+  return {
+    pacientesAvaliados: pacientes.size, visitas: visitas.length, antibioticosAvaliados: aval.length,
+    modificados: aval.filter(a => rec(a) === 'modificar' || rec(a) === 'ajustardose').length,
+    suspensos: aval.filter(a => rec(a) === 'suspender').length,
+    incorretos: aval.filter(a => /incorreto/.test(normalizarTexto(a.Avaliacao))).length,
+    retirarSVD: visitas.filter(v => String(v.SVD_Retirar || '').trim().toUpperCase() === 'S').length,
+    retirarCVC: visitas.filter(v => String(v.CVC_Retirar || '').trim().toUpperCase() === 'S').length,
+    retirarVM: visitas.filter(v => String(v.VM_Retirar || '').trim().toUpperCase() === 'S').length
+  };
+}
+
 function indicadoresReuniao(bancos, hoje) {
   const meses = _mesesFechados(hoje, 12);
   const mesRef = meses[meses.length - 1];
-  const casosIras = ((bancos.iras || {}).casos || []).filter(k => !_indeterminado(k));
+  const casosIras = ((bancos.iras || {}).casos || []).filter(_casoValeReuniao);
   const internacoes = ((bancos.pacientes || {}).internacoes || []);
 
-  /* Série mensal: IRAS, internações, IRAS/100, óbitos e permanência média (pelo mês da ALTA). */
+  /* Série mensal: IRAS, internações, IRAS/100, densidade/1.000 pacientes-dia, óbitos e
+     permanência média (pelo mês da ALTA). */
   const serie = meses.map(m => {
     const iras = casosIras.filter(k => relPeriodo(k.DataInfeccao, m.inicio, m.fim)).length;
     const iniciadas = internacoes.filter(i => relPeriodo(i.DataInternacao, m.inicio, m.fim)).length;
+    const pd = pacientesDia(internacoes, m.inicio, m.fim);
     const altas = internacoes.filter(i => relPeriodo(i.DataAlta, m.inicio, m.fim));
     const obitos = altas.filter(i => i.Obito === 'S' || /obito/.test(normalizarTexto(i.Desfecho))).length;
     const dias = altas.map(i => relDiasEntre(i.DataInternacao, i.DataAlta)).filter(d => d !== null && d >= 0);
     const permanencia = dias.length ? dias.reduce((a, b) => a + b, 0) / dias.length : null;
     return { mes: m.mes, iras, internacoes: iniciadas,
       por100: iniciadas ? +(iras / iniciadas * 100).toFixed(2) : null,
+      pacientesDia: Math.round(pd), densidade: pd ? +(iras / pd * 1000).toFixed(2) : null,
       altas: altas.length, obitos,
       letalidade: altas.length ? +(obitos / altas.length * 100).toFixed(1) : null,
       permanencia: permanencia === null ? null : +permanencia.toFixed(1) };
   });
 
-  /* Dispositivos: trimestre fechado, no escopo dos setores que TÊM contagem (hoje o CTI). */
+  /* Sítios das IRAS do mês de referência, para o gráfico de barras. */
+  const casosMes = casosIras.filter(k => relPeriodo(k.DataInfeccao, mesRef.inicio, mesRef.fim));
+  const sitios = relContar(casosMes, _sitioDaIRAS);
+
+  /* Dispositivos (setores com censo NISS, hoje o CTI): utilização e densidade no mês de
+     referência, lado a lado com os 6 meses anteriores (pedido de 21/10/2026). A tabela de
+     taxas do trimestre continua saindo (`taxas`) para quem a usava. */
   const tri = meses.slice(-3);
+  const seis = meses.slice(-7, -1);
   const setoresNISS = [...new Set(((bancos.denominadores || {}).dispositivos_dia || []).map(l => l.Setor))].filter(Boolean);
-  const casosTri = casosIras.filter(k => relPeriodo(k.DataInfeccao, tri[0].inicio, mesRef.fim)
+  const casosNISS = (de, ate) => casosIras.filter(k => relPeriodo(k.DataInfeccao, de, ate)
     && relEscopo(k.Setor, setoresNISS.length ? setoresNISS : null));
   const dispositivos = setoresNISS.length
     ? { setores: setoresNISS, periodo: tri[0].mes + ' a ' + mesRef.mes,
-        taxas: taxasPorDispositivo(bancos, casosTri, tri[0].inicio, mesRef.fim, setoresNISS) }
+        taxas: taxasPorDispositivo(bancos, casosNISS(tri[0].inicio, mesRef.fim), tri[0].inicio, mesRef.fim, setoresNISS),
+        mes: utilizacaoDispositivos(bancos, casosNISS(mesRef.inicio, mesRef.fim), mesRef.inicio, mesRef.fim, setoresNISS),
+        seisMeses: { periodo: seis[0].mes + ' a ' + seis[seis.length - 1].mes,
+          ...(utilizacaoDispositivos(bancos, casosNISS(seis[0].inicio, seis[seis.length - 1].fim), seis[0].inicio, seis[seis.length - 1].fim, setoresNISS) || { linhas: [] }) } }
     : null;
 
   /* MDR no trimestre: culturas de IRAS com mecanismo, germe × setor (como a seção 5 do perfil). */
@@ -1188,15 +1276,18 @@ function indicadoresReuniao(bancos, hoje) {
   }
   const mdr = [...mdrMapa.values()].sort((a, b) => b.n - a.n).slice(0, 8);
 
-  /* Antibióticos, higiene, sepse e pós-alta: cherry-pick dos relatórios já testados. */
+  /* Antibióticos, higiene e pós-alta: cherry-pick dos relatórios já testados. Higiene no
+     trimestre (momentos e setores); pós-alta no mês ANTERIOR ao de referência, porque o
+     contato leva 30 dias (pedido de 21/10/2026). */
   const rAtb = relatorioAntibioticos(bancos, null, mesRef.inicio, mesRef.fim);
-  const rHig = relatorioHigiene(bancos, null, mesRef.inicio, mesRef.fim);
-  const rSep = relatorioSepse(bancos, null, mesRef.inicio, mesRef.fim);
-  const rPos = relatorioPosAlta(bancos, null, mesRef.inicio, mesRef.fim);
+  const rHig = relatorioHigiene(bancos, null, tri[0].inicio, mesRef.fim);
+  const mesPos = meses[meses.length - 2];
+  const rPos = relatorioPosAlta(bancos, null, mesPos.inicio, mesPos.fim);
   const doResumo = (rel2, rotulo) => { const p = (rel2.resumo || []).find(x => x[0] === rotulo); return p ? p[1] : null; };
   const panAtb = (rAtb.secoes.find(s => s.titulo === 'Panorama') || { itens: [] }).itens
     .concat((rAtb.secoes.find(s => s.titulo === 'Análises de antibiótico (Tasy)') || { itens: [] }).itens);
   const doPanorama = rotulo => { const p = panAtb.find(x => String(x[0]).includes(rotulo)); return p ? p[1] : null; };
+  const secaoHig = titulo => ((rHig.secoes || []).find(s => s.titulo === titulo) || { linhas: [] }).linhas;
 
   /* Isolamentos ativos hoje. */
   const precaucoes = ((bancos.isolamentos || {}).precaucoes || []);
@@ -1210,14 +1301,15 @@ function indicadoresReuniao(bancos, hoje) {
 
   return {
     mesReferencia: mesRef.mes, trimestre: tri[0].mes + ' a ' + mesRef.mes, serie, consumoAtb,
-    dispositivos, mdr,
+    sitios, dispositivos, mdr,
     atb: { dot: doResumo(rAtb, 'DOT'), dotMil: doResumo(rAtb, 'DOT/1.000 pac-dia'),
       analisadas: doPanorama('analisadas no período'),
       avaliacoes: doPanorama('Avaliações de stewardship'),
       cursosAvaliados: doPanorama('avaliação casada') },
-    higiene: { resumo: rHig.resumo || [] },
-    sepse: { resumo: rSep.resumo || [] },
-    posAlta: { resumo: rPos.resumo || [] },
+    avaliacoesUTI: { periodo: mesRef.mes, ...avaliacoesUTIReuniao(bancos, mesRef.inicio, mesRef.fim) },
+    higiene: { periodo: tri[0].mes + ' a ' + mesRef.mes, resumo: rHig.resumo || [],
+      porMomento: secaoHig('Pelos 5 momentos da OMS'), porSetor: secaoHig('Por setor') },
+    posAlta: { mes: mesPos.mes, resumo: rPos.resumo || [], ...(rPos.indicadores || {}) },
     isolamentos: { ativos: ativos.length, porTipo }
   };
 }
@@ -1448,7 +1540,7 @@ if (typeof module !== 'undefined' && module.exports) {
     relatorioAntibioticos, relatorioIsolamentos, relatorioSepse, relatorioPosAlta,
     relatorioResumoExecutivo, RELATORIOS_PADRAO, BANCOS_RELATORIOS, setoresEmUso, pacientesDia, pacientesDiaDoCenso,
     relMediana, relDiasEntre, mesAnteriorIntervalo,
-    diasDeDispositivo, taxasPorDispositivo, grupoDoDispositivo, grupoDispositivoDaIRAS, indicadoresReuniao,
+    diasDeDispositivo, taxasPorDispositivo, grupoDoDispositivo, grupoDispositivoDaIRAS, indicadoresReuniao, utilizacaoDispositivos, avaliacoesUTIReuniao,
     TABELA_DDD_PADRAO, dddDiarioDaPrescricao, consumoAntibioticosMensal, DDD_COBERTURA_MINIMA,
     perfilMicrobiologico, cruzarIRAScomCulturas, culturasDaIRAS, melhorCulturaDaIRAS, indiceCulturasPorProntuario,
     sitioDaIRAS, materialCasaSitio, colunasDoPerfil, classificarGram, especieEnterobacteria,

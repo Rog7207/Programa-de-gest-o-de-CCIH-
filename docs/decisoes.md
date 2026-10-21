@@ -64,12 +64,19 @@ profilaxia 1714, óbitos 836, NISS 3066.
   adulto = só o CTI Dr. Joaquim, e hospital). Tabela de DDD/apresentações em `config.xlsx`,
   aba `ddd_antibioticos` (OMS; confirmados: meropenem 1 g, vancomicina 500 mg, metronidazol
   comprimido 400 mg, sulfa comprimido 800/160).
+- Redesenho de 21/10/2026 (ordem e conteúdo dos slides, decisão dele): IRAS do mês (taxa/1.000
+  pd, n, barras por sítio) → IRAS por mês em colunas → dispositivos do CTI (utilização e
+  densidade, mês × 6 meses anteriores) → MDR do trimestre → consumo ATB desde janeiro →
+  avaliações de ATB da UTI adulto (visita/miniapp; o relatório de avaliações do Tasy não
+  funciona) → higiene do trimestre por momento e setor → pós-alta das cirurgias do MÊS
+  ANTERIOR (contato aos 30 dias) → isolamentos → óbitos/permanência. Slide de sepse retirado.
+  A reunião só conta IRAS confirmadas/digitadas.
 - Pendente: painel por público (direção / UTI / clínica / cirúrgica) com metas e semáforo —
   depende de a CCIH definir metas e os grupos de setores de cada área.
 
 ## Pendências conhecidas
 - Idade não existe no cadastro de pacientes (vem no 2536 e nos óbitos; guardar na internação).
 - Dispositivo-dia só do CTI (NISS); enfermarias sem denominador de dispositivo.
-- Contagens antigas (panorama gerencial, série da reunião, cruzamento IRAS × culturas) incluem
+- Contagens antigas (panorama gerencial, cruzamento IRAS × culturas) incluem
   descartados e em investigação como IRAS — não alterado para não mudar números já apresentados.
 - Arquivo cifrado da pasta de dados para transporte: decisão de formato pendente.

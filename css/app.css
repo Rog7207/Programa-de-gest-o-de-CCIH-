@@ -192,3 +192,10 @@ tr.linha-mdr td:first-child { border-left: 4px solid #b03a2e; }
 .reuniao-eixo { font: 11px "Segoe UI", system-ui, sans-serif; fill: #61707f; }
 .reuniao-legenda { display: flex; gap: 18px; font-size: 13px; color: #3a4a5c; margin: 0 0 12px 56px; }
 .reuniao-legenda-cor { display: inline-block; width: 14px; height: 4px; border-radius: 2px; vertical-align: middle; }
+
+/* Reunião, redesenho de 21/10/2026: barras por sítio, colunas mensais e higiene em duas colunas. */
+.reuniao-barra-rotulo-largo { width: 220px; font-size: 14px; color: #3a4a5c; }
+.reuniao-coluna-valor { font: 600 12px "Segoe UI", system-ui, sans-serif; fill: #0d3f7a; }
+.reuniao-duas-colunas { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.reuniao-duas-colunas h3 { margin: 4px 0 8px; }
+@media (max-width: 900px) { .reuniao-duas-colunas { grid-template-columns: 1fr; } }

@@ -21,6 +21,43 @@ function barrasMensais(serie, campo, formato) {
   }));
 }
 
+/* Barras horizontais por categoria (ex.: sítios de IRAS): [[rotulo, n], ...]. */
+function barrasCategorias(pares) {
+  const maximo = Math.max(...pares.map(([, n]) => Number(n) || 0), 1);
+  return el('div', { class: 'reuniao-barras' }, ...pares.map(([rotulo, n]) =>
+    el('div', { class: 'reuniao-barra-linha' },
+      el('span', { class: 'reuniao-barra-rotulo reuniao-barra-rotulo-largo' }, rotulo),
+      el('div', { class: 'reuniao-barra-trilha' },
+        el('div', { class: 'reuniao-barra', style: `width:${Math.round(Number(n) / maximo * 100)}%` })),
+      el('span', { class: 'reuniao-barra-valor' }, String(n)))));
+}
+
+/* Colunas verticais em SVG, uma série mensal, valor escrito em cima de cada coluna
+   (pedido de 21/10/2026: IRAS por mês em barras verticais). */
+function colunasMensais(serie, campo, opcoes) {
+  const op = opcoes || {};
+  const L = 44, T = 22, W = 760, H = 260, R = 12, B = 30;
+  const valores = serie.map(s => (s[campo] === null || s[campo] === undefined) ? 0 : Number(s[campo]));
+  const maximo = Math.max(...valores, 1) * 1.15;
+  const largura = (W - L - R) / Math.max(serie.length, 1);
+  const y = v => T + (H - T - B) * (1 - v / maximo);
+  const svgNs = 'http://www.w3.org/2000/svg';
+  const mk = (tag, attrs, texto) => { const e = document.createElementNS(svgNs, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (texto != null) e.textContent = texto; return e; };
+  const svg = mk('svg', { viewBox: `0 0 ${W} ${H}`, class: 'reuniao-grafico', role: 'img', 'aria-label': op.titulo || '' });
+  for (let i = 0; i <= 4; i++) {
+    const v = maximo / 1.15 * i / 4, yy = y(v);
+    svg.append(mk('line', { x1: L, x2: W - R, y1: yy, y2: yy, class: 'reuniao-grade' }));
+    svg.append(mk('text', { x: L - 6, y: yy + 4, 'text-anchor': 'end', class: 'reuniao-eixo' }, Math.round(v)));
+  }
+  serie.forEach((m, i) => {
+    const x0 = L + i * largura + largura * 0.18, w = largura * 0.64, v = valores[i];
+    svg.append(mk('rect', { x: x0, y: y(v), width: w, height: Math.max(0, y(0) - y(v)), rx: 3, fill: op.cor || '#0d3f7a' }));
+    svg.append(mk('text', { x: x0 + w / 2, y: y(v) - 5, 'text-anchor': 'middle', class: 'reuniao-coluna-valor' }, _fmtIndicador(m[campo])));
+    svg.append(mk('text', { x: x0 + w / 2, y: H - B + 16, 'text-anchor': 'middle', class: 'reuniao-eixo' }, m.mes.slice(5) + '/' + m.mes.slice(2, 4)));
+  });
+  return svg;
+}
+
 /* Gráfico de linhas em SVG, duas ou mais séries mensais, sem biblioteca; imprime bem.
    series = [{ rotulo, campo, cor }]; valores null viram buraco na linha. */
 function linhasMensais(serie, series, opcoes) {
@@ -78,32 +115,47 @@ async function montarReuniao(conteudo) {
   const ultimo = dados.serie[dados.serie.length - 1];
   const rotuloMes = dados.mesReferencia.split('-').reverse().join('/');
 
+  const mesCurto = m => m.slice(5) + '/' + m.slice(2, 4);
+  const anoRef = dados.mesReferencia.slice(0, 4);
+
   const slides = [
-    { titulo: `Panorama — ${rotuloMes}`, corpo: () => el('div', {},
+    /* 1. Só o essencial: taxa, número e sítios (pedido de 21/10/2026). */
+    { titulo: `IRAS — ${rotuloMes}`, corpo: () => el('div', {},
       slideNumeros([
-        ['IRAS notificadas no mês', ultimo.iras],
-        ['IRAS por 100 internações', ultimo.por100],
-        ['Internações iniciadas', ultimo.internacoes],
-        ['Óbitos (altas do mês)', ultimo.obitos],
-        ['Letalidade hospitalar (%)', ultimo.letalidade],
-        ['Permanência média (dias)', ultimo.permanencia]
+        ['IRAS por 1.000 pacientes-dia', ultimo.densidade],
+        ['IRAS confirmadas no mês', ultimo.iras]
       ]),
-      el('p', { class: 'texto-suave' }, 'Mês fechado mais recente. Detalhe de cada tema nos slides seguintes.')) },
+      el('h3', {}, 'Sítios de infecção'),
+      dados.sitios.length ? barrasCategorias(dados.sitios) : el('p', { class: 'texto-suave' }, 'Nenhuma IRAS confirmada no mês.'),
+      el('p', { class: 'texto-suave' }, `Mês fechado mais recente; ${fmtInt(ultimo.pacientesDia)} pacientes-dia (censo individual). Só casos confirmados pela CCIH ou digitados no Tasy.`)) },
 
-    { titulo: 'IRAS — últimos 12 meses', corpo: () => el('div', {},
-      barrasMensais(dados.serie, 'iras'),
-      el('p', { class: 'texto-suave' }, 'IRAS por 100 internações no mesmo período:'),
-      barrasMensais(dados.serie, 'por100')) },
+    /* 2. Número de IRAS por mês, colunas verticais. */
+    { titulo: 'IRAS por mês — últimos 12 meses', corpo: () => el('div', {},
+      colunasMensais(dados.serie, 'iras', { titulo: 'IRAS por mês' })) },
 
-    ...(dados.dispositivos && dados.dispositivos.taxas ? [{
-      titulo: `Taxas por dispositivo — ${dados.dispositivos.setores.join(', ')} (${dados.dispositivos.periodo})`,
-      corpo: () => el('div', {},
-        el('table', { class: 'tabela reuniao-tabela' },
-          el('thead', {}, el('tr', {}, ['Dispositivo', 'Dias de dispositivo', 'IRAS', 'Taxa / 1.000 dias'].map(c => el('th', {}, c)))),
-          el('tbody', {}, dados.dispositivos.taxas.linhas.map(l =>
-            el('tr', {}, l.map((v, i) => el('td', i === 3 ? { class: 'reuniao-destaque' } : {}, String(v))))))),
-        el('p', { class: 'texto-suave' },
-          'Denominador do censo diário de invasividade (NISS). PAV→ventilação mecânica, IPCS→cateter central, ITU→sonda vesical.')) }] : []),
+    /* 3. Utilização de dispositivos e densidade, mês × 6 meses anteriores. */
+    ...(dados.dispositivos && dados.dispositivos.mes ? [{
+      titulo: `Dispositivos — ${dados.dispositivos.setores.join(', ')}`,
+      corpo: () => {
+        const d = dados.dispositivos;
+        const antes = new Map((d.seisMeses.linhas || []).map(l => [l.dispositivo, l]));
+        const pct = v => (v === null || v === undefined) ? '—' : Math.round(v * 100) + '%';
+        const num = v => (v === null || v === undefined) ? '—' : String(v);
+        return el('div', {},
+          el('table', { class: 'tabela reuniao-tabela' },
+            el('thead', {},
+              el('tr', {}, el('th', { rowspan: '2' }, 'Dispositivo'), el('th', { colspan: '2' }, 'Taxa de utilização'), el('th', { colspan: '2' }, 'Densidade de IRAS / 1.000 dias')),
+              el('tr', {}, ...[rotuloMes, '6 meses anteriores', rotuloMes, '6 meses anteriores'].map(c => el('th', {}, c)))),
+            el('tbody', {}, d.mes.linhas.map(l => {
+              const a = antes.get(l.dispositivo) || {};
+              return el('tr', {}, el('td', {}, l.dispositivo),
+                el('td', { class: 'reuniao-destaque' }, pct(l.utilizacao)), el('td', {}, pct(a.utilizacao)),
+                el('td', { class: 'reuniao-destaque' }, num(l.densidade) + (l.iras ? ` (${l.iras})` : '')), el('td', {}, num(a.densidade) + (a.iras ? ` (${a.iras})` : '')));
+            }))),
+          el('p', { class: 'texto-suave' },
+            `Utilização = dias de dispositivo ÷ pacientes-dia (${fmtInt(d.mes.pacientesDia)} no mês; ${fmtInt(d.seisMeses.pacientesDia || 0)} em ${d.seisMeses.periodo}). `
+            + 'Densidade = IRAS do dispositivo por 1.000 dias de dispositivo (número de casos entre parênteses). Censo diário de invasividade (NISS). PAV→ventilação mecânica, IPCS→cateter central, ITU→sonda vesical.'));
+      } }] : []),
 
     { titulo: `Multirresistentes em IRAS — ${dados.trimestre}`, corpo: () => dados.mdr.length
       ? el('table', { class: 'tabela reuniao-tabela' },
@@ -112,10 +164,11 @@ async function montarReuniao(conteudo) {
             [m.germe, m.mecanismo, m.setor, m.n].map(v => el('td', {}, String(v)))))))
       : el('p', { class: 'texto-suave' }, 'Nenhuma cepa multirresistente em IRAS no trimestre.') },
 
+    /* 5. Consumo só a partir de janeiro do ano de referência (antes o banco não tem prescrição). */
     ...(dados.consumoAtb ? [{
-      titulo: 'Consumo de antibióticos — 12 meses',
+      titulo: `Consumo de antibióticos — ${anoRef}`,
       corpo: () => {
-        const c = dados.consumoAtb;
+        const c = dados.consumoAtb.filter(m => m.mes >= anoRef + '-01');
         const ultimo = c[c.length - 1] || {};
         const comDDD = c.filter(m => m.dddMil !== null);
         const semDose = c.reduce((s, m) => s + m.semDose, 0), naoConv = c.reduce((s, m) => s + m.naoConvertida.reduce((x, [, n]) => x + n, 0), 0);
@@ -138,27 +191,43 @@ async function montarReuniao(conteudo) {
             + 'Tabela de DDD e apresentações: config.xlsx, aba ddd_antibioticos (OMS ATC/DDD, a conferir pela CCIH).'));
       } }] : []),
 
-    { titulo: `Antibióticos (stewardship) — ${rotuloMes}`, corpo: () => el('div', {},
+    /* 6. Avaliações de antibiótico da visita à UTI adulto (o relatório do Tasy não sai). */
+    { titulo: `Avaliações de antibióticos na UTI adulto — ${rotuloMes}`, corpo: () => {
+      const a = dados.avaliacoesUTI;
+      return el('div', {},
+        slideNumeros([
+          ['Pacientes avaliados', a.pacientesAvaliados],
+          ['Antibióticos avaliados', a.antibioticosAvaliados],
+          ['Antibióticos modificados', a.modificados],
+          ['Antibióticos suspensos', a.suspensos],
+          ['Retiradas de sonda vesical recomendadas', a.retirarSVD],
+          ['Retiradas de cateter central recomendadas', a.retirarCVC]
+        ]),
+        el('p', { class: 'texto-suave' },
+          `Registros da visita à UTI (miniapp): ${fmtInt(a.visitas)} visita(s) a leito no mês. "Modificados" inclui troca e ajuste de dose. Só o CTI adulto.`));
+    } },
+
+    /* 7. Higiene de mãos: momentos e setores do trimestre. */
+    { titulo: `Higiene de mãos — ${dados.higiene.periodo.split(' a ').map(mesCurto).join(' a ')}`, corpo: () => {
+      const tabela = (colunas, linhas) => el('table', { class: 'tabela reuniao-tabela' },
+        el('thead', {}, el('tr', {}, colunas.map(c => el('th', {}, c)))),
+        el('tbody', {}, linhas.map(l => el('tr', {}, l.map((v, i) => el('td', i === 2 ? { class: 'reuniao-destaque' } : {}, String(v)))))));
+      if (!dados.higiene.porMomento.length) return el('p', { class: 'texto-suave' }, 'Sem observações de higiene das mãos no trimestre.');
+      return el('div', { class: 'reuniao-duas-colunas' },
+        el('div', {}, el('h3', {}, 'Pelos 5 momentos'), tabela(['Momento', 'Oportunidades', 'Adesão'], dados.higiene.porMomento)),
+        el('div', {}, el('h3', {}, 'Por setor'), tabela(['Setor', 'Oportunidades', 'Adesão'], dados.higiene.porSetor.slice(0, 12))));
+    } },
+
+    /* 8. Pós-alta das cirurgias do mês ANTERIOR (o contato leva 30 dias). */
+    { titulo: `Vigilância pós-alta — cirurgias de ${mesCurto(dados.posAlta.mes)}`, corpo: () => el('div', {},
       slideNumeros([
-        ['Dias de terapia (DOT)', dados.atb.dot],
-        ['DOT / 1.000 pacientes-dia', dados.atb.dotMil],
-        ['Prescrições analisadas (Tasy)', dados.atb.analisadas],
-        ['Avaliações de stewardship', dados.atb.avaliacoes],
-        ['Cursos com avaliação casada', dados.atb.cursosAvaliados]
+        ['Cirurgias sob vigilância', dados.posAlta.sobVigilancia],
+        ['Contatos realizados', dados.posAlta.contatos],
+        ['Respostas obtidas', dados.posAlta.respostas],
+        ['Infecções de sítio cirúrgico', dados.posAlta.isc]
       ]),
-      el('p', { class: 'texto-suave' }, 'Detalhe por droga no relatório de Antibióticos.')) },
-
-    { titulo: `Higiene de mãos — ${rotuloMes}`, corpo: () =>
-      slideNumeros((dados.higiene.resumo.length ? dados.higiene.resumo
-        : [['Sem observações no mês', '—']])) },
-
-    { titulo: `Sepse — ${rotuloMes}`, corpo: () =>
-      slideNumeros((dados.sepse.resumo.length ? dados.sepse.resumo
-        : [['Sem protocolos no mês', '—']])) },
-
-    { titulo: `Vigilância pós-alta — ${rotuloMes}`, corpo: () =>
-      slideNumeros((dados.posAlta.resumo.length ? dados.posAlta.resumo
-        : [['Sem dados no mês', '—']])) },
+      el('p', { class: 'texto-suave' },
+        `${fmtInt(dados.posAlta.cirurgias || 0)} cirurgias no mês; taxa de ISC entre desfechos conhecidos: ${dados.posAlta.taxaISC || '—'}. Mês anterior ao de referência porque o contato pós-alta é feito aos 30 dias.`)) },
 
     { titulo: 'Isolamentos ativos hoje', corpo: () => el('div', {},
       slideNumeros([['Pacientes em precaução', dados.isolamentos.ativos]]),

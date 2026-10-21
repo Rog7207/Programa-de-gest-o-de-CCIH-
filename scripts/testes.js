@@ -16,6 +16,7 @@ const imp = require(path.join(__dirname, '..', 'js', 'importacao.js'));
 global.normalizarProntuario = imp.normalizarProntuario;
 global.germeDaCultura = imp.germeDaCultura;
 global.prescricaoAtiva = imp.prescricaoAtiva;
+global.grupoTopografia = imp.grupoTopografia;
 
 const pastaAmostras = path.join(__dirname, '..', 'amostras');
 let passaram = 0, falharam = 0;
@@ -4436,8 +4437,11 @@ console.log('\n== 76. Indicadores da reunião da CCIH ==');
 
   const bancos = {
     iras: { casos: [
-      { DataInfeccao: '2026-08-10', Setor: 'CTI', Topografia: 'PAV', Microrganismo: 'Klebsiella pneumoniae' },
-      { DataInfeccao: '2026-07-05', Setor: 'CTI', Topografia: 'IPCS clínica', Microrganismo: '' }
+      { DataInfeccao: '2026-08-10', Setor: 'CTI', Topografia: 'PAV', Microrganismo: 'Klebsiella pneumoniae', StatusInvestigacao: 'confirmado' },
+      { DataInfeccao: '2026-07-05', Setor: 'CTI', Topografia: 'IPCS clínica', Microrganismo: '', StatusInvestigacao: 'digitado' },
+      /* descartado e em investigação NÃO contam na reunião */
+      { DataInfeccao: '2026-08-20', Setor: 'CTI', Topografia: 'ITU associada a cateter vesical', StatusInvestigacao: 'descartado' },
+      { DataInfeccao: '2026-08-21', Setor: 'CTI', Topografia: 'ISC incisional superficial', StatusInvestigacao: 'em investigação' }
     ] },
     pacientes: { internacoes: [
       { Prontuario: '1', Atendimento: 'A1', DataInternacao: '2026-08-01', DataAlta: '2026-08-11', Desfecho: 'Alta melhorada', Obito: '' },
@@ -4445,8 +4449,29 @@ console.log('\n== 76. Indicadores da reunião da CCIH ==');
     ] },
     denominadores: { dispositivos_dia: [
       { Data: '2026-08-10', Competencia: '2026-08', Setor: 'CTI', Estrato: '', Dispositivo: 'Ventilação mecânica', Contagem: 10 },
-      { Data: '2026-08-11', Competencia: '2026-08', Setor: 'CTI', Estrato: '', Dispositivo: 'Ventilação mecânica', Contagem: 10 }
+      { Data: '2026-08-11', Competencia: '2026-08', Setor: 'CTI', Estrato: '', Dispositivo: 'Ventilação mecânica', Contagem: 10 },
+      { Data: '2026-08-10', Competencia: '2026-08', Setor: 'CTI', Estrato: '', Dispositivo: 'Pacientes-dia', Contagem: 25 },
+      { Data: '2026-08-11', Competencia: '2026-08', Setor: 'CTI', Estrato: '', Dispositivo: 'Pacientes-dia', Contagem: 25 },
+      /* seis meses anteriores (abril, fora do trimestre): 40 dias de VM e 50 de cateter em 100
+         pacientes-dia; a IPCS de julho cai nesse período */
+      { Data: '2026-04-05', Competencia: '2026-04', Setor: 'CTI', Estrato: '', Dispositivo: 'Ventilação mecânica', Contagem: 40 },
+      { Data: '2026-04-05', Competencia: '2026-04', Setor: 'CTI', Estrato: '', Dispositivo: 'Cateter venoso central', Contagem: 50 },
+      { Data: '2026-04-05', Competencia: '2026-04', Setor: 'CTI', Estrato: '', Dispositivo: 'Pacientes-dia', Contagem: 100 }
     ] },
+    uti: {
+      avaliacoes_atb: [
+        { Data: '2026-08-12', Setor: 'CTI - Dr. Joaquim', Prontuario: '1', Antibiotico: 'Meropenem', Avaliacao: 'Incorreto', Recomendacao: 'Suspender' },
+        { Data: '2026-08-12', Setor: 'CTI - Dr. Joaquim', Prontuario: '1', Antibiotico: 'Vancomicina', Avaliacao: 'Parcialmente correto', Recomendacao: 'Ajustar dose' },
+        { Data: '2026-08-13', Setor: 'CTI - Dr. Joaquim', Prontuario: '2', Antibiotico: 'Ceftriaxona', Avaliacao: 'Correto', Recomendacao: 'Manter' },
+        { Data: '2026-08-13', Setor: 'CTI Pediátrico', Prontuario: '9', Antibiotico: 'Ceftriaxona', Avaliacao: 'Incorreto', Recomendacao: 'Modificar' },
+        { Data: '2026-07-13', Setor: 'CTI - Dr. Joaquim', Prontuario: '3', Antibiotico: 'Ceftriaxona', Avaliacao: 'Incorreto', Recomendacao: 'Modificar' }
+      ],
+      visitas: [
+        { Data: '2026-08-12', Setor: 'CTI - Dr. Joaquim', Prontuario: '1', SVD_Retirar: 'S', CVC_Retirar: 'N' },
+        { Data: '2026-08-13', Setor: 'CTI - Dr. Joaquim', Prontuario: '2', SVD_Retirar: 'N', CVC_Retirar: 'S' },
+        { Data: '2026-08-13', Setor: 'CTI - Dr. Joaquim', Prontuario: '5', SVD_Retirar: 'S', CVC_Retirar: '' }
+      ]
+    },
     culturas: { culturas: [
       { ID_Cultura: 'C1', Prontuario: '1', DataColeta: '2026-08-10', Setor: 'CTI', Microrganismo: 'Acinetobacter baumannii',
         MecanismoResistencia: 'CRAb', AvaliacaoCCIH: 'IRAS' }
@@ -4456,7 +4481,22 @@ console.log('\n== 76. Indicadores da reunião da CCIH ==');
       { TipoPrecaucao: 'Contato', DataInicio: '2026-08-01', DataFim: '' },
       { TipoPrecaucao: 'Contato', DataInicio: '2026-07-01', DataFim: '2026-07-10' }
     ] },
-    higiene_maos: { observacoes: [] }, sepse: { casos: [] }, cirurgias: { cirurgias: [] }
+    higiene_maos: { observacoes: [
+      { Data: '2026-06-10', Setor: 'CTI', Momento: 'Antes do contato com paciente', Acao: 'Higienizou' },
+      { Data: '2026-07-10', Setor: 'CTI', Momento: 'Antes do contato com paciente', Acao: 'Não higienizou' },
+      { Data: '2026-08-10', Setor: 'Clínica', Momento: 'Após contato com paciente', Acao: 'Higienizou' },
+      /* fora do trimestre */
+      { Data: '2026-05-10', Setor: 'Clínica', Momento: 'Após contato com paciente', Acao: 'Não higienizou' }
+    ] }, sepse: { casos: [] },
+    /* pós-alta: a reunião olha as cirurgias do mês ANTERIOR ao de referência (julho) */
+    cirurgias: { cirurgias: [
+      { ID_Cirurgia: 'X1', DataCirurgia: '2026-07-02', Procedimento: 'Colecistectomia', StatusVigilancia: 'sem infecção' },
+      { ID_Cirurgia: 'X2', DataCirurgia: '2026-07-03', Procedimento: 'Colecistectomia', StatusVigilancia: 'mensagem enviada' },
+      { ID_Cirurgia: 'X3', DataCirurgia: '2026-07-04', Procedimento: 'Colecistectomia', StatusVigilancia: 'infecção confirmada', ISC: 'S', TipoISC: 'Superficial' },
+      { ID_Cirurgia: 'X4', DataCirurgia: '2026-07-05', Procedimento: 'Colecistectomia', StatusVigilancia: 'sob vigilância' },
+      { ID_Cirurgia: 'X5', DataCirurgia: '2026-07-06', Procedimento: 'Colecistectomia', StatusVigilancia: 'dispensada' },
+      { ID_Cirurgia: 'X6', DataCirurgia: '2026-08-06', Procedimento: 'Colecistectomia', StatusVigilancia: 'sem infecção' }
+    ] }
   };
   const d = rel.indicadoresReuniao(bancos, '2026-09-16');
   verificar('mês de referência é o último fechado', d.mesReferencia === '2026-08');
@@ -4474,6 +4514,34 @@ console.log('\n== 76. Indicadores da reunião da CCIH ==');
     d.mdr.length === 1 && d.mdr[0].germe === 'Acinetobacter' && d.mdr[0].n === 1, JSON.stringify(d.mdr));
   verificar('isolamentos ativos: 1 sem data de fim',
     d.isolamentos.ativos === 1 && d.isolamentos.porTipo[0][0] === 'Contato');
+
+  /* Redesenho de 21/10/2026 */
+  verificar('reunião: descartado e em investigação não contam (agosto = 1 IRAS, não 3)', ago.iras === 1);
+  verificar('densidade do mês: 1 IRAS em 14 pacientes-dia (11 + 3, dias inclusivos) → 71,43/1.000',
+    ago.pacientesDia === 14 && ago.densidade === 71.43, JSON.stringify(ago));
+  verificar('sítios do mês: PAV vira "Respiratória"', d.sitios.length === 1 && d.sitios[0][0] === 'Respiratória (PAV/PNM/TQB)' && d.sitios[0][1] === 1, JSON.stringify(d.sitios));
+  const vmMes = d.dispositivos.mes.linhas.find(l => l.dispositivo === 'Ventilação mecânica');
+  verificar('utilização de VM no mês: 20 dias de VM / 50 pacientes-dia = 0,40; densidade 50/1.000',
+    vmMes && vmMes.utilizacao === 0.4 && vmMes.pacientesDia === 50 && vmMes.iras === 1 && vmMes.densidade === 50, JSON.stringify(d.dispositivos.mes));
+  const vmSeis = d.dispositivos.seisMeses.linhas.find(l => l.dispositivo === 'Ventilação mecânica');
+  const cvcSeis = d.dispositivos.seisMeses.linhas.find(l => l.dispositivo === 'Cateter central');
+  verificar('seis meses anteriores (fev–jul): VM 40/100 = 0,40 sem IRAS; cateter 50 dias com a IPCS de julho → 20/1.000',
+    d.dispositivos.seisMeses.periodo === '2026-02 a 2026-07' && vmSeis && vmSeis.utilizacao === 0.4 && vmSeis.iras === 0
+    && cvcSeis && cvcSeis.iras === 1 && cvcSeis.densidade === 20, JSON.stringify(d.dispositivos.seisMeses));
+  const u = d.avaliacoesUTI;
+  verificar('avaliações da UTI adulto no mês: 3 pacientes (2 com ATB + 1 só visita), 3 ATB, 1 modificado (ajuste), 1 suspenso, 2 SVD, 1 CVC; pediátrico e julho fora',
+    u.pacientesAvaliados === 3 && u.antibioticosAvaliados === 3 && u.modificados === 1 && u.suspensos === 1
+    && u.retirarSVD === 2 && u.retirarCVC === 1 && u.visitas === 3, JSON.stringify(u));
+  verificar('higiene no trimestre: 3 observações (maio fora), por momento e por setor',
+    d.higiene.periodo === '2026-06 a 2026-08' && d.higiene.porMomento.length === 2
+    && d.higiene.porMomento.find(l => l[0] === 'Antes do contato com paciente')[1] === 2
+    && d.higiene.porMomento.find(l => l[0] === 'Antes do contato com paciente')[2] === '50%'
+    && d.higiene.porSetor.find(l => l[0] === 'CTI')[1] === 2, JSON.stringify(d.higiene));
+  verificar('pós-alta olha julho: 5 cirurgias, 4 sob vigilância, 3 contatos, 2 respostas, 1 ISC',
+    d.posAlta.mes === '2026-07' && d.posAlta.cirurgias === 5 && d.posAlta.sobVigilancia === 4
+    && d.posAlta.contatos === 3 && d.posAlta.respostas === 2 && d.posAlta.isc === 1, JSON.stringify(d.posAlta));
+  verificar('sem censo NISS, utilizacaoDispositivos devolve null',
+    rel.utilizacaoDispositivos({ denominadores: { dispositivos_dia: [] } }, [], '2026-08-01', '2026-08-31', null) === null);
 }
 
 console.log('\n== 77. Busca clínica de pacientes (aba Pacientes) ==');

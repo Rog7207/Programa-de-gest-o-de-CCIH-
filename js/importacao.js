@@ -3573,6 +3573,30 @@ function diasDesde(dataISO, hojeISO) {
   return Math.round((b - a) / 86400000);
 }
 
+/* ---- Busca livre por vários campos (pedido de 21/10/2026, aba Pós-alta) ----
+   Uma caixa só: o texto é partido em termos e CADA termo precisa aparecer em ALGUM campo
+   ("maria 1234" acha a Maria do prontuário 1234). Sem acento e sem caixa; termo só com
+   dígitos compara com os dígitos do campo (telefone "(48) 9 9999-0000" casa com "99990000",
+   atendimento com ou sem pontos); datas ISO também são testadas como dd/mm/aaaa. */
+function _semAcento(v) { return String(v == null ? '' : v).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+function casaBuscaLivre(consulta, campos) {
+  const termos = _semAcento(consulta).split(/\s+/).filter(Boolean);
+  if (!termos.length) return true;
+  const textos = [], digitos = [];
+  for (const c of (campos || [])) {
+    const s = String(c == null ? '' : c);
+    if (!s.trim()) continue;
+    textos.push(_semAcento(s));
+    const d = s.replace(/\D/g, '');
+    if (d) digitos.push(d);
+    const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+    if (iso) textos.push(`${iso[3]}/${iso[2]}/${iso[1]}`);
+  }
+  return termos.every(t => /^\d+$/.test(t)
+    ? digitos.some(d => d.includes(t)) || textos.some(x => x.includes(t))
+    : textos.some(x => x.includes(t)));
+}
+
 /* Telefone brasileiro para o wa.me: só dígitos, com o 55 na frente.
    Devolve '' quando o número não tem cara de celular/fixo válido. */
 function telefoneWhatsApp(telefone) {
@@ -4797,7 +4821,7 @@ if (typeof module !== 'undefined' && module.exports) {
     momentoCanonico, categoriaProfissional, normalizarObservacaoHigiene, MOMENTOS_OMS,
     principioAtivo, aplicarObitos,
     classificarParaVigilancia, categoriaDeVigilancia, CATEGORIAS_VIGILANCIA, CATEGORIAS_VIGILANCIA_PADRAO,
-    diasDesde, telefoneWhatsApp, mensagemVigilancia, linkWhatsApp, JANELA_VIGILANCIA,
+    diasDesde, telefoneWhatsApp, casaBuscaLivre, mensagemVigilancia, linkWhatsApp, JANELA_VIGILANCIA,
     prescricaoAtiva, analisarDose, cursosDeAntibiotico, alertasDeAntibioticos, DIAS_CURSO_PROLONGADO, TETO_DOSE_DIARIA_MG,
     grupoTopografia, mesmoCasoIras, registrarCasoIras, agruparCasosIrasDuplicados, identidadePorNome, conciliarComTasy, aplicarConciliacao, culturasDoEpisodio, SEM_CULTURA_VALIDA, fichaDeNotificacao, htmlDasFichas,
     fundirCasosIras, deduplicarCasosIras, IRAS_JANELA_DUPLICATA_DIAS

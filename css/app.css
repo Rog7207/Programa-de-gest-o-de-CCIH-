@@ -175,3 +175,13 @@ tr.linha-mdr td:first-child { border-left: 4px solid #b03a2e; }
 .reuniao-barra-trilha { flex: 1; background: #eef1f5; border-radius: 4px; height: 20px; }
 .reuniao-barra { background: #0d3f7a; height: 100%; border-radius: 4px; min-width: 2px; }
 .reuniao-barra-valor { width: 64px; font-size: 14px; font-weight: 600; }
+
+/* Abas dentro de uma tela (pós-alta, 21/10/2026): uma situação por aba, com a contagem. */
+.abas-tela { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 2px solid #dde3ea; margin-top: 6px; }
+.aba-tela {
+  font: inherit; font-size: 14px; padding: 8px 14px; cursor: pointer;
+  background: #f2f4f7; color: #3a4a5c; border: 1px solid #dde3ea; border-bottom: none;
+  border-radius: 6px 6px 0 0; margin-bottom: -2px;
+}
+.aba-tela:hover { background: #e4ecf7; color: #0d3f7a; }
+.aba-tela-atual { background: #fff; color: #0d3f7a; font-weight: 600; border-color: #0d3f7a #0d3f7a #fff; border-bottom: 2px solid #fff; }

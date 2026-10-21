@@ -126,11 +126,11 @@ async function montarVigilancia(conteudo) {
   const selMes = el('select', { onchange: ev => { app.filtroMesVigilancia = ev.target.value; recarregar(); } },
     el('option', { value: '' }, 'todos os meses'),
     mesesDisponiveis.map(m => el('option', { value: m, selected: m === mesFiltro ? '' : null }, mesBR(m))));
-  conteudo.append(el('div', { class: 'cartao' },
-    el('div', { class: 'linha-campos' },
-      el('label', {}, 'Mês da cirurgia: ', selMes),
-      el('span', { class: 'texto-suave' },
-        mesFiltro ? `mostrando só cirurgias de ${mesBR(mesFiltro)} em todas as listas` : 'todas as listas, sem filtro'))));
+  /* Mês, busca e abas ficam num cartão só, no topo (montado mais abaixo, em "Abas"). */
+  const linhaMes = el('div', { class: 'linha-campos' },
+    el('label', {}, 'Mês da cirurgia: ', selMes),
+    el('span', { class: 'texto-suave' },
+      mesFiltro ? `mostrando só cirurgias de ${mesBR(mesFiltro)} em todas as abas` : 'todas as abas, sem filtro de mês'));
 
   const porStatus = status => banco.cirurgias.filter(c => c.StatusVigilancia === status && doMes(c));
   const recarregar = () => navegar('vigilancia', { historico: 'substituir' });
@@ -141,14 +141,9 @@ async function montarVigilancia(conteudo) {
     'encerrada — número incorreto', 'encerrada — óbito'];
   const doPeriodoVig = banco.cirurgias.filter(c => doMes(c) && c.StatusVigilancia !== 'descartada');
   const contaStatus = lista => doPeriodoVig.filter(c => lista.includes(String(c.StatusVigilancia || 'pendente'))).length;
-  conteudo.append(el('div', { class: 'grade-cartoes' }, ...[
-    ['Cirurgias', doPeriodoVig.length],
-    ['Monitoradas (aguardando contato)', contaStatus(['sob vigilância'])],
-    ['Mensagens enviadas', contaStatus(['mensagem enviada'])],
-    ['Respostas a avaliar', contaStatus(['em investigação'])],
-    ['Concluídas', contaStatus(CONCLUIDAS_VIG)]
-  ].map(([r, n]) => el('div', { class: 'cartao cartao-numero' },
-    el('div', { class: 'numero-grande' }, fmtInt(n)), el('div', { class: 'texto-suave' }, r)))));
+  /* O funil virou as próprias abas (cada uma com a contagem); fica só o total do período. */
+  linhaMes.append(el('span', { class: 'texto-suave' },
+    `· ${fmtInt(doPeriodoVig.length)} cirurgias no período, ${fmtInt(contaStatus(CONCLUIDAS_VIG))} concluídas`));
 
   const categoriasVigiadas = config.rotina.vigilanciaCategorias;
   const seloImplante = c => classificarParaVigilancia(c, categoriasVigiadas).implante
@@ -157,6 +152,13 @@ async function montarVigilancia(conteudo) {
   const seloVencida = c => janelaVencida(c)
     ? el('span', { class: 'selo aviso-erro-texto', title: `Passou dos ${JANELA_VIGILANCIA.fimDias} dias sem desfecho` }, ' ⏰ janela vencida')
     : null;
+
+  /* Busca livre (nome, prontuário, atendimento, telefone, procedimento, data, cirurgião). */
+  const campoBusca = el('input', { type: 'text', style: 'flex:1;min-width:260px',
+    placeholder: 'Buscar paciente: nome, prontuário, atendimento, telefone, procedimento ou data' });
+  const buscaAtiva = () => !!String(campoBusca.value || '').trim();
+  const casa = c => casaBuscaLivre(campoBusca.value, [nomeDe(c), c.Prontuario, c.Atendimento, telefoneDe(c),
+    c.Procedimento, c.ProcedimentoNHSN, c.DataCirurgia, c.Cirurgiao]);
 
   /* ---- 1. Triagem: o que entra na vigilância ---- */
   /* O .filter(!faleceu) das três filas é o cinto de segurança para quando a trava de
@@ -179,47 +181,49 @@ async function montarVigilancia(conteudo) {
     ? el('p', { class: 'texto-suave' },
         `⏳ ${fmtInt(aCaminho.length)} cirurgia(s) recentes aguardam completar ${JANELA_VIGILANCIA.inicioDias} dias de pós-operatório — a primeira entra na triagem em ${proximaEntrada}.`)
     : null;
-  if (!triagem.length) {
-    conteudo.append(el('div', { class: 'cartao' },
-      el('h2', {}, 'Triagem — nenhuma cirurgia aguardando'),
-      el('p', { class: 'texto-suave' },
-        `Todas as cirurgias da janela de ${JANELA_VIGILANCIA.inicioDias}–${JANELA_VIGILANCIA.fimDias} dias já foram triadas.`),
-      avisoACaminho || el('p', { class: 'texto-suave' }, 'Também não há cirurgias recentes a caminho — confira se o relatório do centro cirúrgico está sendo importado.')));
-  }
-
-  if (triagem.length) {
+  /* Triagem sobre a lista VISÍVEL (a busca pode filtrar): confirmar só mexe no que está na
+     tela — marcadas entram em vigilância, desmarcadas são dispensadas. */
+  function secaoTriagem(lista) {
+    if (!lista.length) {
+      return el('div', { class: 'cartao' },
+        el('h2', {}, buscaAtiva() ? 'Triagem — nenhuma cirurgia com esta busca' : 'Triagem — nenhuma cirurgia aguardando'),
+        buscaAtiva() ? null : el('p', { class: 'texto-suave' },
+          `Todas as cirurgias da janela de ${JANELA_VIGILANCIA.inicioDias}–${JANELA_VIGILANCIA.fimDias} dias já foram triadas.`),
+        buscaAtiva() ? null : (avisoACaminho || el('p', { class: 'texto-suave' }, 'Também não há cirurgias recentes a caminho — confira se o relatório do centro cirúrgico está sendo importado.')));
+    }
     const caixas = new Map();
-    const linhasTabela = triagem.map(c => {
+    const linhasTabela = lista.map(c => {
       const regra = classificarParaVigilancia(c, categoriasVigiadas);
       const caixa = el('input', { type: 'checkbox', checked: regra.marcar ? '' : null });
       caixas.set(c.ID_Cirurgia, caixa);
       const tr = el('tr', { class: regra.marcar ? '' : 'linha-esmaecida' },
         el('td', {}, caixa),
         el('td', {}, c.DataCirurgia, el('span', { class: 'texto-suave' }, ` (${idadePosOp(c)}d)`)),
-        el('td', {}, nomeDe(c) || c.Prontuario),
+        el('td', { class: 'linha-clicavel', onclick: () => abrirPaciente(c.Prontuario) }, nomeDe(c) || c.Prontuario),
         el('td', {}, String(c.Procedimento || '').slice(0, 60), seloImplante(c)),
         el('td', { class: 'texto-suave' }, regra.motivo));
       caixa.addEventListener('change', () => { tr.className = caixa.checked ? '' : 'linha-esmaecida'; });
       return tr;
     });
-
     const msgTriagem = el('p', { class: 'aviso-erro-texto' });
-    conteudo.append(el('div', { class: 'cartao' },
-      el('h2', {}, `Triagem — ${fmtInt(triagem.length)} cirurgias de ${JANELA_VIGILANCIA.inicioDias} a ${JANELA_VIGILANCIA.fimDias} dias`),
+    return el('div', { class: 'cartao' },
+      el('h2', {}, `Triagem — ${fmtInt(lista.length)} cirurgias de ${JANELA_VIGILANCIA.inicioDias} a ${JANELA_VIGILANCIA.fimDias} dias`
+        + (buscaAtiva() ? ' (filtradas pela busca)' : '')),
       avisoACaminho,
       el('p', { class: 'texto-suave' },
         'Pré-marcadas conforme a rotina da instituição (Configurações → Rotina → cirurgias vigiadas; '
         + 'padrão de fábrica: próteses/implantes, cesarianas e limpas). O relatório do centro cirúrgico '
         + 'ainda não traz o potencial de contaminação — enquanto isso, as categorias que dependem dele '
-        + 'aparecem como "sem classificação". Marque ou desmarque à vontade antes de confirmar.'),
+        + 'aparecem como "sem classificação". Marque ou desmarque à vontade antes de confirmar.'
+        + (buscaAtiva() ? ' Com a busca ativa, "Confirmar triagem" vale só para as cirurgias listadas.' : '')),
       el('table', { class: 'tabela' },
         el('thead', {}, el('tr', {}, ['Vigiar', 'Cirurgia', 'Paciente', 'Procedimento', 'Regra'].map(t => el('th', {}, t)))),
         el('tbody', {}, linhasTabela)),
       el('div', { class: 'linha-botoes' },
         el('button', { class: 'botao-primario', onclick: async () => {
           try {
-            const marcadas = triagem.filter(c => caixas.get(c.ID_Cirurgia).checked);
-            const dispensadas = triagem.filter(c => !caixas.get(c.ID_Cirurgia).checked);
+            const marcadas = lista.filter(c => caixas.get(c.ID_Cirurgia).checked);
+            const dispensadas = lista.filter(c => !caixas.get(c.ID_Cirurgia).checked);
             await comTrava(['cirurgias'], async () => {
               const atual = await lerBanco('cirurgias');
               const indice = new Map(atual.cirurgias.map(c => [c.ID_Cirurgia, c]));
@@ -238,7 +242,7 @@ async function montarVigilancia(conteudo) {
             });
             recarregar();
           } catch (e) { msgTriagem.textContent = e.message; }
-        } }, 'Confirmar triagem')), msgTriagem));
+        } }, 'Confirmar triagem')), msgTriagem);
   }
 
   /* ---- 2. Modelo da mensagem ---- */
@@ -247,8 +251,8 @@ async function montarVigilancia(conteudo) {
   const sobVigilancia = porStatus('sob vigilância').filter(c => !faleceu(c))
     .sort((a, b) => String(a.DataCirurgia).localeCompare(String(b.DataCirurgia)));
 
-  conteudo.append(el('div', { class: 'cartao' },
-    el('h2', {}, 'Mensagem padrão do WhatsApp'),
+  const cartaoModelo = el('details', { class: 'cartao' },
+    el('summary', {}, 'Mensagem padrão do WhatsApp (editar)'),
     el('p', { class: 'texto-suave' },
       'Campos que se preenchem sozinhos: {nome}, {procedimento}, {data}. O modelo fica salvo no banco e vale para todos.'),
     campoModelo,
@@ -256,7 +260,7 @@ async function montarVigilancia(conteudo) {
       el('button', { class: 'botao-secundario', onclick: async () => {
         try { await gravarModeloVigilancia(campoModelo.value); msgModelo.textContent = 'Modelo salvo ✓'; }
         catch (e) { msgModelo.textContent = e.message; }
-      } }, 'Salvar modelo'), msgModelo)));
+      } }, 'Salvar modelo'), msgModelo));
 
   /* ---- 3. Sob vigilância: enviar mensagem ---- */
   function linhaContato(c, aposEnvio) {
@@ -350,12 +354,13 @@ async function montarVigilancia(conteudo) {
       } catch (e) { alert(e.message); }
     } }, '↩');
 
-  if (sobVigilancia.length) {
-    conteudo.append(el('div', { class: 'cartao' },
-      el('h2', {}, `Sob vigilância — ${fmtInt(sobVigilancia.length)} aguardando contato`),
+  function secaoAguardandoEnvio(lista) {
+    if (!lista.length) return el('div', { class: 'cartao' }, el('p', { class: 'texto-suave' }, buscaAtiva() ? 'Nenhuma cirurgia aguardando envio com esta busca.' : 'Nenhuma cirurgia aguardando o envio da mensagem.'));
+    return el('div', { class: 'cartao' },
+      el('h2', {}, `Aguardando envio — ${fmtInt(lista.length)} sob vigilância`),
       el('table', { class: 'tabela' },
         el('thead', {}, el('tr', {}, ['Cirurgia', 'Paciente', 'Procedimento', 'Contato', ''].map(t => el('th', {}, t)))),
-        el('tbody', {}, sobVigilancia.map(c => el('tr', {},
+        el('tbody', {}, lista.map(c => el('tr', {},
           el('td', {}, c.DataCirurgia, el('span', { class: 'texto-suave' }, ` (${idadePosOp(c)}d)`), seloVencida(c)),
           el('td', { class: 'linha-clicavel', onclick: () => abrirPaciente(c.Prontuario) }, nomeDe(c) || c.Prontuario),
           el('td', {}, String(c.Procedimento || '').slice(0, 50), seloImplante(c)),
@@ -369,7 +374,7 @@ async function montarVigilancia(conteudo) {
                   } catch (e) { alert(e.message); }
                 } }, 'Encerrar sem contato')
               : botaoReverter(c, 'pendente', alvo => { alvo.VigilanciaPor = ''; }),
-            botaoNumeroIncorreto(c)))))))));
+            botaoNumeroIncorreto(c))))))));
   }
 
   /* ---- 4. Mensagem enviada: aguardando resposta ---- */
@@ -503,12 +508,13 @@ async function montarVigilancia(conteudo) {
       } catch (e) { alert(e.message); }
     } }, '＋'); }
 
-  if (enviadas.length) {
-    conteudo.append(el('div', { class: 'cartao' },
-      el('h2', {}, `Mensagem enviada — ${fmtInt(enviadas.length)} aguardando resposta`),
+  function secaoEnviados(lista) {
+    if (!lista.length) return el('div', { class: 'cartao' }, el('p', { class: 'texto-suave' }, buscaAtiva() ? 'Nenhuma mensagem enviada com esta busca.' : 'Nenhuma mensagem aguardando resposta.'));
+    return el('div', { class: 'cartao' },
+      el('h2', {}, `Enviados — ${fmtInt(lista.length)} aguardando resposta`),
       el('table', { class: 'tabela' },
         el('thead', {}, el('tr', {}, ['Enviada em', 'Paciente', 'Procedimento', 'Contato', 'Desfecho', ''].map(t => el('th', {}, t)))),
-        el('tbody', {}, enviadas.map(c => el('tr', {},
+        el('tbody', {}, lista.map(c => el('tr', {},
           el('td', {}, c.MensagemEnviadaEm || '—',
             el('span', { class: 'texto-suave' }, c.MensagemEnviadaEm ? ` (${diasDesde(c.MensagemEnviadaEm, hoje)}d)` : ''), seloVencida(c)),
           el('td', { class: 'linha-clicavel', onclick: () => abrirPaciente(c.Prontuario) }, nomeDe(c) || c.Prontuario),
@@ -525,20 +531,21 @@ async function montarVigilancia(conteudo) {
                   recarregar();
                 } catch (e) { alert(e.message); }
               } }, 'Encerrar sem contato')
-            : botaoReverter(c, 'sob vigilância', alvo => { alvo.MensagemEnviadaEm = ''; }))))))));
+            : botaoReverter(c, 'sob vigilância', alvo => { alvo.MensagemEnviadaEm = ''; })))))));
   }
 
   /* ---- 5. Em investigação: validar ---- */
   const investigacoes = porStatus('em investigação');
-  if (investigacoes.length) {
-    conteudo.append(el('div', { class: 'cartao' },
-      el('h2', {}, `Em investigação — ${fmtInt(investigacoes.length)} aguardando validação`),
+  function secaoInvestigacao(lista) {
+    if (!lista.length) return el('div', { class: 'cartao' }, el('p', { class: 'texto-suave' }, buscaAtiva() ? 'Nenhuma investigação com esta busca.' : 'Nenhuma investigação aguardando validação.'));
+    return el('div', { class: 'cartao' },
+      el('h2', {}, `Em investigação — ${fmtInt(lista.length)} aguardando validação`),
       el('p', { class: 'texto-suave' },
         'A validação é a segunda assinatura: quem valida não precisa ser quem investigou, e o caso de IRAS '
         + 'só vira confirmado aqui.'),
       el('table', { class: 'tabela' },
         el('thead', {}, el('tr', {}, ['Paciente', 'Procedimento', 'Tipo de ISC', 'Investigou', 'Observações', 'Validação', ''].map(t => el('th', {}, t)))),
-        el('tbody', {}, investigacoes.map(c => {
+        el('tbody', {}, lista.map(c => {
           const caixaValida = el('input', { type: 'checkbox' });
           caixaValida.addEventListener('change', async () => {
             if (!caixaValida.checked) return;
@@ -569,7 +576,7 @@ async function montarVigilancia(conteudo) {
             el('td', {}, el('label', {}, caixaValida, ' validada')),
             el('td', {}, el('div', { class: 'linha-botoes' },
               botaoMaisObservacao(c), reverterComIras(c, 'mensagem enviada', 'apagarIras'))));
-        })))));
+        }))));
   }
 
   /* ---- 6. Encerradas ---- */
@@ -579,14 +586,6 @@ async function montarVigilancia(conteudo) {
   const dispensadas = porStatus('dispensada');
   const porObito = porStatus('encerrada — óbito');
   const numeroErrado = porStatus('encerrada — número incorreto');
-
-  conteudo.append(el('div', { class: 'grade-cartoes' },
-    [[sobVigilancia.length, 'sob vigilância'], [enviadas.length, 'mensagens aguardando resposta'],
-     [semInfeccao.length, 'sem infecção'], [confirmadas.length, 'infecções confirmadas'],
-     [semContato.length, 'encerradas sem contato'], [porObito.length, 'encerradas por óbito'],
-     [numeroErrado.length, 'número incorreto/inexistente']].map(([n, r]) =>
-      el('div', { class: 'cartao cartao-numero' },
-        el('div', { class: 'numero-grande' }, fmtInt(n)), el('div', { class: 'texto-suave' }, r)))));
 
   const blocoEncerradas = (titulo, lista, statusVolta) => el('details', {},
     el('summary', {}, `${titulo} (${fmtInt(lista.length)})`),
@@ -599,44 +598,102 @@ async function montarVigilancia(conteudo) {
         el('td', { class: 'texto-suave' }, c.ValidadoPor || c.InvestigadoPor || c.VigilanciaPor || ''),
         el('td', {}, botaoReverter(c, statusVolta)))))));
 
-  const blocoObitos = () => el('details', {},
-    el('summary', {}, `Encerradas por óbito (${fmtInt(porObito.length)})`),
+  const blocoObitos = lista => el('details', {},
+    el('summary', {}, `Encerradas por óbito (${fmtInt(lista.length)})`),
     el('p', { class: 'texto-suave' },
       'Encerramento automático: o paciente tem óbito registrado após a cirurgia. Não há botão de reverter — '
       + 'se o óbito estiver errado, corrija o registro do paciente e a vigilância reabre pela triagem.'),
     el('table', { class: 'tabela' },
       el('thead', {}, el('tr', {}, ['Cirurgia', 'Paciente', 'Procedimento', 'Óbito em'].map(t => el('th', {}, t)))),
-      el('tbody', {}, porObito.slice(0, 200).map(c => el('tr', {},
+      el('tbody', {}, lista.slice(0, 200).map(c => el('tr', {},
         el('td', {}, c.DataCirurgia),
         el('td', { class: 'linha-clicavel', onclick: () => abrirPaciente(c.Prontuario) }, nomeDe(c) || c.Prontuario),
         el('td', {}, String(c.Procedimento || '').slice(0, 50)),
         el('td', {}, indiceObitos.get(normalizarProntuario(c.Prontuario)) || 'data não informada'))))));
 
-  if (semInfeccao.length || confirmadas.length || semContato.length || dispensadas.length
-      || porObito.length || numeroErrado.length) {
-    conteudo.append(el('div', { class: 'cartao' },
-      el('h2', {}, 'Encerradas'),
-      blocoEncerradas('Vigilância realizada sem infecção', semInfeccao, 'mensagem enviada'),
-      el('details', {},
-        el('summary', {}, `Infecções confirmadas (${fmtInt(confirmadas.length)})`),
-        el('table', { class: 'tabela' },
-          el('thead', {}, el('tr', {}, ['Cirurgia', 'Paciente', 'Tipo de ISC', 'Investigou', 'Validou', ''].map(t => el('th', {}, t)))),
-          el('tbody', {}, confirmadas.slice(0, 200).map(c => el('tr', {},
-            el('td', {}, c.DataCirurgia),
-            el('td', { class: 'linha-clicavel', onclick: () => abrirPaciente(c.Prontuario) }, nomeDe(c) || c.Prontuario),
-            el('td', {}, TIPOS_ISC[c.TipoISC] || c.TipoISC),
-            el('td', {}, c.InvestigadoPor), el('td', {}, `${c.ValidadoPor} em ${c.ValidadoEm}`),
-            el('td', {}, reverterComIras(c, 'em investigação', 'reabrirIras'))))))),
-      blocoEncerradas('Sem contato (janela vencida)', semContato, 'sob vigilância'),
-      blocoEncerradas('Número incorreto ou inexistente', numeroErrado, 'sob vigilância'),
-      blocoEncerradas('Dispensadas na triagem', dispensadas, 'pendente'),
-      porObito.length ? blocoObitos() : null));
+  function secaoEncerradas(f) {
+    const total = f(semInfeccao).length + f(confirmadas).length + f(semContato).length + f(dispensadas).length + f(porObito).length + f(numeroErrado).length;
+    if (!total) return el('div', { class: 'cartao' }, el('p', { class: 'texto-suave' }, buscaAtiva() ? 'Nenhuma vigilância encerrada com esta busca.' : 'Nenhuma vigilância encerrada ainda.'));
+    const lObito = f(porObito);
+    return el('div', {},
+      el('div', { class: 'grade-cartoes' },
+        [[f(semInfeccao).length, 'sem infecção'], [f(confirmadas).length, 'infecções confirmadas'],
+         [f(semContato).length, 'encerradas sem contato'], [lObito.length, 'encerradas por óbito'],
+         [f(numeroErrado).length, 'número incorreto/inexistente'], [f(dispensadas).length, 'dispensadas na triagem']].map(([n, r]) =>
+          el('div', { class: 'cartao cartao-numero' },
+            el('div', { class: 'numero-grande' }, fmtInt(n)), el('div', { class: 'texto-suave' }, r)))),
+      el('div', { class: 'cartao' },
+        el('h2', {}, 'Encerradas'),
+        blocoEncerradas('Vigilância realizada sem infecção', f(semInfeccao), 'mensagem enviada'),
+        el('details', {},
+          el('summary', {}, `Infecções confirmadas (${fmtInt(f(confirmadas).length)})`),
+          el('table', { class: 'tabela' },
+            el('thead', {}, el('tr', {}, ['Cirurgia', 'Paciente', 'Tipo de ISC', 'Investigou', 'Validou', ''].map(t => el('th', {}, t)))),
+            el('tbody', {}, f(confirmadas).slice(0, 200).map(c => el('tr', {},
+              el('td', {}, c.DataCirurgia),
+              el('td', { class: 'linha-clicavel', onclick: () => abrirPaciente(c.Prontuario) }, nomeDe(c) || c.Prontuario),
+              el('td', {}, TIPOS_ISC[c.TipoISC] || c.TipoISC),
+              el('td', {}, c.InvestigadoPor), el('td', {}, `${c.ValidadoPor} em ${c.ValidadoEm}`),
+              el('td', {}, reverterComIras(c, 'em investigação', 'reabrirIras'))))))),
+        blocoEncerradas('Sem contato (janela vencida)', f(semContato), 'sob vigilância'),
+        blocoEncerradas('Número incorreto ou inexistente', f(numeroErrado), 'sob vigilância'),
+        blocoEncerradas('Dispensadas na triagem', f(dispensadas), 'pendente'),
+        lObito.length ? blocoObitos(lObito) : null));
   }
 
-  if (!triagem.length && !sobVigilancia.length && !enviadas.length && !investigacoes.length
-      && !semInfeccao.length && !confirmadas.length && !semContato.length) {
-    conteudo.append(el('div', { class: 'cartao' }, el('p', { class: 'texto-suave' },
-      `Nenhuma cirurgia na janela de vigilância (${JANELA_VIGILANCIA.inicioDias} a ${JANELA_VIGILANCIA.fimDias} dias de pós-operatório). `
-      + 'As cirurgias entram aqui automaticamente conforme completam 30 dias.')));
+  /* ---- Abas por situação + busca (pedido de 21/10/2026) ----
+     Antes as filas vinham empilhadas e a triagem longa empurrava "aguardando envio" e
+     "enviados" para o fim da página. Cada situação tem a sua aba; a busca (nome, prontuário,
+     atendimento, telefone, procedimento, data) vale para todas e mostra quantos casam em
+     cada aba. A aba e a busca sobrevivem aos recarregamentos de cada ação. */
+  const encerradasTodas = [semInfeccao, confirmadas, semContato, dispensadas, porObito, numeroErrado];
+  const ABAS_VIG = [
+    { id: 'triagem', rotulo: 'Triagem', lista: () => triagem.filter(casa) },
+    { id: 'envio', rotulo: 'Aguardando envio', lista: () => sobVigilancia.filter(casa) },
+    { id: 'enviados', rotulo: 'Enviados', lista: () => enviadas.filter(casa) },
+    { id: 'investigacao', rotulo: 'Em investigação', lista: () => investigacoes.filter(casa) },
+    { id: 'encerradas', rotulo: 'Encerradas', lista: () => [].concat(...encerradasTodas).filter(casa) }
+  ];
+  if (!ABAS_VIG.some(a => a.id === app.abaVigilancia)) {
+    /* 1ª abertura: a primeira aba com trabalho a fazer */
+    app.abaVigilancia = (ABAS_VIG.slice(0, 4).find(a => a.lista().length) || ABAS_VIG[0]).id;
   }
+  campoBusca.value = app.buscaVigilancia || '';
+  const barraAbas = el('div', { class: 'abas-tela', role: 'tablist' });
+  const areaAba = el('div', {});
+  const infoBusca = el('span', { class: 'texto-suave' });
+  campoBusca.addEventListener('input', () => { app.buscaVigilancia = campoBusca.value; desenharAbas(true); });
+  conteudo.append(el('div', { class: 'cartao' },
+    linhaMes,
+    el('div', { class: 'linha-campos' },
+      el('label', { style: 'flex:1;display:flex;gap:8px;align-items:center' }, '🔎 ', campoBusca),
+      el('button', { class: 'botao-secundario', onclick: () => { campoBusca.value = ''; app.buscaVigilancia = ''; desenharAbas(false); campoBusca.focus(); } }, 'Limpar'),
+      infoBusca),
+    barraAbas), areaAba);
+
+  function desenharAbas(veioDaBusca) {
+    const contagens = new Map(ABAS_VIG.map(a => [a.id, a.lista().length]));
+    /* Busca nova sem resultado na aba atual: pula para a primeira aba onde o paciente está. */
+    if (veioDaBusca && buscaAtiva() && !contagens.get(app.abaVigilancia)) {
+      const achou = ABAS_VIG.find(a => contagens.get(a.id));
+      if (achou) app.abaVigilancia = achou.id;
+    }
+    infoBusca.textContent = buscaAtiva()
+      ? 'encontrado em: ' + (ABAS_VIG.filter(a => contagens.get(a.id)).map(a => `${a.rotulo} (${contagens.get(a.id)})`).join(' · ') || 'nenhuma aba')
+      : '';
+    barraAbas.replaceChildren(...ABAS_VIG.map(a => el('button', {
+      class: 'aba-tela' + (a.id === app.abaVigilancia ? ' aba-tela-atual' : ''), role: 'tab',
+      'aria-selected': a.id === app.abaVigilancia ? 'true' : 'false',
+      onclick: () => { app.abaVigilancia = a.id; desenharAbas(false); }
+    }, `${a.rotulo} (${fmtInt(contagens.get(a.id))})`)));
+    const aba = app.abaVigilancia;
+    const lista = ABAS_VIG.find(a => a.id === aba).lista();
+    areaAba.replaceChildren(
+      aba === 'triagem' ? secaoTriagem(lista)
+      : aba === 'envio' ? el('div', {}, cartaoModelo, secaoAguardandoEnvio(lista))
+      : aba === 'enviados' ? secaoEnviados(lista)
+      : aba === 'investigacao' ? secaoInvestigacao(lista)
+      : secaoEncerradas(l => l.filter(casa)));
+  }
+  desenharAbas(false);
 }

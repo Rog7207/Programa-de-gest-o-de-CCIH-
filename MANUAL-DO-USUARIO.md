@@ -555,7 +555,13 @@ esse import, tudo aparece como "a avaliar" (o app não sabe o que já foi notifi
 
 ## 10. Vigilância pós-alta (cirurgias)
 
-A aba Pós-alta acompanha infecção de sítio cirúrgico depois da alta:
+A aba Pós-alta acompanha infecção de sítio cirúrgico depois da alta. No topo ficam o filtro
+de mês, a **busca** e as **abas por situação** — **Triagem**, **Aguardando envio**,
+**Enviados**, **Em investigação** e **Encerradas** —, cada uma com a quantidade de pacientes.
+A busca aceita vários termos ao mesmo tempo (nome, prontuário, atendimento, telefone,
+procedimento, data da cirurgia ou cirurgião: "maria quadril", "12/09", "1440176") e mostra em
+quais abas o paciente aparece; se ele não está na aba aberta, a tela pula para a aba certa. Com
+a busca ativa, "Confirmar triagem" vale só para as cirurgias listadas.
 
 1. **Triagem**: cirurgias de 30 a 150 dias aparecem com checkbox — próteses/implantes e
    cesarianas já marcadas. Confirme para colocar **sob vigilância**.

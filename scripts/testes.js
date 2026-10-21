@@ -5030,7 +5030,7 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     mensagemVigilancia: imp.mensagemVigilancia, linkWhatsApp: imp.linkWhatsApp,
     normalizarProntuario: imp.normalizarProntuario,
     indiceDeObitos: imp.indiceDeObitos, faleceuAposCirurgia: imp.faleceuAposCirurgia,
-    acrescentarObservacao: imp.acrescentarObservacao
+    acrescentarObservacao: imp.acrescentarObservacao, casaBuscaLivre: imp.casaBuscaLivre
   });
   /* Um paciente em cada situação — cada fila e cada seção da tela é montada. */
   const cirurgia = (id, extra) => ({ ID_Cirurgia: id, Prontuario: '77', DataCirurgia: '2026-08-01',
@@ -5062,6 +5062,19 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
   } catch (e) {
     verificar('montarVigilancia monta com todos os status sem exceção', false, e.stack ? e.stack.split('\n')[0] : e.message);
   }
+  /* Abas por situação + busca (21/10/2026): cada aba monta, com e sem busca. */
+  for (const aba of ['triagem', 'envio', 'enviados', 'investigacao', 'encerradas']) {
+    for (const busca of ['', 'silva', 'colecist 77', 'zzzz']) {
+      try {
+        global.app = { usuario: 'Teste', abaVigilancia: aba, buscaVigilancia: busca };
+        await montarVigilancia(fakeNode());
+      } catch (e) {
+        verificar(`aba "${aba}" com busca "${busca}" monta sem exceção`, false, e.stack ? e.stack.split('\n').slice(0, 2).join(' | ') : e.message);
+      }
+    }
+  }
+  verificar('as 5 abas da pós-alta montam com e sem busca', true);
+  global.app = { usuario: 'Teste' };
 
   /* == 85. Amostras repetidas agrupadas nas telas de Culturas e Isolamentos ==
      Motor puro (pendências agrupadas) + fumaça da tela de Culturas com DOM falso: duas
@@ -5891,6 +5904,19 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     verificar('reconciliar de novo não muda nada (idempotente)', (() => { const r2 = imp.reconciliarPassagens(r.passagens, internacoes); return r2.passagens.length === r.passagens.length && r2.cobertasPelo2536 + r2.invalidas + r2.repetidas + r2.fechadasPorPosterior + r2.fechadasPorAlta === 0; })());
     const linha = imp.montarLinhaImportada({ Atendimento: '5', Setor: 'CTI', EntradaSetor: 46295.5, SaidaSetor: '' }, 'passagem_setor', 'PSS-1', 'x', '2026-10-18');
     verificar('importação genérica: data do Excel na passagem vira ISO com hora (46295,5 = 30/09/2026 12h)', linha.EntradaSetor === '2026-09-30 12:00:00', linha.EntradaSetor);
+  }
+
+  /* == 105. Busca livre por vários campos (aba Pós-alta, 21/10/2026) == */
+  {
+    console.log('\n== 105. Busca livre por vários campos ==');
+    const campos = ['José da Conceição', '0012345', '1440176', '(48) 9 9999-0000', 'ARTROPLASTIA TOTAL DE QUADRIL', '2026-09-15'];
+    const b = q => imp.casaBuscaLivre(q, campos);
+    verificar('busca vazia casa tudo', b('') && b('   '));
+    verificar('nome sem acento e sem caixa', b('jose conceicao') && b('CONCEIÇÃO'));
+    verificar('vários termos: todos precisam casar, em campos diferentes', b('jose 12345') && b('quadril conceicao') && !b('jose joelho'));
+    verificar('dígitos: telefone formatado e prontuário com zeros', b('99990000') && b('48999990000'.slice(2)) && b('12345') && b('1440176'));
+    verificar('data em dd/mm/aaaa e parcial', b('15/09/2026') && b('15/09') && b('2026-09'));
+    verificar('o que não está em campo nenhum não casa', !b('maria') && !b('777'));
   }
 
   console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);

@@ -51,8 +51,9 @@ async function montarAntibioticosNovo(conteudo) {
      para avaliar na fila (não há paciente), então sai dela; o número fica à vista para o usuário
      saber que existem e importar o censo/foto que os resolve. */
   const temProntuario = c => String(c.Prontuario || '').trim();
+  /* Do curso mais recente para o mais antigo (pedido de 23/10/2026); empate pelo paciente. */
   const ativos = cursos.filter(c => String(c.fim) >= hoje && temProntuario(c))
-    .sort((a, b) => b.dias - a.dias);
+    .sort((a, b) => String(b.inicio).localeCompare(String(a.inicio)) || b.dias - a.dias);
   const ativosSemProntuario = cursos.filter(c => String(c.fim) >= hoje && !temProntuario(c)).length;
   const alertas = alertasDeAntibioticos({ antibioticos: banco, culturas: bancoCulturas }, hoje);
   /* Por chave, não por referência: alertasDeAntibioticos monta os próprios cursos. */
@@ -88,7 +89,8 @@ async function montarAntibioticosNovo(conteudo) {
     conteudo.append(el('div', { class: 'aviso-erro' },
       el('div', { class: 'alerta-titulo' }, `Alertas de antimicrobianos (${alertas.length})`),
       alertas.slice(0, 12).map(a => el('div', { class: 'alerta-item linha-clicavel',
-        onclick: () => abrirPaciente(a.curso.Prontuario) },
+        title: 'Abre a avaliação deste curso na fila',
+        onclick: () => abrirCursoDoAlerta(a.curso) },
         `${ICONE[a.tipo]} ${nomeDe(a.curso.Prontuario)} (${a.curso.Setor || 'sem setor'}): ${a.detalhe}`)),
       alertas.length > 12 ? el('div', { class: 'texto-suave' }, `… e mais ${alertas.length - 12}.`) : null));
   }
@@ -104,13 +106,16 @@ async function montarAntibioticosNovo(conteudo) {
       + (ativosSemProntuario ? ` ${fmtInt(ativosSemProntuario)} curso(s) ativo(s) sem prontuário (atendimento fora do censo de internações) ficaram de fora — importe o censo/foto dos internados para vinculá-los ao paciente.` : '')),
     areaFila));
 
+  /* Linha da fila de cada curso mostrado, para o alerta conseguir abrir a avaliação dele. */
+  const linhaDoCurso = new Map();
   function desenharFila() {
     const mostrados = pendentes.slice(0, 150);
+    linhaDoCurso.clear();
     areaFila.replaceChildren(el('table', { class: 'tabela' },
       el('thead', {}, el('tr', {}, ['Paciente', 'Antibiótico', 'Dose atual', 'Início', 'Dias', 'Setor', 'Alertas'].map(c => el('th', {}, c)))),
       el('tbody', {}, mostrados.map(curso => {
         const doCurso = alertasDoCurso(curso);
-        return el('tr', { class: 'linha-clicavel', onclick: e => detalharCurso(curso, e.currentTarget) },
+        const tr = el('tr', { class: 'linha-clicavel', onclick: e => detalharCurso(curso, e.currentTarget) },
           el('td', {}, nomeDe(curso.Prontuario)),
           el('td', {}, curso.Antibiotico),
           el('td', {}, String(curso.ultima.Dose || '')),
@@ -118,7 +123,28 @@ async function montarAntibioticosNovo(conteudo) {
           el('td', { class: curso.dias >= DIAS_CURSO_PROLONGADO ? 'aviso-erro-texto' : '' }, String(curso.dias)),
           el('td', {}, String(curso.Setor || '')),
           el('td', {}, doCurso.map(a => ({ resistencia: '🦠', dose: '💊', duracao: '⏱' })[a.tipo]).join(' ')));
+        linhaDoCurso.set(chaveCurso(curso), tr);
+        return tr;
       }))));
+  }
+
+  /* Clique num alerta: abre o formulário de avaliação do curso na fila (não a ficha do
+     paciente — pedido de 23/10/2026). Curso que não está na fila (avaliado há pouco, fora da
+     rotina ou além dos 150 mostrados) é posto no topo dela para ser avaliado mesmo assim. */
+  function abrirCursoDoAlerta(cursoDoAlerta) {
+    const chave = chaveCurso(cursoDoAlerta);
+    let curso = ativos.find(c => chaveCurso(c) === chave);
+    if (!curso) { abrirPaciente(cursoDoAlerta.Prontuario); return; }
+    const pos = pendentes.indexOf(curso);
+    if (pos < 0 || pos >= 150) {
+      if (pos >= 0) pendentes.splice(pos, 1);
+      pendentes.unshift(curso);
+      desenharFila();
+    }
+    const tr = linhaDoCurso.get(chave);
+    if (!tr) { abrirPaciente(curso.Prontuario); return; }
+    if (!tr.classList.contains('linha-aberta')) detalharCurso(curso, tr);
+    tr.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
   function detalharCurso(curso, tr) {

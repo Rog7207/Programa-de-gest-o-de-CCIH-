@@ -5322,6 +5322,9 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     const achar = (n, pred, saida = []) => { if (n && typeof n === 'object') { if (pred(n)) saida.push(n); (n.kids || []).forEach(k => achar(k, pred, saida)); } return saida; };
 
     const curso = { Prontuario: '100', Antibiotico: 'Meropenem', Setor: 'CTI', inicio: '2026-10-01', fim: '2026-10-06', dias: 5, ids: ['PRE-1'], ultima: { ID_Prescricao: 'PRE-1', Dose: '1g', Indicacao: '' } };
+    /* Curso mais recente: deve vir ANTES na fila (ordem do mais atual para o mais antigo, 23/10/2026). */
+    const cursoNovo = { Prontuario: '100', Antibiotico: 'Vancomicina', Setor: 'CTI', inicio: '2026-10-04', fim: '2026-10-06', dias: 2, ids: ['PRE-2'], ultima: { ID_Prescricao: 'PRE-2', Dose: '1g', Indicacao: '' } };
+    let fichasAbertas = 0;
     /* Curso órfão: atendimento fora do censo → sem prontuário (sai da fila). */
     const orfao = { Prontuario: '', Antibiotico: 'Piperacilina tazobactam', Setor: '', inicio: '2026-10-01', fim: '2026-10-06', dias: 8, ids: ['PRE-9'], ultima: { ID_Prescricao: 'PRE-9', Dose: '', Indicacao: '' } };
     const fx = {
@@ -5340,10 +5343,11 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       el: elFalso, fmtInt: n => String(n), app: { usuario: 'Dr. Teste' },
       config: { ehAtbAvaliado: () => true, classeDoAntimicrobiano: () => '', vocabulario: {} },
       lerBanco: async n => JSON.parse(JSON.stringify(fx[n] || {})), gravarBanco: async () => {},
-      navegar() {}, abrirPaciente() {}, normalizarProntuario: imp.normalizarProntuario, normalizarTexto: leitura.normalizarTexto,
+      navegar() {}, abrirPaciente() { fichasAbertas++; }, normalizarProntuario: imp.normalizarProntuario, normalizarTexto: leitura.normalizarTexto,
       hojeISO: () => '2026-10-06', agoraCurto: () => '2026-10-06 10:00', diasDesde: () => 5, comTrava: async (_l, fn) => fn(),
       detalharNaLinha: (tr, cartao) => tr.after(cartao), analisarDose: () => null,
-      cursosDeAntibiotico: () => [curso, orfao], alertasDeAntibioticos: () => [], DIAS_CURSO_PROLONGADO: 10,
+      cursosDeAntibiotico: () => [curso, cursoNovo, orfao],
+      alertasDeAntibioticos: () => [{ tipo: 'duracao', detalhe: 'curso longo', curso: { ...curso } }], DIAS_CURSO_PROLONGADO: 10,
       grafLinhas: () => elFalso('div'), grafBarras: () => elFalso('div'), chavePeriodo: () => '', montarCartaoPublicacaoRemota: () => {},
       publicacao: { restaurar: async () => null, escolher: async () => ({ name: 'x' }), gravar: async () => {}, handle: null },
       sincronizacaoGoogle: { configurada: async () => false, publicarNoDrive: async () => ({}) }
@@ -5382,6 +5386,18 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       verificar('avaliação de ATB: clicar na cultura alterna a exibição do antibiograma', detalheAntibiograma.style.display !== antesDisplay);
       const evo = achar(cartao, n => n.tag === 'details' && /Última evolução médica/.test(texto(n)))[0];
       verificar('avaliação de ATB: última evolução médica recolhida no cartão', !!evo && /estável, afebril/.test(texto(evo)), evo && texto(evo).slice(0, 120));
+      /* Ordem da fila e clique no alerta (23/10/2026) */
+      const linhasFila = achar(raiz, n => n.tag === 'tr' && n.ouvintes.click && /Meropenem|Vancomicina/.test(texto(n)) && !/Klebsiella/.test(texto(n)));
+      verificar('avaliação de ATB: fila do curso mais recente para o mais antigo (Vancomicina 04/10 antes de Meropenem 01/10)',
+        linhasFila.length === 2 && /Vancomicina/.test(texto(linhasFila[0])) && /Meropenem/.test(texto(linhasFila[1])), linhasFila.map(texto).join(' || '));
+      const alerta = achar(raiz, n => n.tag === 'div' && /alerta-item/.test(String(n.attrs.class || '')))[0];
+      verificar('avaliação de ATB: o alerta do quadro vermelho é clicável', !!alerta && !!alerta.ouvintes.click);
+      const cartoesAntes = achar(raiz, n => n.tag === 'div' && String(n.attrs.class || '').includes('cartao-detalhe')).length;
+      alerta.ouvintes.click[0]({});
+      const cartoesDepois = achar(raiz, n => n.tag === 'div' && String(n.attrs.class || '').includes('cartao-detalhe'));
+      verificar('avaliação de ATB: clicar no alerta abre o formulário de avaliação do curso (não a ficha do paciente)',
+        cartoesDepois.length === cartoesAntes + 1 && /Meropenem — Fulano/.test(texto(cartoesDepois[cartoesDepois.length - 1])) && fichasAbertas === 0,
+        `cartões ${cartoesAntes}→${cartoesDepois.length}, fichas abertas ${fichasAbertas}`);
     } catch (e) {
       verificar('aba de avaliação de ATB monta e expande o antibiograma sem exceção', false, e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e.message);
     } finally {

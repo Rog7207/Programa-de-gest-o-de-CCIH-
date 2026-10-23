@@ -260,7 +260,10 @@ A aba Antibióticos traz:
 - **Alertas**: 🦠 germe do paciente resistente ao antibiótico em uso (culturas de até 30
   dias) · 💊 dose diária acima do teto usual de adulto (setores pediátricos ficam fora) ·
   ⏱ curso com 10+ dias sem interrupção. Os alertas também aparecem no painel inicial.
-- **Fila de avaliação**: como a de culturas — clique no curso, o cartão mostra as culturas
+  **Clicar num alerta abre a avaliação daquele curso na fila** (não a ficha do paciente);
+  se o curso não estiver na fila, ele é posto no topo dela.
+- **Fila de avaliação**: do curso **mais recente para o mais antigo**. Como a de culturas —
+  clique no curso, o cartão mostra as culturas
   recentes com o resultado daquele antibiótico, e você registra Avaliação + Recomendação
   (Manter / Ajustar dose / Descalonar / Modificar / Suspender) com parecer. A avaliação
   vale pelo curso; se ele continuar correndo, volta à fila em 7 dias.

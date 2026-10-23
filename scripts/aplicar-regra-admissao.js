@@ -52,7 +52,8 @@ if (!aplicar) { console.log('\nSIMULAÇÃO — nada gravado. Rode com --aplicar 
 
 const dirBackup = path.join(PASTA, 'backups');
 fs.mkdirSync(dirBackup, { recursive: true });
-const backup = path.join(dirBackup, 'culturas.backup-antes-regra-admissao-d3.xlsx');
+const carimbo = new Date().toISOString().slice(0, 16).replace(/[-:]/g, '').replace('T', '-');
+const backup = path.join(dirBackup, `culturas.backup-antes-regra-admissao-d3-${carimbo}.xlsx`);
 fs.copyFileSync(arqCulturas, backup);
 /* Preserva todas as colunas e abas: reescreve só a aba culturas, com a coluna nova no fim. */
 const colunas = esquemas.ESQUEMAS.culturas.abas.culturas.slice();

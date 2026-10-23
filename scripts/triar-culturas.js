@@ -79,8 +79,10 @@ if (!APLICAR) {
 }
 
 fs.mkdirSync(path.join(PASTA, 'backups'), { recursive: true });
-const backup = path.join(PASTA, 'backups', 'culturas.backup-antes-triagem.xlsx');
-if (!fs.existsSync(backup)) fs.copyFileSync(arquivo, backup);
+/* Nome com data/hora: um backup por execução (nome fixo pulava o backup na 2ª rodada). */
+const carimbo = new Date().toISOString().slice(0, 16).replace(/[-:]/g, '').replace('T', '-');
+const backup = path.join(PASTA, 'backups', `culturas.backup-antes-triagem-${carimbo}.xlsx`);
+fs.copyFileSync(arquivo, backup);
 
 const wb = XLSX.utils.book_new();
 for (const [aba, colunas] of Object.entries(ESQUEMAS.culturas.abas)) {

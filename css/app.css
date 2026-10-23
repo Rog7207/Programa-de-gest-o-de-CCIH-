@@ -199,3 +199,17 @@ tr.linha-mdr td:first-child { border-left: 4px solid #b03a2e; }
 .reuniao-duas-colunas { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .reuniao-duas-colunas h3 { margin: 4px 0 8px; }
 @media (max-width: 900px) { .reuniao-duas-colunas { grid-template-columns: 1fr; } }
+
+/* Slide de benchmarks externos (23/10/2026). */
+.bench-grupo { margin-bottom: 18px; }
+.bench-grupo h3 { margin: 6px 0 8px; }
+.bench-tabela { font-size: 14px; }
+.bench-tabela th, .bench-tabela td { padding: 7px 9px; vertical-align: top; }
+.bench-nota { font-size: 12px; font-weight: 400; }
+.bench-chip { display: inline-block; padding: 2px 9px; border-radius: 12px; font-size: 12px; font-weight: 600; color: #fff; white-space: nowrap; }
+.bench-nivel-0, .bench-nivel-1 { background: #1b7a2f; }
+.bench-nivel-2 { background: #b58900; }
+.bench-nivel-3 { background: #d2691e; }
+.bench-nivel-4 { background: #b00020; }
+.bench-fontes { margin: 10px 0; font-size: 13px; }
+.bench-fontes li { margin-bottom: 4px; }

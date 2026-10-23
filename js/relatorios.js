@@ -1507,6 +1507,123 @@ const RELATORIOS_PADRAO = [
   ['executivo', 'Resumo executivo', relatorioResumoExecutivo]
 ];
 
+/* ---- Benchmarks externos (pedido de 23/10/2026) ----
+   Referências publicadas, com percentis entre hospitais quando a fonte os dá. Anvisa = UTI
+   adulto do Brasil (Boletim nº 32, dados de 2024; as tabelas de percentis estão reproduzidas
+   no boletim de Porto Alegre 2024, que cita o nº 32 como fonte). NHSN = UTI médico-cirúrgica
+   de hospital-escola nos EUA (último sumário com pooled means publicado, 2012). INICC = 630
+   UTIs de 45 países de renda média/baixa (2015–2020). A posição do hospital é dada pelos
+   percentis da Anvisa: abaixo do P50 é melhor que metade das UTIs brasileiras. Números
+   transcritos das fontes — conferir pela CCIH antes de apresentar. */
+const BENCHMARKS_EXTERNOS = {
+  fontes: {
+    anvisa2024: { sigla: 'Anvisa 2024', titulo: 'Anvisa. Boletim Segurança do Paciente e Qualidade em Serviços de Saúde nº 32 — Avaliação Nacional dos indicadores de IRAS e RM, Brasil, 2012 a 2024 (painel Power BI). Tabelas de percentis nacionais reproduzidas em: SMS Porto Alegre. Boletim de Monitoramento das IRAS no Município de Porto Alegre — 2024, nº 1, mar/2026.',
+      url: 'https://www.gov.br/anvisa/pt-br/centraisdeconteudo/publicacoes/servicosdesaude/boletins-e-relatorios-das-notificacoes-de-iras-e-outros-eventos-adversos-1/boletins-e-relatorios-das-notificacoes-de-iras-e-outros-eventos-adversos',
+      url2: 'https://prefeitura.poa.br/sites/default/files/usu_doc/hotsites/sms/vigilancia-em-saude/Monitora%20Iras2024.pdf' },
+    nhsn2012: { sigla: 'NHSN 2012', titulo: 'Dudeck MA, Weiner LM, Allen-Bridson K, et al. National Healthcare Safety Network (NHSN) report, data summary for 2012, Device-associated module. Am J Infect Control 2013;41:1148-66 — UTI médico-cirúrgica de hospital-escola (major teaching), EUA.',
+      url: 'https://www.cdc.gov/nhsn/pdfs/datastat/2012-data-summary-nhsn.pdf' },
+    inicc2020: { sigla: 'INICC 2015–20', titulo: 'Rosenthal VD, et al. International Nosocomial Infection Control Consortium (INICC) report, data summary of 45 countries for 2015 to 2020, adult and pediatric units, device-associated module. Am J Infect Control 2024 — 630 UTIs, 221 hospitais.',
+      url: 'https://www.sciencedirect.com/science/article/abs/pii/S0196655323008799' },
+    omsHigiene: { sigla: 'OMS / literatura', titulo: 'OMS não fixa meta numérica de adesão; 70% é o patamar usual de referência — no inquérito global do WHO Hand Hygiene Self-Assessment Framework (de Kraker MEA, et al. Lancet Infect Dis 2022) a adesão raramente ultrapassa 70% mesmo em países de alta renda.',
+      url: 'https://www.thelancet.com/journals/laninf/article/PIIS1473-3099(21)00618-6/fulltext' },
+    ddSP: { sigla: 'SP 2008–2017', titulo: 'Programa estadual de vigilância do uso de antimicrobianos de São Paulo (10 anos): consumo total em UTI subiu de 588 para 943 DDD por 1.000 pacientes-dia (Antimicrob Steward Healthc Epidemiol, Cambridge). Referência descritiva, não meta.',
+      url: 'https://www.cambridge.org/core/journals/antimicrobial-stewardship-and-healthcare-epidemiology/article/antibiotic-use-in-different-hospital-administrative-categories-an-overview-of-10-years-of-a-statewide-surveillance-program-in-brazil/C63233A69F026C720687B9438A0B6DC9' }
+  },
+  /* tipo 'dispositivo': densidade por 1.000 dias de dispositivo na UTI adulto; 'isc': por 100
+     cirurgias da categoria NHSN; 'percentual'; 'consumo'. */
+  indicadores: [
+    { id: 'ipcs', tipo: 'dispositivo', dispositivo: 'Cateter central', rotulo: 'IPCS (corrente sanguínea) por 1.000 CVC-dia — UTI adulto',
+      nota: 'Anvisa conta só a IPCS laboratorial; aqui entram IPCS laboratorial e clínica associadas a cateter central.',
+      referencias: [
+        { fonte: 'anvisa2024', media: 3.5, p10: 0, p25: 0.8, p50: 2.7, p75: 5.2, p90: 8.9, utilizacao: 0.559, n: 2026 },
+        { fonte: 'nhsn2012', media: 1.2, p10: 0, p25: 0, p50: 1.0, p75: 1.8, p90: 3.0, utilizacao: 0.55, n: 328 },
+        { fonte: 'inicc2020', media: 4.55 }] },
+    { id: 'pav', tipo: 'dispositivo', dispositivo: 'Ventilação mecânica', rotulo: 'PAV por 1.000 VM-dia — UTI adulto',
+      referencias: [
+        { fonte: 'anvisa2024', media: 9.4, p10: 0, p25: 2.5, p50: 6.6, p75: 13.5, p90: 21.7, utilizacao: 0.327, n: 2015 },
+        { fonte: 'nhsn2012', media: 1.6, p10: 0, p25: 0, p50: 0.9, p75: 2.2, p90: 3.9, utilizacao: 0.38, n: 152 },
+        { fonte: 'inicc2020', media: 11.96 }] },
+    { id: 'itu', tipo: 'dispositivo', dispositivo: 'Sonda vesical', rotulo: 'ITU associada a cateter vesical por 1.000 SVD-dia — UTI adulto',
+      referencias: [
+        { fonte: 'anvisa2024', media: 2.1, p10: 0, p25: 0.2, p50: 1.2, p75: 3.2, p90: 6.6, utilizacao: 0.515, n: 2023 },
+        { fonte: 'nhsn2012', media: 2.4, p10: 0, p25: 0.9, p50: 2.0, p75: 3.5, p90: 5.2, utilizacao: 0.68, n: 328 },
+        { fonte: 'inicc2020', media: 2.91 }] },
+    { id: 'isc_csec', tipo: 'isc', categorias: ['Cesariana'], rotulo: 'ISC — parto cesáreo (por 100 cirurgias)',
+      referencias: [{ fonte: 'anvisa2024', media: 1.5, p10: 0, p25: 0, p50: 0.6, p75: 1.7, p90: 3.8, n: 2278 }] },
+    { id: 'isc_hpro', tipo: 'isc', categorias: ['Artroplastia de quadril'], rotulo: 'ISC — artroplastia primária de quadril (por 100)',
+      referencias: [{ fonte: 'anvisa2024', media: 2.6, p10: 0, p25: 0, p50: 0, p75: 3.9, p90: 8.7, n: 1817 }] },
+    { id: 'isc_kpro', tipo: 'isc', categorias: ['Artroplastia de joelho'], rotulo: 'ISC — artroplastia primária de joelho (por 100)',
+      referencias: [{ fonte: 'anvisa2024', media: 1.9, p10: 0, p25: 0, p50: 0, p75: 2.5, p90: 5.8, n: 1772 }] },
+    { id: 'isc_brst', tipo: 'isc', categorias: ['Cirurgia de mama'], rotulo: 'ISC — cirurgia de mama (por 100)',
+      nota: 'Anvisa acompanha só o implante de prótese mamária; aqui entra toda cirurgia de mama.',
+      referencias: [{ fonte: 'anvisa2024', media: 1.3, p10: 0, p25: 0, p50: 0, p75: 1.4, p90: 5.4, n: 1783 }] },
+    { id: 'isc_card', tipo: 'isc', categorias: ['Cirurgia cardíaca', 'Revascularização do miocárdio'], rotulo: 'ISC — cirurgia cardíaca (por 100)',
+      referencias: [{ fonte: 'anvisa2024', media: 6.2, p10: 0, p25: 0, p50: 3.4, p75: 8.7, p90: 14.6, n: 1333 }] },
+    { id: 'isc_neuro', tipo: 'isc', categorias: ['Craniotomia', 'Derivação ventricular', 'Neurocirurgia (outras)'], rotulo: 'ISC — cirurgia neurológica (por 100)',
+      referencias: [{ fonte: 'anvisa2024', media: 2.8, p10: 0, p25: 0, p50: 0, p75: 5.2, p90: 12.5, n: 1493 }] },
+    { id: 'higiene', tipo: 'percentual', rotulo: 'Adesão à higiene das mãos (%)', maiorMelhor: true,
+      referencias: [{ fonte: 'omsHigiene', alvo: 70 }] },
+    { id: 'ddd_uti', tipo: 'consumo', rotulo: 'DDD por 1.000 pacientes-dia — UTI adulto',
+      referencias: [{ fonte: 'ddSP', media: 943 }] }
+  ]
+};
+
+/* Faixa do valor entre os percentis de uma referência: 0 = até P25 … 4 = acima do P90. */
+function posicaoNoBenchmark(valor, ref) {
+  if (valor === null || valor === undefined || !ref || ref.p50 === undefined) return null;
+  const faixas = [['até o P25', ref.p25], ['P25–P50', ref.p50], ['P50–P75', ref.p75], ['P75–P90', ref.p90]];
+  for (let i = 0; i < faixas.length; i++) if (valor <= faixas[i][1]) return { nivel: i, rotulo: faixas[i][0] };
+  return { nivel: 4, rotulo: 'acima do P90' };
+}
+
+/* Indicadores do hospital no trimestre fechado × benchmarks externos. */
+function compararComBenchmarks(bancos, hoje) {
+  const meses = _mesesFechados(hoje, 3);
+  const inicio = meses[0].inicio, fim = meses[meses.length - 1].fim;
+  const casos = ((bancos.iras || {}).casos || []).filter(_casoValeReuniao).filter(k => relPeriodo(k.DataInfeccao, inicio, fim));
+  const setoresUTI = [...new Set(((bancos.denominadores || {}).dispositivos_dia || []).map(l => String(l.Setor || '').trim()))].filter(s => s && _setorUTIAdulto(s));
+  const util = setoresUTI.length
+    ? utilizacaoDispositivos(bancos, casos.filter(k => relEscopo(k.Setor, setoresUTI)), inicio, fim, setoresUTI) : null;
+  const cirurgias = ((bancos.cirurgias || {}).cirurgias || []).filter(c => relPeriodo(c.DataCirurgia, inicio, fim)
+    && (typeof categoriaDeVigilancia !== 'function' || categoriaDeVigilancia(c) !== 'nao_cirurgico'));
+  const obsHig = ((bancos.higiene_maos || {}).observacoes || []).filter(o => relPeriodo(o.Data, inicio, fim)
+    && (o.Acao === 'Higienizou' || o.Acao === 'Não higienizou'));
+  const consumo = consumoAntibioticosMensal(bancos, meses, { hojeISO: hoje });
+  const linhas = [];
+  for (const ind of BENCHMARKS_EXTERNOS.indicadores) {
+    const linha = { id: ind.id, tipo: ind.tipo, rotulo: ind.rotulo, nota: ind.nota || '', maiorMelhor: !!ind.maiorMelhor,
+      valor: null, numerador: null, denominador: null, utilizacao: null, referencias: ind.referencias, posicao: null };
+    if (ind.tipo === 'dispositivo') {
+      const l = util && util.linhas.find(x => x.dispositivo === ind.dispositivo);
+      if (l) { linha.valor = l.densidade; linha.numerador = l.iras; linha.denominador = l.dias; linha.utilizacao = l.utilizacao; }
+    } else if (ind.tipo === 'isc') {
+      const doGrupo = cirurgias.filter(c => ind.categorias.includes(String(c.ProcedimentoNHSN || '').trim()));
+      if (doGrupo.length) {
+        linha.denominador = doGrupo.length; linha.numerador = doGrupo.filter(c => c.ISC === 'S').length;
+        linha.valor = +(linha.numerador / linha.denominador * 100).toFixed(2);
+      }
+    } else if (ind.tipo === 'percentual') {
+      if (obsHig.length) { linha.denominador = obsHig.length; linha.numerador = obsHig.filter(o => o.Acao === 'Higienizou').length; linha.valor = Math.round(linha.numerador / linha.denominador * 100); }
+    } else if (ind.tipo === 'consumo') {
+      const comDDD = consumo.filter(m => m.dddUti !== null && m.pdUti);
+      if (comDDD.length) {
+        linha.numerador = +comDDD.reduce((s, m) => s + m.dddUti, 0).toFixed(1); linha.denominador = comDDD.reduce((s, m) => s + m.pdUti, 0);
+        linha.valor = Math.round(linha.numerador / linha.denominador * 1000 * 10) / 10;
+        linha.nota = (linha.nota ? linha.nota + ' ' : '') + `${comDDD.length} de ${meses.length} meses com dose convertível.`;
+      }
+    }
+    const refPercentis = ind.referencias.find(r => r.p50 !== undefined);
+    linha.posicao = posicaoNoBenchmark(linha.valor, refPercentis);
+    if (ind.tipo === 'percentual' && linha.valor !== null) {
+      const alvo = ind.referencias[0].alvo;
+      linha.posicao = { nivel: linha.valor >= alvo ? 0 : linha.valor >= alvo - 10 ? 2 : 4, rotulo: linha.valor >= alvo ? `≥ ${alvo}%` : `abaixo de ${alvo}%` };
+    }
+    linhas.push(linha);
+  }
+  return { periodo: meses[0].mes + ' a ' + meses[meses.length - 1].mes, meses: meses.map(m => m.mes), setoresUTI,
+    pacientesDiaUTI: util ? util.pacientesDia : 0, linhas, fontes: BENCHMARKS_EXTERNOS.fontes };
+}
+
 /* Bancos que os relatórios leem — a UI carrega todos de uma vez. */
 const BANCOS_RELATORIOS = ['iras', 'culturas', 'higiene_maos', 'antibioticos', 'isolamentos', 'denominadores',
   'sepse', 'cirurgias', 'pacientes', 'uti'];
@@ -1542,7 +1659,7 @@ if (typeof module !== 'undefined' && module.exports) {
     relatorioAntibioticos, relatorioIsolamentos, relatorioSepse, relatorioPosAlta,
     relatorioResumoExecutivo, RELATORIOS_PADRAO, BANCOS_RELATORIOS, setoresEmUso, pacientesDia, pacientesDiaDoCenso,
     relMediana, relDiasEntre, mesAnteriorIntervalo,
-    diasDeDispositivo, taxasPorDispositivo, grupoDoDispositivo, grupoDispositivoDaIRAS, indicadoresReuniao, utilizacaoDispositivos, avaliacoesUTIReuniao,
+    diasDeDispositivo, taxasPorDispositivo, grupoDoDispositivo, grupoDispositivoDaIRAS, indicadoresReuniao, utilizacaoDispositivos, avaliacoesUTIReuniao, compararComBenchmarks, posicaoNoBenchmark, BENCHMARKS_EXTERNOS,
     TABELA_DDD_PADRAO, dddDiarioDaPrescricao, consumoAntibioticosMensal, DDD_COBERTURA_MINIMA,
     perfilMicrobiologico, cruzarIRAScomCulturas, culturasDaIRAS, melhorCulturaDaIRAS, indiceCulturasPorProntuario,
     sitioDaIRAS, materialCasaSitio, colunasDoPerfil, classificarGram, especieEnterobacteria,

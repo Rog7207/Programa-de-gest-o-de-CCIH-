@@ -4590,6 +4590,46 @@ console.log('\n== 76. Indicadores da reunião da CCIH ==');
     && d.posAlta.contatos === 3 && d.posAlta.respostas === 2 && d.posAlta.isc === 1, JSON.stringify(d.posAlta));
   verificar('sem censo NISS, utilizacaoDispositivos devolve null',
     rel.utilizacaoDispositivos({ denominadores: { dispositivos_dia: [] } }, [], '2026-08-01', '2026-08-31', null) === null);
+
+  /* Benchmarks externos (23/10/2026): trimestre fechado jun–ago × Anvisa 2024 / NHSN / INICC. */
+  global.categoriaDeVigilancia = global.categoriaVigilanciaAntes || (() => '');
+  const bancosBench = { ...bancos,
+    iras: { casos: [
+      { DataInfeccao: '2026-07-10', Setor: 'CTI - Dr. Joaquim', Topografia: 'IPCS com confirmação laboratorial', StatusInvestigacao: 'confirmado' },
+      { DataInfeccao: '2026-08-10', Setor: 'CTI - Dr. Joaquim', Topografia: 'PAV', StatusInvestigacao: 'confirmado' },
+      { DataInfeccao: '2026-08-12', Setor: 'CTI - Dr. Joaquim', Topografia: 'ITU associada a cateter vesical', StatusInvestigacao: 'descartado' }
+    ] },
+    denominadores: { dispositivos_dia: ['2026-06', '2026-07', '2026-08'].flatMap(m => [
+      { Data: m + '-10', Competencia: m, Setor: 'CTI - Dr. Joaquim', Dispositivo: 'Pacientes-dia', Contagem: 500 },
+      { Data: m + '-10', Competencia: m, Setor: 'CTI - Dr. Joaquim', Dispositivo: 'Cateter venoso central', Contagem: 300 },
+      { Data: m + '-10', Competencia: m, Setor: 'CTI - Dr. Joaquim', Dispositivo: 'Ventilação mecânica', Contagem: 200 },
+      { Data: m + '-10', Competencia: m, Setor: 'CTI - Dr. Joaquim', Dispositivo: 'Sonda vesical de demora', Contagem: 250 },
+      { Data: m + '-10', Competencia: m, Setor: 'UTI Pediátrica', Dispositivo: 'Cateter venoso central', Contagem: 999 }
+    ]) },
+    cirurgias: { cirurgias: [
+      ...Array.from({ length: 50 }, (_, i) => ({ ID_Cirurgia: 'C' + i, DataCirurgia: '2026-07-15', ProcedimentoNHSN: 'Cesariana', ISC: i < 2 ? 'S' : '' })),
+      { ID_Cirurgia: 'Q1', DataCirurgia: '2026-08-15', ProcedimentoNHSN: 'Artroplastia de quadril', ISC: '' },
+      { ID_Cirurgia: 'F1', DataCirurgia: '2026-05-15', ProcedimentoNHSN: 'Cesariana', ISC: 'S' }
+    ] },
+    higiene_maos: { observacoes: Array.from({ length: 100 }, (_, i) => ({ Data: '2026-07-0' + (1 + i % 9), Setor: 'CTI', Momento: 'Antes do contato com paciente', Acao: i < 75 ? 'Higienizou' : 'Não higienizou' })) },
+    antibioticos: { prescricoes: [] }, pacientes: { internacoes: [] }
+  };
+  const b = rel.compararComBenchmarks(bancosBench, '2026-09-16');
+  const ipcs = b.linhas.find(l => l.id === 'ipcs'), pav = b.linhas.find(l => l.id === 'pav'), itu = b.linhas.find(l => l.id === 'itu');
+  verificar('benchmarks: período é o trimestre fechado e só a UTI adulto entra (pediátrica fora)',
+    b.periodo === '2026-06 a 2026-08' && b.setoresUTI.length === 1 && b.pacientesDiaUTI === 1500, JSON.stringify([b.periodo, b.setoresUTI, b.pacientesDiaUTI]));
+  verificar('IPCS: 1 caso em 900 CVC-dia = 1,11/1.000, utilização 60%, faixa P25–P50 da Anvisa',
+    ipcs.valor === 1.11 && ipcs.denominador === 900 && ipcs.utilizacao === 0.6 && ipcs.posicao.rotulo === 'P25–P50', JSON.stringify(ipcs));
+  verificar('PAV: 1 em 600 VM-dia = 1,67 → até o P25 (Anvisa P25 = 2,5)', pav.valor === 1.67 && pav.posicao.nivel === 0, JSON.stringify(pav.posicao));
+  verificar('ITU descartada não conta: 0 casos → até o P25', itu.numerador === 0 && itu.posicao.nivel === 0, JSON.stringify(itu));
+  const csec = b.linhas.find(l => l.id === 'isc_csec'), hpro = b.linhas.find(l => l.id === 'isc_hpro'), kpro = b.linhas.find(l => l.id === 'isc_kpro');
+  verificar('ISC cesárea: 2 em 50 = 4% → acima do P90 nacional (3,8); maio fica fora', csec.valor === 4 && csec.denominador === 50 && csec.posicao.nivel === 4, JSON.stringify(csec));
+  verificar('ISC quadril 0/1 → até o P25; joelho sem cirurgias → sem valor', hpro.valor === 0 && hpro.posicao.nivel === 0 && kpro.valor === null && kpro.posicao === null);
+  const hig = b.linhas.find(l => l.id === 'higiene');
+  verificar('higiene 75% ≥ 70% → verde', hig.valor === 75 && hig.posicao.nivel === 0 && /70/.test(hig.posicao.rotulo), JSON.stringify(hig.posicao));
+  verificar('toda referência tem fonte com título e link', b.linhas.every(l => l.referencias.every(r => b.fontes[r.fonte] && b.fontes[r.fonte].url && b.fontes[r.fonte].titulo)));
+  verificar('posicaoNoBenchmark: valor acima do P90 → nível 4; sem percentis → null',
+    rel.posicaoNoBenchmark(9, { p25: 0.8, p50: 2.7, p75: 5.2, p90: 8.9 }).nivel === 4 && rel.posicaoNoBenchmark(1, { media: 3 }) === null);
 }
 
 console.log('\n== 77. Busca clínica de pacientes (aba Pacientes) ==');

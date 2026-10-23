@@ -71,6 +71,13 @@ profilaxia 1714, óbitos 836, NISS 3066.
   funciona) → higiene do trimestre por momento e setor → pós-alta das cirurgias do MÊS
   ANTERIOR (contato aos 30 dias) → isolamentos → óbitos/permanência. Slide de sepse retirado.
   A reunião só conta IRAS confirmadas/digitadas.
+- 23/10/2026: slide "Comparação com benchmarks externos" (`compararComBenchmarks`,
+  `BENCHMARKS_EXTERNOS` em relatorios.js): trimestre fechado × Anvisa 2024 (Boletim 32,
+  percentis nacionais de UTI adulto e ISC por categoria, transcritos do boletim de Porto Alegre
+  2024 que reproduz as tabelas), NHSN 2012 (UTI médico-cirúrgica major teaching) e INICC
+  2015–20; higiene 70% como patamar usual (OMS não fixa meta); DDD UTI vs programa de SP.
+  Os números das referências estão em código e devem ser conferidos pela CCIH; a Anvisa
+  publica o Boletim 32 só em Power BI.
 - Pendente: painel por público (direção / UTI / clínica / cirúrgica) com metas e semáforo —
   depende de a CCIH definir metas e os grupos de setores de cada área.
 

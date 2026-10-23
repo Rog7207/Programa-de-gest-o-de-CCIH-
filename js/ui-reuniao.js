@@ -93,6 +93,60 @@ function linhasMensais(serie, series, opcoes) {
   return el('div', {}, svg, legenda);
 }
 
+/* Slide de benchmarks: uma linha por indicador, o valor do hospital ao lado das referências
+   externas; a cor da posição vem dos percentis da Anvisa (verde ≤ P50 … vermelho > P90). */
+function slideBenchmarks(bench) {
+  const fmt = v => (v === null || v === undefined) ? '—' : String(v).replace('.', ',');
+  const pct = v => (v === null || v === undefined) ? '—' : Math.round(v * 100) + '%';
+  const chip = pos => pos ? el('span', { class: 'bench-chip bench-nivel-' + pos.nivel }, pos.rotulo) : el('span', { class: 'texto-suave' }, '—');
+  const refDe = (linha, fonte) => linha.referencias.find(r => r.fonte === fonte);
+  const colRef = (r, campo) => r ? fmt(r[campo]) : '—';
+  const grupo = (titulo, linhas, colunas, celulas, rodape) => linhas.length ? el('div', { class: 'bench-grupo' },
+    el('h3', {}, titulo),
+    el('table', { class: 'tabela reuniao-tabela bench-tabela' },
+      el('thead', {}, el('tr', {}, colunas.map(c => el('th', {}, c)))),
+      el('tbody', {}, linhas.map(l => el('tr', {}, ...celulas(l))))),
+    rodape ? el('p', { class: 'texto-suave' }, rodape) : null) : null;
+  const disp = bench.linhas.filter(l => l.tipo === 'dispositivo');
+  const isc = bench.linhas.filter(l => l.tipo === 'isc' && l.valor !== null);
+  const outros = bench.linhas.filter(l => (l.tipo === 'percentual' || l.tipo === 'consumo'));
+  const semDados = bench.linhas.filter(l => l.tipo === 'isc' && l.valor === null).map(l => l.rotulo.replace(/^ISC — /, '').replace(/ \(por 100.*$/, ''));
+  return el('div', {},
+    grupo(`UTI adulto (${bench.setoresUTI.join(', ') || 'sem censo NISS'}) — densidade por 1.000 dias de dispositivo`, disp,
+      ['Indicador', 'Hospital (casos / dias)', 'Posição (Anvisa)', 'Anvisa 2024 média · P50 · P75 · P90', 'NHSN 2012 média · P50 · P90', 'INICC 2015–20', 'Utilização: hosp. · Anvisa · NHSN'],
+      l => { const a = refDe(l, 'anvisa2024'), n = refDe(l, 'nhsn2012'), i = refDe(l, 'inicc2020'); return [
+        el('td', {}, l.rotulo.replace(/ — UTI adulto$/, ''), l.nota ? el('div', { class: 'texto-suave bench-nota' }, l.nota) : null),
+        el('td', { class: 'reuniao-destaque' }, fmt(l.valor), el('div', { class: 'texto-suave bench-nota' }, l.valor === null ? 'sem denominador' : `${l.numerador} / ${fmtInt(l.denominador)}`)),
+        el('td', {}, chip(l.posicao)),
+        el('td', {}, `${colRef(a, 'media')} · ${colRef(a, 'p50')} · ${colRef(a, 'p75')} · ${colRef(a, 'p90')}`),
+        el('td', {}, `${colRef(n, 'media')} · ${colRef(n, 'p50')} · ${colRef(n, 'p90')}`),
+        el('td', {}, colRef(i, 'media')),
+        el('td', {}, `${pct(l.utilizacao)} · ${pct(a && a.utilizacao)} · ${pct(n && n.utilizacao)}`)]; },
+      `Hospital: casos confirmados/digitados do trimestre e censo NISS (${fmtInt(bench.pacientesDiaUTI)} pacientes-dia). Anvisa: percentis entre as UTIs adulto notificantes do Brasil em 2024. NHSN: UTI médico-cirúrgica de hospital-escola (EUA). Utilização = dias de dispositivo ÷ pacientes-dia.`),
+    grupo('Infecção de sítio cirúrgico — por 100 cirurgias da categoria (cirurgias do trimestre)', isc,
+      ['Cirurgia', 'Hospital (ISC / cirurgias)', 'Posição (Anvisa)', 'Anvisa 2024 média · P50 · P75 · P90'],
+      l => { const a = refDe(l, 'anvisa2024'); return [
+        el('td', {}, l.rotulo.replace(/^ISC — /, '').replace(/ \(por 100.*$/, ''), l.nota ? el('div', { class: 'texto-suave bench-nota' }, l.nota) : null),
+        el('td', { class: 'reuniao-destaque' }, fmt(l.valor) + '%', el('div', { class: 'texto-suave bench-nota' }, `${l.numerador} / ${fmtInt(l.denominador)}`)),
+        el('td', {}, chip(l.posicao)),
+        el('td', {}, `${colRef(a, 'media')} · ${colRef(a, 'p50')} · ${colRef(a, 'p75')} · ${colRef(a, 'p90')}`)]; },
+      'A ISC pode aparecer até 30 dias após a cirurgia (90 com implante): o trimestre mais recente está subestimado até a vigilância pós-alta fechar.'
+      + (semDados.length ? ` Sem cirurgias no trimestre: ${semDados.join(', ')}.` : '')),
+    grupo('Processo e consumo', outros,
+      ['Indicador', 'Hospital', 'Posição', 'Referência'],
+      l => { const r = l.referencias[0]; const f = bench.fontes[r.fonte]; return [
+        el('td', {}, l.rotulo, l.nota ? el('div', { class: 'texto-suave bench-nota' }, l.nota) : null),
+        el('td', { class: 'reuniao-destaque' }, l.valor === null ? '—' : fmt(l.valor) + (l.tipo === 'percentual' ? '%' : ''), l.valor !== null ? el('div', { class: 'texto-suave bench-nota' }, `${fmt(l.numerador)} / ${fmtInt(l.denominador)}`) : null),
+        el('td', {}, chip(l.posicao)),
+        el('td', {}, (r.alvo !== undefined ? `≥ ${r.alvo}% (patamar usual)` : fmt(r.media)) + ' — ' + f.sigla)]; }),
+    el('details', { class: 'bench-fontes' },
+      el('summary', {}, 'Referências dos benchmarks'),
+      el('ol', {}, ...Object.values(bench.fontes).map(f => el('li', {}, el('strong', {}, f.sigla + ': '), f.titulo + ' ',
+        el('a', { href: f.url, target: '_blank', rel: 'noopener' }, 'link'),
+        f.url2 ? [' · ', el('a', { href: f.url2, target: '_blank', rel: 'noopener' }, 'tabelas (POA 2024)')] : null)))),
+    el('p', { class: 'texto-suave' }, 'Posição: verde = até o P50 nacional (melhor que metade das UTIs do Brasil); amarelo = P50–P75; laranja = P75–P90; vermelho = acima do P90. Números das fontes transcritos pela CCIH — conferir antes de apresentar.'));
+}
+
 function slideNumeros(pares) {
   return el('div', { class: 'grade-cartoes' }, ...pares.map(([rotulo, valor]) =>
     el('div', { class: 'cartao cartao-numero' },
@@ -106,8 +160,8 @@ async function montarReuniao(conteudo) {
   await Promise.all(BANCOS_RELATORIOS.map(async n => {
     try { bancos[n] = await lerBanco(n); } catch (e) { bancos[n] = {}; }
   }));
-  let dados;
-  try { dados = indicadoresReuniao(bancos, hojeISO()); }
+  let dados, bench = null;
+  try { dados = indicadoresReuniao(bancos, hojeISO()); bench = compararComBenchmarks(bancos, hojeISO()); }
   catch (e) {
     conteudo.append(el('div', { class: 'cartao aviso-erro' }, 'Erro ao calcular os indicadores: ' + e.message));
     return;
@@ -156,6 +210,12 @@ async function montarReuniao(conteudo) {
             `Utilização = dias de dispositivo ÷ pacientes-dia (${fmtInt(d.mes.pacientesDia)} no mês; ${fmtInt(d.seisMeses.pacientesDia || 0)} em ${d.seisMeses.periodo}). `
             + 'Densidade = IRAS do dispositivo por 1.000 dias de dispositivo (número de casos entre parênteses). Censo diário de invasividade (NISS). PAV→ventilação mecânica, IPCS→cateter central, ITU→sonda vesical.'));
       } }] : []),
+
+    /* 3b. Trimestre × benchmarks externos (Anvisa 2024, NHSN 2012, INICC), com referências. */
+    ...(bench ? [{
+      titulo: `Comparação com benchmarks externos — ${bench.periodo.split(' a ').map(mesCurto).join(' a ')}`,
+      corpo: () => slideBenchmarks(bench)
+    }] : []),
 
     { titulo: `Multirresistentes em IRAS — ${dados.trimestre}`, corpo: () => dados.mdr.length
       ? el('table', { class: 'tabela reuniao-tabela' },

@@ -638,7 +638,12 @@ a busca ativa, "Confirmar triagem" vale só para as cirurgias listadas.
   pacientes-dia, número de casos e barras por sítio; (2) **IRAS por mês** nos últimos 12 meses
   (colunas); (3) **Dispositivos** no CTI — taxa de utilização (dias de dispositivo ÷
   pacientes-dia do NISS) e densidade de IRAS por 1.000 dias, o mês ao lado dos 6 meses
-  anteriores; (4) **multirresistentes** do trimestre; (5) **consumo de antibióticos** desde
+  anteriores; (3b) **comparação com benchmarks externos** — o trimestre fechado do hospital
+  (IPCS, PAV e ITU por 1.000 dias de dispositivo na UTI adulto, utilização, ISC por 100 cirurgias
+  por categoria, higiene das mãos, DDD da UTI) ao lado da Anvisa 2024 (média e percentis
+  nacionais P50/P75/P90, com a posição do hospital em cores), do NHSN 2012 (UTI
+  médico-cirúrgica de hospital-escola, EUA) e do INICC 2015–20, com as referências e links no
+  rodapé do slide; (4) **multirresistentes** do trimestre; (5) **consumo de antibióticos** desde
   janeiro do ano; (6) **avaliações de antibióticos na UTI adulto** feitas na visita (miniapp):
   pacientes avaliados, antibióticos avaliados/modificados/suspensos, retiradas de sonda vesical
   e de cateter central recomendadas; (7) **higiene das mãos** do trimestre, pelos 5 momentos e

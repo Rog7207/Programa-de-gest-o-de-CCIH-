@@ -48,7 +48,7 @@ const ESQUEMAS = {
          antibióticos" do Tasy (tipo analise_atb): DataSuspensao é o fim EFETIVO do uso
          (o DOT usa ela quando existe); DiasSolicitados × DiasLiberados + DataFimCCIH
          registram a intervenção da CCIH sobre o curso. */
-      prescricoes: ['ID_Prescricao', 'Prontuario', 'Atendimento', 'IDOrigem', 'Antibiotico', 'Dose', 'Via', 'Frequencia', 'DataInicio', 'DataFim', 'DataSuspensao', 'SuspensoPor', 'DiasSolicitados', 'DiasLiberados', 'DataFimCCIH', 'Setor', 'Indicacao', 'UltimaEvolucao', 'Restrito', 'ParecerInfecto', 'CriadoPor', 'CriadoEm'],
+      prescricoes: ['ID_Prescricao', 'Prontuario', 'Atendimento', 'IDOrigem', 'Antibiotico', 'Dose', 'Via', 'Frequencia', 'DataInicio', 'DataFim', 'DataSuspensao', 'SuspensoPor', 'DiasSolicitados', 'DiasLiberados', 'DataFimCCIH', 'DiaTerapia', 'Setor', 'Indicacao', 'UltimaEvolucao', 'Restrito', 'ParecerInfecto', 'CriadoPor', 'CriadoEm'],
       avaliacoes: ['ID_Prescricao', 'Prontuario', 'Antibiotico', 'Indicacao', 'Topografia', 'OrigemInfeccao', 'Avaliacao', 'Recomendacao', 'ParecerTexto', 'Avaliador', 'DataDados', 'CriadoEm'],
       /* Decisões empíricas registradas pelos médicos assistentes no miniapp: o que foi
          perguntado (Respostas), o que o protocolo sugeriu e o que foi de fato prescrito.
@@ -555,6 +555,10 @@ const TIPOS_RELATORIO = {
       { id: 'Setor', rotulo: 'Setor', tipo: 'vocab', vocab: 'setores', sinonimos: ['setor', 'unidade', 'clinica', 'localizacao'] },
       { id: 'Indicacao', rotulo: 'Indicação', tipo: 'texto', sinonimos: ['indicacao', 'justificativa', 'motivo'] },
       { id: 'UltimaEvolucao', rotulo: 'Última evolução', tipo: 'texto', sinonimos: ['evolucao', 'ultimaevolucao', 'evolucaomedica', 'historia', 'quadroclinico'] },
+      /* "Nr dia util" do relatório diário de prescrições do Tasy: o contador de dias de
+         terapia do próprio Tasy. Dia 1 = esquema novo — separa o curso mesmo quando um fim
+         previsto antigo (2362) ainda "corre" (23/10/2026). */
+      { id: 'DiaTerapia', rotulo: 'Dia de terapia (Tasy)', tipo: 'texto', sinonimos: ['nrdiautil', 'diautil', 'diadeterapia', 'diaterapia', 'diadotratamento'] },
       /* Alguns relatórios trazem, na MESMA linha, a prescrição e o parecer do
          infectologista. Preenchidos, estes campos geram também um registro na aba de
          avaliações — é a fila de stewardship alimentada pelo próprio relatório. */

@@ -1417,7 +1417,9 @@ function consumoAntibioticosMensal(bancos, meses, opcoes) {
   const tabela = op.tabela || TABELA_DDD_PADRAO;
   const ehUTI = typeof op.setorUTI === 'function' ? op.setorUTI
     : (s => (op.setorUTI instanceof RegExp ? op.setorUTI : /\bcti\b/i).test(String(s || '')) && !/neonat|pedi/i.test(String(s || '')));
-  const prescricoes = ((bancos.antibioticos || {}).prescricoes || []);
+  const prescricoes = typeof prescricoesComFimEfetivo === 'function'
+    ? prescricoesComFimEfetivo((bancos.antibioticos || {}).prescricoes || [])
+    : ((bancos.antibioticos || {}).prescricoes || []);
   const passagens = ((bancos.denominadores || {}).passagem_setor || []);
   const internacoes = ((bancos.pacientes || {}).internacoes || []);
   const hoje = String(op.hojeISO || new Date().toISOString().slice(0, 10)).slice(0, 10);

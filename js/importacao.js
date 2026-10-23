@@ -3862,9 +3862,54 @@ function analisarDose(texto) {
 /* Funde as janelas de prescrição em cursos por paciente+antibiótico.
    Emenda com folga de 1 dia: renovação de segunda para a janela que acabou domingo é o
    mesmo curso. Devolve [{Prontuario, Antibiotico, Setor, inicio, fim, dias, ultima, ids}]. */
+/* Prescrição PREVISTA × prescrição DIÁRIA (achado de 23/10/2026). O relatório 2362 do Tasy
+   traz o fim PREVISTO (5–14 dias) e só registra suspensão quando alguém suspende de fato;
+   esquema que simplesmente deixou de ser prescrito segue "correndo" até o previsto — e emenda
+   com o esquema novo que começa dias depois (cefepima parada há 15 dias contada junto com a
+   cefepima nova). O relatório diário de prescrições (uma linha por dia de uso, com dose) é a
+   verdade do que correu. Regra: a prescrição prevista termina na VÉSPERA do primeiro dia em
+   que o paciente aparece no relatório diário SEM aquele antibiótico; e um dia de terapia 1
+   do Tasy (DiaTerapia) também encerra o previsto anterior. Sem relatório diário naquele dia,
+   nada muda (fim de semana sem importação não quebra o curso). */
+function _ehPrescricaoDiaria(p) {
+  if (String(p.Dose || '').trim() || String(p.DiaTerapia || '').trim()) return true;
+  const dur = diasDesde(String(p.DataInicio || '').slice(0, 10), String(p.DataFim || p.DataInicio || '').slice(0, 10));
+  return dur !== null && dur <= 2 && !String(p.IDOrigem || '').trim();
+}
+function _quemDaPrescricao(p) {
+  return normalizarProntuario(p.Prontuario) || ('atd:' + normalizarProntuario(p.Atendimento));
+}
+function prescricoesComFimEfetivo(prescricoes) {
+  const lista = (prescricoes || []).filter(p => p.Antibiotico && /^\d{4}-/.test(String(p.DataInicio)));
+  const addDias = (iso, n) => new Date(Date.parse(iso + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+  const vistoPaciente = new Set(), vistoDroga = new Set(), diaUm = new Set();
+  for (const p of lista) {
+    if (!_ehPrescricaoDiaria(p)) continue;
+    const quem = _quemDaPrescricao(p), droga = normalizarTexto(p.Antibiotico);
+    /* A linha diária é a prescrição DO DIA (a validade é só o vencimento dela): conta como
+       "visto" apenas no dia da prescrição. */
+    const ini = String(p.DataInicio).slice(0, 10);
+    vistoPaciente.add(quem + '|' + ini); vistoDroga.add(quem + '|' + droga + '|' + ini);
+    if (String(p.DiaTerapia || '').trim() === '1') diaUm.add(quem + '|' + droga + '|' + ini);
+  }
+  return lista.map(p => {
+    if (_ehPrescricaoDiaria(p) || String(p.DataSuspensao || '').trim()) return p;
+    const ini = String(p.DataInicio).slice(0, 10), fim = String(p.DataFim || '').slice(0, 10);
+    if (!/^\d{4}-/.test(fim) || fim <= ini) return p;
+    const quem = _quemDaPrescricao(p), droga = normalizarTexto(p.Antibiotico);
+    for (let d = addDias(ini, 1); d <= fim; d = addDias(d, 1)) {
+      const semADroga = vistoPaciente.has(quem + '|' + d) && !vistoDroga.has(quem + '|' + droga + '|' + d);
+      if (semADroga || diaUm.has(quem + '|' + droga + '|' + d)) {
+        return { ...p, DataFim: addDias(d, -1), FimPrevistoCortado: semADroga ? 'relatório diário sem o antibiótico em ' + d : 'dia 1 de terapia no Tasy em ' + d };
+      }
+    }
+    return p;
+  });
+}
+
 function cursosDeAntibiotico(prescricoes) {
   const porChave = new Map();
-  for (const p of (prescricoes || [])) {
+  for (const p of prescricoesComFimEfetivo(prescricoes)) {
     if (!p.Antibiotico || !/^\d{4}-/.test(String(p.DataInicio))) continue;
     /* Sem prontuário (RN/ambulatório ainda não resolvido), o atendimento identifica o
        paciente — senão todos os sem-prontuário da mesma droga virariam um curso só. */
@@ -3882,7 +3927,9 @@ function cursosDeAntibiotico(prescricoes) {
       /* Fim EFETIVO: a suspensão encerra o uso de verdade; o DataFim é o previsto na
          prescrição (análise do Tasy: suspensa no dia 2 de 7 = 2 dias de terapia, não 7). */
       const fim = String(p.DataSuspensao || p.DataFim || p.DataInicio).slice(0, 10);
-      const emenda = atual && diasDesde(atual.fim, inicio) !== null && diasDesde(atual.fim, inicio) <= 1;
+      /* Dia 1 de terapia no Tasy = esquema novo: não emenda com o anterior (23/10/2026). */
+      const diaUm = String(p.DiaTerapia || '').trim() === '1' && atual && atual.inicio !== inicio;
+      const emenda = !diaUm && atual && diasDesde(atual.fim, inicio) !== null && diasDesde(atual.fim, inicio) <= 1;
       if (emenda) {
         if (fim > atual.fim) atual.fim = fim;
         atual.ultima = p;
@@ -5022,7 +5069,7 @@ if (typeof module !== 'undefined' && module.exports) {
     principioAtivo, aplicarObitos,
     classificarParaVigilancia, categoriaDeVigilancia, CATEGORIAS_VIGILANCIA, CATEGORIAS_VIGILANCIA_PADRAO,
     diasDesde, telefoneWhatsApp, casaBuscaLivre, mensagemVigilancia, linkWhatsApp, JANELA_VIGILANCIA,
-    prescricaoAtiva, analisarDose, cursosDeAntibiotico, alertasDeAntibioticos, DIAS_CURSO_PROLONGADO, TETO_DOSE_DIARIA_MG,
+    prescricaoAtiva, analisarDose, cursosDeAntibiotico, prescricoesComFimEfetivo, alertasDeAntibioticos, DIAS_CURSO_PROLONGADO, TETO_DOSE_DIARIA_MG,
     grupoTopografia, gravidadeTopografia, mesmoCasoIras, casoIndeterminado, marcarIndeterminados, resolverIndeterminado, STATUS_INDETERMINADO, CLASSE_INDETERMINADA, registrarCasoIras, agruparCasosIrasDuplicados, identidadePorNome, conciliarComTasy, aplicarConciliacao, culturasDoEpisodio, SEM_CULTURA_VALIDA, cirurgiasDoEpisodio, tipoIscDaTopografia, vincularCirurgiaIsc, reclassificarCulturaComoAgente, ISC_JANELA_DIAS, ISC_JANELA_IMPLANTE_DIAS, ISC_CANDIDATAS_DIAS, fichaDeNotificacao, htmlDasFichas,
     fundirCasosIras, deduplicarCasosIras, IRAS_JANELA_DUPLICATA_DIAS
   };

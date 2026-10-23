@@ -255,6 +255,15 @@ O extrato do hospital traz *janelas de prescrição* renovadas a cada 1–3 dias
 as janelas contíguas do mesmo paciente + droga num **curso de tratamento** — é o curso que
 aparece na ficha do paciente, na fila e nos indicadores.
 
+**Fim previsto × uso real.** O relatório 2362 (análise de antibióticos) traz o *fim previsto*
+da prescrição (5–14 dias) e só registra suspensão quando alguém suspende de fato; um esquema
+que simplesmente deixou de ser prescrito seguiria "correndo" até o previsto e emendaria com o
+esquema novo iniciado dias depois. Por isso o app usa o **relatório diário de prescrições**
+como verdade: o previsto termina na véspera do primeiro dia em que o paciente aparece no
+diário **sem** aquele antibiótico. Ao importar o relatório diário, mapeie também a coluna
+**"Nr dia util" → "Dia de terapia (Tasy)"**: dia 1 abre curso novo mesmo que um previsto
+antigo ainda esteja aberto. Dia sem importação do diário (fim de semana) não quebra curso.
+
 A aba Antibióticos traz:
 
 - **Alertas**: 🦠 germe do paciente resistente ao antibiótico em uso (culturas de até 30

@@ -74,6 +74,14 @@ profilaxia 1714, óbitos 836, NISS 3066.
 - Pendente: painel por público (direção / UTI / clínica / cirúrgica) com metas e semáforo —
   depende de a CCIH definir metas e os grupos de setores de cada área.
 
+## Antibióticos: cursos e dias de terapia
+- 23/10/2026: o fim PREVISTO do 2362 (sem suspensão) emendava esquema antigo com esquema novo
+  (cefepima parada há 15 dias contada junto com a nova). Regra: o previsto termina na véspera do
+  primeiro dia em que o relatório diário de prescrições mostra o paciente sem aquele
+  antibiótico (`prescricoesComFimEfetivo`); "Nr dia util" = 1 (coluna DiaTerapia, a mapear na
+  importação do diário) abre curso novo. Sem diário no dia, nada muda. Vale para cursos, fila,
+  alertas e DOT/DDD.
+
 ## Pendências conhecidas
 - Idade não existe no cadastro de pacientes (vem no 2536 e nos óbitos; guardar na internação).
 - Dispositivo-dia só do CTI (NISS); enfermarias sem denominador de dispositivo.

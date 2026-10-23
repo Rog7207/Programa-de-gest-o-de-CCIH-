@@ -2594,6 +2594,41 @@ console.log('\n== 43. Antibióticos: cursos, doses e alertas ==');
   verificar('buraco de dias separa cursos',
     cursos.filter(c => c.Antibiotico === 'Vancomicina').length === 2);
 
+  /* Fim PREVISTO (2362) × relatório DIÁRIO (23/10/2026): a cefepima prevista até o dia 14
+     deixou de ser prescrita no dia 6 (o paciente aparece no diário sem ela) e volta no dia
+     20 como esquema novo — são DOIS cursos, não um de 20 dias. */
+  const mistas = [
+    /* 2362: previsto de 14 dias, sem suspensão, sem dose */
+    { ID_Prescricao: 'T1', Prontuario: '300', IDOrigem: '7001', Antibiotico: 'Cefepima', DataInicio: '2026-10-01', DataFim: '2026-10-14', DiasLiberados: '14' },
+    /* diário: cefepima nos dias 1–5 */
+    ...[1, 2, 3, 4, 5].map(d => ({ ID_Prescricao: 'D' + d, Prontuario: '300', Antibiotico: 'Cefepima', Dose: '2 g 8/8h IV', DataInicio: '2026-10-0' + d, DataFim: '2026-10-0' + (d + 1) })),
+    /* diário dia 6: o paciente está lá, só com vancomicina */
+    { ID_Prescricao: 'D6', Prontuario: '300', Antibiotico: 'Vancomicina', Dose: '1 g 12/12h IV', DataInicio: '2026-10-06', DataFim: '2026-10-07' },
+    /* 2362 do esquema novo + diário com dia 1 de terapia */
+    { ID_Prescricao: 'T2', Prontuario: '300', IDOrigem: '7002', Antibiotico: 'Cefepima', DataInicio: '2026-10-20', DataFim: '2026-10-27' },
+    { ID_Prescricao: 'D20', Prontuario: '300', Antibiotico: 'Cefepima', Dose: '2 g 8/8h IV', DiaTerapia: '1', DataInicio: '2026-10-20', DataFim: '2026-10-21' }
+  ];
+  const efetivas = imp.prescricoesComFimEfetivo(mistas);
+  const t1 = efetivas.find(p => p.ID_Prescricao === 'T1');
+  verificar('previsto do 2362 termina na véspera do dia em que o diário mostra o paciente sem a droga',
+    t1.DataFim === '2026-10-05' && /relatório diário/.test(t1.FimPrevistoCortado), JSON.stringify(t1));
+  verificar('linhas diárias e previsto não contestado ficam como estão',
+    efetivas.find(p => p.ID_Prescricao === 'D3').DataFim === '2026-10-04' && efetivas.find(p => p.ID_Prescricao === 'T2').DataFim === '2026-10-27');
+  const cursosMistos = imp.cursosDeAntibiotico(mistas).filter(c => c.Antibiotico === 'Cefepima');
+  verificar('cefepima parada no dia 6 e retomada no dia 20 = dois cursos (6 d, até a validade da última diária, e 8 d), não um de 27',
+    cursosMistos.length === 2 && cursosMistos[0].dias === 6 && cursosMistos[1].inicio === '2026-10-20' && cursosMistos[1].dias === 8,
+    JSON.stringify(cursosMistos.map(c => [c.inicio, c.fim, c.dias])));
+  /* Sem relatório diário no período (fim de semana sem importação) o previsto segue valendo. */
+  const semDiario = imp.cursosDeAntibiotico([mistas[0], { ...mistas[7], DataInicio: '2026-10-12' }]);
+  verificar('sem diário contestando, previsto emenda normalmente (um curso só, 1→27)', semDiario.length === 1 && semDiario[0].dias === 27, JSON.stringify(semDiario.map(c => c.dias)));
+  /* Dia 1 de terapia no Tasy separa o curso mesmo com o previsto antigo "correndo" até lá. */
+  const diaUm = imp.cursosDeAntibiotico([
+    { ID_Prescricao: 'T9', Prontuario: '400', IDOrigem: '7009', Antibiotico: 'Meropenem', DataInicio: '2026-10-01', DataFim: '2026-10-14' },
+    { ID_Prescricao: 'D9', Prontuario: '400', Antibiotico: 'Meropenem', Dose: '1 g 8/8h IV', DiaTerapia: '1', DataInicio: '2026-10-10', DataFim: '2026-10-11' }
+  ]);
+  verificar('dia 1 de terapia no Tasy abre curso novo e corta o previsto anterior na véspera',
+    diaUm.length === 2 && diaUm[0].fim === '2026-10-09' && diaUm[1].inicio === '2026-10-10', JSON.stringify(diaUm.map(c => [c.inicio, c.fim])));
+
   const d = imp.analisarDose('74 mg 8/8h IV');
   verificar('dose em mg com intervalo vira mg/dia', d.mgDia === 222 && d.vezesDia === 3 && d.via === 'IV', d);
   verificar('dose em g converte', imp.analisarDose('2 g 6/6h IV').mgDia === 8000);

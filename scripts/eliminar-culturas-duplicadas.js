@@ -166,8 +166,11 @@ if (!APLICAR) {
 }
 
 fs.mkdirSync(path.join(PASTA, 'backups'), { recursive: true });
-const backup = path.join(PASTA, 'backups', 'culturas.backup-antes-dedup-provisorias.xlsx');
-if (!fs.existsSync(backup)) fs.copyFileSync(arquivo, backup);
+/* Nome com data/hora: um backup por execução. (Com nome fixo, a segunda rodada — em outro
+   banco, com a mesma pasta backups/ copiada — não gravava backup nenhum.) */
+const carimbo = new Date().toISOString().slice(0, 16).replace(/[-:]/g, '').replace('T', '-');
+const backup = path.join(PASTA, 'backups', `culturas.backup-antes-dedup-${carimbo}.xlsx`);
+fs.copyFileSync(arquivo, backup);
 
 const wb = XLSX.utils.book_new();
 for (const [aba, colunas] of Object.entries(ESQUEMAS.culturas.abas)) {
@@ -180,8 +183,8 @@ for (const [aba, colunas] of Object.entries(ESQUEMAS.culturas.abas)) {
 }
 fs.writeFileSync(arquivo, XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
 if (irasReligadas) {
-  const backupIras = path.join(PASTA, 'backups', 'iras.backup-antes-dedup-provisorias.xlsx');
-  if (!fs.existsSync(backupIras)) fs.copyFileSync(arquivoIras, backupIras);
+  const backupIras = path.join(PASTA, 'backups', `iras.backup-antes-dedup-${carimbo}.xlsx`);
+  fs.copyFileSync(arquivoIras, backupIras);
   const wb2 = XLSX.utils.book_new();
   wbIras.SheetNames.forEach(aba => XLSX.utils.book_append_sheet(wb2, XLSX.utils.json_to_sheet(bancoIras[aba]), aba));
   fs.writeFileSync(arquivoIras, XLSX.write(wb2, { type: 'buffer', bookType: 'xlsx' }));

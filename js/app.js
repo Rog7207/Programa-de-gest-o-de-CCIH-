@@ -244,7 +244,17 @@ function atualizarBotaoVoltar() {
 
 function contextoAtual() {
   return { filtroCulturas: app.filtroCulturas || null, surtoParaAbrir: app.surtoParaAbrir || null,
-    pacienteAberto: app.pacienteAberto || null };
+    pacienteAberto: app.pacienteAberto || null, cursoAberto: app.cursoAberto || null };
+}
+
+/* Regrava o contexto da tela ATUAL no histórico (sem navegar): o que a pessoa abriu dentro
+   da tela — ex.: o curso de antibiótico em avaliação — volta aberto quando ela clica
+   "voltar" depois de ir à ficha do paciente (pedido de 23/10/2026). */
+function guardarContexto() {
+  try {
+    const estado = history.state || { aba: app.abaAtual, indice: app.indiceNavegacao || 0 };
+    history.replaceState({ ...estado, contexto: contextoAtual() }, '', '#' + (estado.aba || app.abaAtual));
+  } catch (e) { /* file:// sem histórico */ }
 }
 
 function navegar(abaId, opcoes) {
@@ -269,6 +279,7 @@ window.addEventListener('popstate', evento => {
   app.filtroCulturas = (estado.contexto || {}).filtroCulturas || null;
   app.surtoParaAbrir = (estado.contexto || {}).surtoParaAbrir || null;
   app.pacienteAberto = (estado.contexto || {}).pacienteAberto || null;
+  app.cursoAberto = (estado.contexto || {}).cursoAberto || null;
   app.indiceNavegacao = Number.isFinite(estado.indice) ? estado.indice : 0;
   renderizarAba(estado.aba);
 });

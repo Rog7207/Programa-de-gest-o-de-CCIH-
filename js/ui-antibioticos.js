@@ -230,13 +230,23 @@ async function montarAntibioticosNovo(conteudo) {
               });
               await gravarBanco('antibioticos', atual);
             });
+            app.cursoAberto = null;
             navegar('antibioticos', { historico: 'substituir' });
           } catch (e) { msg.textContent = e.message; }
         } }, 'Salvar avaliação')), msg);
-    detalharNaLinha(tr, cartao);
+    /* O curso aberto fica no contexto do histórico: ao voltar da ficha do paciente, a tela
+       reabre nele (sem isso a pessoa tinha de procurar o paciente de novo). */
+    const aberta = detalharNaLinha(tr, cartao);
+    app.cursoAberto = aberta ? chaveCurso(curso) : null;
+    if (typeof guardarContexto === 'function') guardarContexto();
   }
 
   desenharFila();
+  /* Voltando da ficha do paciente (ou de outra tela): reabre o curso que estava em avaliação. */
+  if (app.cursoAberto) {
+    const curso = ativos.find(c => chaveCurso(c) === app.cursoAberto);
+    if (curso) abrirCursoDoAlerta(curso); else app.cursoAberto = null;
+  }
 
   /* ---- Indicadores de uso ---- */
   const datas = prescricoes.map(p => String(p.DataInicio).slice(0, 10)).filter(d => /^\d{4}/.test(d)).sort();

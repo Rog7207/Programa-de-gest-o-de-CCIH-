@@ -5337,7 +5337,7 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     const curso = { Prontuario: '100', Antibiotico: 'Meropenem', Setor: 'CTI', inicio: '2026-10-01', fim: '2026-10-06', dias: 5, ids: ['PRE-1'], ultima: { ID_Prescricao: 'PRE-1', Dose: '1g', Indicacao: '' } };
     /* Curso mais recente: deve vir ANTES na fila (ordem do mais atual para o mais antigo, 23/10/2026). */
     const cursoNovo = { Prontuario: '100', Antibiotico: 'Vancomicina', Setor: 'CTI', inicio: '2026-10-04', fim: '2026-10-06', dias: 2, ids: ['PRE-2'], ultima: { ID_Prescricao: 'PRE-2', Dose: '1g', Indicacao: '' } };
-    let fichasAbertas = 0;
+    let fichasAbertas = 0, contextosGuardados = 0;
     /* Curso órfão: atendimento fora do censo → sem prontuário (sai da fila). */
     const orfao = { Prontuario: '', Antibiotico: 'Piperacilina tazobactam', Setor: '', inicio: '2026-10-01', fim: '2026-10-06', dias: 8, ids: ['PRE-9'], ultima: { ID_Prescricao: 'PRE-9', Dose: '', Indicacao: '' } };
     const fx = {
@@ -5350,15 +5350,15 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     };
     const chaves = ['el', 'fmtInt', 'app', 'config', 'lerBanco', 'gravarBanco', 'navegar', 'abrirPaciente', 'normalizarProntuario', 'normalizarTexto',
       'hojeISO', 'agoraCurto', 'diasDesde', 'comTrava', 'detalharNaLinha', 'analisarDose', 'cursosDeAntibiotico', 'alertasDeAntibioticos',
-      'DIAS_CURSO_PROLONGADO', 'grafLinhas', 'grafBarras', 'chavePeriodo', 'montarCartaoPublicacaoRemota', 'publicacao', 'sincronizacaoGoogle'];
+      'DIAS_CURSO_PROLONGADO', 'grafLinhas', 'grafBarras', 'chavePeriodo', 'montarCartaoPublicacaoRemota', 'publicacao', 'sincronizacaoGoogle', 'guardarContexto'];
     const antes = {}; chaves.forEach(k => { antes[k] = global[k]; });
     Object.assign(global, {
-      el: elFalso, fmtInt: n => String(n), app: { usuario: 'Dr. Teste' },
+      el: elFalso, fmtInt: n => String(n), app: { usuario: 'Dr. Teste' }, guardarContexto() { contextosGuardados++; },
       config: { ehAtbAvaliado: () => true, classeDoAntimicrobiano: () => '', vocabulario: {} },
       lerBanco: async n => JSON.parse(JSON.stringify(fx[n] || {})), gravarBanco: async () => {},
       navegar() {}, abrirPaciente() { fichasAbertas++; }, normalizarProntuario: imp.normalizarProntuario, normalizarTexto: leitura.normalizarTexto,
       hojeISO: () => '2026-10-06', agoraCurto: () => '2026-10-06 10:00', diasDesde: () => 5, comTrava: async (_l, fn) => fn(),
-      detalharNaLinha: (tr, cartao) => tr.after(cartao), analisarDose: () => null,
+      detalharNaLinha: (tr, cartao) => { tr.after(cartao); return cartao; }, analisarDose: () => null,
       cursosDeAntibiotico: () => [curso, cursoNovo, orfao],
       alertasDeAntibioticos: () => [{ tipo: 'duracao', detalhe: 'curso longo', curso: { ...curso } }], DIAS_CURSO_PROLONGADO: 10,
       grafLinhas: () => elFalso('div'), grafBarras: () => elFalso('div'), chavePeriodo: () => '', montarCartaoPublicacaoRemota: () => {},
@@ -5376,7 +5376,7 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
         + 'navegar=global.navegar,comTrava=global.comTrava,lerBanco=global.lerBanco,gravarBanco=global.gravarBanco,'
         + 'normalizarProntuario=global.normalizarProntuario,normalizarTexto=global.normalizarTexto,config=global.config,'
         + 'app=global.app,DIAS_CURSO_PROLONGADO=global.DIAS_CURSO_PROLONGADO,cursosDeAntibiotico=global.cursosDeAntibiotico,'
-        + 'alertasDeAntibioticos=global.alertasDeAntibioticos;\n';
+        + 'alertasDeAntibioticos=global.alertasDeAntibioticos,guardarContexto=global.guardarContexto;\n';
       eval(prefixo + fs.readFileSync(path.join(__dirname, '..', 'js', 'ui-antibioticos.js'), 'utf-8') + '\nglobal.__montarATB = montarAntibioticosNovo;');
       const raiz = mkNode('div');
       await global.__montarATB(raiz);
@@ -5411,6 +5411,15 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       verificar('avaliação de ATB: clicar no alerta abre o formulário de avaliação do curso (não a ficha do paciente)',
         cartoesDepois.length === cartoesAntes + 1 && /Meropenem — Fulano/.test(texto(cartoesDepois[cartoesDepois.length - 1])) && fichasAbertas === 0,
         `cartões ${cartoesAntes}→${cartoesDepois.length}, fichas abertas ${fichasAbertas}`);
+      /* Voltar da ficha do paciente reabre o curso (23/10/2026): o curso aberto vai ao
+         contexto do histórico e, ao montar a aba de novo com ele no contexto, o cartão abre sozinho. */
+      verificar('avaliação de ATB: abrir um curso guarda o contexto no histórico',
+        contextosGuardados > 0 && global.app.cursoAberto === '100|meropenem|2026-10-01', `guardados ${contextosGuardados}, cursoAberto ${global.app.cursoAberto}`);
+      const raiz2 = mkNode('div');
+      await global.__montarATB(raiz2);
+      const reaberto = achar(raiz2, n => n.tag === 'div' && String(n.attrs.class || '').includes('cartao-detalhe'))[0];
+      verificar('avaliação de ATB: ao voltar, a aba reabre o curso que estava em avaliação',
+        !!reaberto && /Meropenem — Fulano/.test(texto(reaberto)), reaberto && texto(reaberto).slice(0, 80));
     } catch (e) {
       verificar('aba de avaliação de ATB monta e expande o antibiograma sem exceção', false, e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e.message);
     } finally {

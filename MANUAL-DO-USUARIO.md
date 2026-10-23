@@ -269,6 +269,8 @@ A aba Antibióticos traz:
   vale pelo curso; se ele continuar correndo, volta à fila em 7 dias.
   **Sem sair da ficha**: clique numa cultura para abrir o **antibiograma completo** (todos
   os S/I/R, R em destaque) e consulte a **última evolução médica** no bloco recolhível.
+  Se precisar abrir a **ficha do paciente** no meio da avaliação, o botão "voltar" (do app ou
+  do navegador) traz a fila de volta **com o mesmo curso aberto**.
   *Antibióticos que vieram por atendimento sem casar com o censo (sem prontuário) não
   aparecem na fila — o cartão avisa quantos ficaram de fora; importe o censo/foto para
   vinculá-los ao paciente (ver "Ordem de importação", seção 3).*

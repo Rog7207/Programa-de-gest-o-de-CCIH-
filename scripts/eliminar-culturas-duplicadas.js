@@ -1,12 +1,16 @@
 /* Elimina a cultura que entrou DUAS VEZES por portas diferentes: uma pela planilha do
-   laboratório (com ID do exame e nº de atendimento) e outra pelo PDF diário (sem ID,
-   com registro provisório nascimento+iniciais, porque o PDF não traz o número).
+   laboratório (com ID do exame) e outra pelo PDF diário (sem ID).
 
-   A chave de deduplicação nunca enxergou o par porque os prontuários diferem — um é o
-   atendimento real, o outro é o provisório. O casamento aqui é pelo NOME do paciente no
-   cadastro + data + material + germe + resultado, e só remove a linha provisória quando
-   existe a irmã do laboratório no mesmo grupo. Avaliação da CCIH, antibiograma e mecanismo
-   que só a provisória tenha são herdados pela sobrevivente antes da remoção.
+   A chave de deduplicação da importação nunca enxergou o par: a linha do laboratório é
+   identificada pelo ID do exame, a do PDF pela chave composta — chaves de naturezas
+   diferentes não colidem (corrigido na importação em 23/10/2026; este script limpa o que já
+   entrou). Às vezes os prontuários ainda diferem (o PDF criava registro provisório
+   nascimento+iniciais). O casamento aqui é pelo NOME do paciente no cadastro + data +
+   material + germe + resultado, e só remove a linha SEM ID do laboratório quando existe a
+   irmã do laboratório no mesmo grupo. Avaliação da CCIH, antibiograma, mecanismo e vínculo
+   com IRAS que só a linha removida tenha são herdados pela sobrevivente antes da remoção;
+   as IRAS que apontavam para a removida (ID_CulturaAgente) passam a apontar para a
+   sobrevivente.
 
    Uso:  node scripts/eliminar-culturas-duplicadas.js            (simulação)
          node scripts/eliminar-culturas-duplicadas.js --aplicar  (grava, com backup)  */
@@ -38,6 +42,10 @@ const wbEntrada = XLSX.read(fs.readFileSync(arquivo), { type: 'buffer' });
 const banco = {};
 wbEntrada.SheetNames.forEach(n => { banco[n] = XLSX.utils.sheet_to_json(wbEntrada.Sheets[n], { defval: '' }); });
 const pacientes = lerAba(ESQUEMAS.pacientes.arquivo, 'pacientes');
+const arquivoIras = path.join(PASTA, ESQUEMAS.iras.arquivo);
+const wbIras = XLSX.read(fs.readFileSync(arquivoIras), { type: 'buffer' });
+const bancoIras = {};
+wbIras.SheetNames.forEach(n => { bancoIras[n] = XLSX.utils.sheet_to_json(wbIras.Sheets[n], { defval: '' }); });
 console.log(`culturas: ${banco.culturas.length} | sensibilidade: ${banco.sensibilidade.length}\n`);
 
 const n = normalizarTexto;
@@ -69,14 +77,16 @@ for (const c of banco.culturas) {
 }
 
 const remover = new Set();
+const sobrevivente = new Map();   /* ID removido → ID que fica (para religar as IRAS) */
 const porMes = new Map();
-let gruposMistos = 0, provisoriasMantidas = 0;
+let gruposMistos = 0, provisoriasMantidas = 0, paineisTrocados = 0;
 const exemplos = [];
 
 for (const [, grupo] of grupos) {
   if (grupo.length < 2) continue;
   const doLab = grupo.filter(temIdLab);
-  const provisorias = grupo.filter(c => !temIdLab(c) && imp.ehPseudoProntuario(c.Prontuario));
+  /* Sem ID do laboratório = veio do PDF (prontuário real ou provisório, tanto faz). */
+  const provisorias = grupo.filter(c => !temIdLab(c));
   if (!doLab.length || !provisorias.length) continue;
   gruposMistos++;
   /* Cada provisória casa com uma linha do laboratório; sobrando provisórias além das
@@ -93,17 +103,25 @@ for (const [, grupo] of grupos) {
       sobrevive.StatusRevisao = morre.StatusRevisao;
       sobrevive.AvaliacaoCCIH = morre.AvaliacaoCCIH;
     }
-    if (!String(sobrevive.Antibiograma || '').trim() && String(morre.Antibiograma || '').trim()) {
+    /* Painel S/I/R: fica o mais completo. A planilha do laboratório costuma trazer só a
+       lista de resistentes (3 linhas); o PDF traz o antibiograma inteiro (9+). */
+    const sensFica = sensPorCultura.get(sobrevive.ID_Cultura) || [];
+    const sensMorre = sensPorCultura.get(morre.ID_Cultura) || [];
+    if (sensMorre.length > sensFica.length) {
+      banco.sensibilidade = banco.sensibilidade.filter(x => x.ID_Cultura !== sobrevive.ID_Cultura);
+      sensPorCultura.set(sobrevive.ID_Cultura, sensMorre.map(x => ({ ...x, ID_Cultura: sobrevive.ID_Cultura })));
+      banco.sensibilidade.push(...sensPorCultura.get(sobrevive.ID_Cultura));
+      if (String(morre.Antibiograma || '').trim()) sobrevive.Antibiograma = morre.Antibiograma;
+      paineisTrocados++;
+    } else if (!String(sobrevive.Antibiograma || '').trim() && String(morre.Antibiograma || '').trim()) {
       sobrevive.Antibiograma = morre.Antibiograma;
     }
     if (!String(sobrevive.MecanismoResistencia || '').trim() && String(morre.MecanismoResistencia || '').trim()) {
       sobrevive.MecanismoResistencia = morre.MecanismoResistencia;
     }
-    if (!(sensPorCultura.get(sobrevive.ID_Cultura) || []).length) {
-      for (const s of (sensPorCultura.get(morre.ID_Cultura) || [])) {
-        banco.sensibilidade.push({ ...s, ID_Cultura: sobrevive.ID_Cultura });
-      }
-    }
+    if (!String(sobrevive.ID_IRAS || '').trim() && String(morre.ID_IRAS || '').trim()) sobrevive.ID_IRAS = morre.ID_IRAS;
+    if (!String(sobrevive.DataResultado || '').trim() && String(morre.DataResultado || '').trim()) sobrevive.DataResultado = morre.DataResultado;
+    sobrevivente.set(morre.ID_Cultura, sobrevive.ID_Cultura);
   }
   provisoriasMantidas += provisorias.length - pares;
   if (exemplos.length < 6) {
@@ -114,16 +132,30 @@ for (const [, grupo] of grupos) {
   }
 }
 
-console.log(`grupos mistos (lab + provisória da mesma pessoa): ${gruposMistos}`);
-console.log(`linhas provisórias a remover: ${remover.size}`);
-if (provisoriasMantidas) console.log(`provisórias mantidas por excederem as do lab (podem ser exames distintos): ${provisoriasMantidas}`);
+console.log(`grupos mistos (lab + PDF da mesma pessoa): ${gruposMistos}`);
+console.log(`linhas do PDF a remover: ${remover.size}`);
+if (provisoriasMantidas) console.log(`linhas do PDF mantidas por excederem as do lab (podem ser exames distintos): ${provisoriasMantidas}`);
+let irasReligadas = 0;
+for (const k of (bancoIras.casos || [])) {
+  const novo = sobrevivente.get(String(k.ID_CulturaAgente || '').trim());
+  if (novo) { k.ID_CulturaAgente = novo; irasReligadas++; }
+}
+console.log(`IRAS religadas à cultura sobrevivente: ${irasReligadas}`);
+console.log(`antibiogramas completados com o painel do PDF: ${paineisTrocados}`);
 console.log('\npor mês de coleta:');
 [...porMes.entries()].sort().forEach(([m, v]) => console.log('  ', m, v));
 console.log('\nexemplos:');
 exemplos.forEach(e => console.log('  --', e, '\n'));
 
 const antesC = banco.culturas.length, antesS = banco.sensibilidade.length;
+/* Positivas por mês antes × depois, para conferir o efeito onde a duplicação apareceu. */
+const positiva = c => String(c.Microrganismo || '').trim() && !/negativ|sem crescimento|ausencia/i.test(String(c.Microrganismo));
+const posPorMes = lista => { const m = new Map(); lista.filter(positiva).forEach(c => { const k = String(c.DataColeta || '').slice(0, 7); m.set(k, (m.get(k) || 0) + 1); }); return m; };
+const posAntes = posPorMes(banco.culturas);
 banco.culturas = banco.culturas.filter(c => !remover.has(c.ID_Cultura));
+const posDepois = posPorMes(banco.culturas);
+console.log('\nculturas positivas por mês (antes -> depois), só meses alterados:');
+[...posAntes.keys()].sort().forEach(m => { if (posAntes.get(m) !== posDepois.get(m)) console.log('  ', m, posAntes.get(m), '->', posDepois.get(m) || 0); });
 banco.sensibilidade = banco.sensibilidade.filter(s => !remover.has(s.ID_Cultura));
 console.log(`culturas: ${antesC} -> ${banco.culturas.length}`);
 console.log(`sensibilidade: ${antesS} -> ${banco.sensibilidade.length}`);
@@ -147,4 +179,11 @@ for (const [aba, colunas] of Object.entries(ESQUEMAS.culturas.abas)) {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(linhas, { header: colunas }), aba);
 }
 fs.writeFileSync(arquivo, XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+if (irasReligadas) {
+  const backupIras = path.join(PASTA, 'backups', 'iras.backup-antes-dedup-provisorias.xlsx');
+  if (!fs.existsSync(backupIras)) fs.copyFileSync(arquivoIras, backupIras);
+  const wb2 = XLSX.utils.book_new();
+  wbIras.SheetNames.forEach(aba => XLSX.utils.book_append_sheet(wb2, XLSX.utils.json_to_sheet(bancoIras[aba]), aba));
+  fs.writeFileSync(arquivoIras, XLSX.write(wb2, { type: 'buffer', bookType: 'xlsx' }));
+}
 console.log(`\ngravado. Backup em ${backup}`);

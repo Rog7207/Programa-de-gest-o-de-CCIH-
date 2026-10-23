@@ -75,6 +75,19 @@ console.log('\n== 1. Culturas xlsx (cabeçalho fora da linha 1, antibiograma lar
 
   const denovo = imp.deduplicar(dedup.novos, dedup.novos, 'culturas');
   verificar('reimportação: tudo duplicado', denovo.novos.length === 0 && denovo.duplicados.length === 4, denovo.novos.length + '/' + denovo.duplicados.length);
+
+  /* Mesmo exame por duas portas (achado de 23/10/2026): a planilha do laboratório traz o
+     ID do exame; o PDF diário não. A linha do PDF tem de casar com a do lab pela chave
+     composta — e dois frascos do lab (IDs diferentes) continuam sendo dois exames. */
+  const doLab = { IDOrigem: '95000011', Prontuario: '100', DataColeta: '2026-06-01', Material: 'Hemocultura', Microrganismo: 'Escherichia coli' };
+  const segundoFrasco = { ...doLab, IDOrigem: '95000012' };
+  const doPDF = { IDOrigem: '', Prontuario: '100', DataColeta: '2026-06-01', Material: 'Hemocultura', Microrganismo: 'Escherichia coli' };
+  const cruzado = imp.deduplicar([doPDF], [doLab], 'culturas');
+  verificar('cultura do PDF (sem ID) é duplicata da mesma cultura do laboratório (com ID)', cruzado.duplicados.length === 1 && cruzado.novos.length === 0, JSON.stringify(cruzado));
+  const frascos = imp.deduplicar([segundoFrasco], [doLab], 'culturas');
+  verificar('segundo frasco do laboratório (outro ID) continua sendo exame novo', frascos.novos.length === 1, JSON.stringify(frascos));
+  const noMesmoLote = imp.deduplicar([doLab, doPDF, segundoFrasco], [], 'culturas');
+  verificar('no mesmo lote: lab + PDF + 2º frasco → 2 novos e 1 duplicado interno', noMesmoLote.novos.length === 2 && noMesmoLote.duplicadosInternos.length === 1, JSON.stringify(noMesmoLote));
 }
 
 console.log('\n== 2. Culturas csv (Windows-1252, separador ;) ==');

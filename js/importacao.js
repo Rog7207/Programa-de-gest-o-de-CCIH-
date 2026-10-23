@@ -2685,15 +2685,25 @@ function valorDeChave(registro, campo, tipo) {
 /* opcoes.identidadeDe: identidade do paciente (nome) para a dedup de IRAS não escapar quando
    o mesmo paciente chega com outro número de prontuário. */
 function deduplicar(registros, existentes, tipo, opcoes) {
-  const chavesExistentes = new Set(existentes.map(r => chaveNaturalDe(r, tipo)));
+  /* Duas chaves por registro: a do ID de origem (quando há) E a composta. A linha do
+     laboratório (com ID do exame) só se identificava pelo ID; a do PDF diário (sem ID)
+     só pela chave composta — e chaves de naturezas diferentes nunca colidiam, então o
+     mesmo exame entrou duas vezes em jun–ago/2026 (achado de 23/10/2026). Agora o registro
+     sem ID casa com o existente pela composta; os COM ID continuam distinguidos pelo ID
+     (dois frascos de hemocultura no mesmo dia são dois exames). */
+  const chaveComposta = r => TIPOS_RELATORIO[tipo].chaveNatural.map(campo => normalizarTexto(valorDeChave(r, campo, tipo))).join('|');
+  const chavesExistentes = new Set();
+  for (const r of existentes) { chavesExistentes.add(chaveNaturalDe(r, tipo)); if (TIPOS_RELATORIO[tipo].chaveOrigem) chavesExistentes.add(chaveComposta(r)); }
   const vistas = new Set();
   let novos = [];
   const duplicados = [], duplicadosInternos = [];
   for (const registro of registros) {
     const chave = chaveNaturalDe(registro, tipo);
-    if (chavesExistentes.has(chave)) duplicados.push(registro);
-    else if (vistas.has(chave)) duplicadosInternos.push(registro);
-    else { vistas.add(chave); novos.push(registro); }
+    const composta = TIPOS_RELATORIO[tipo].chaveOrigem ? chaveComposta(registro) : chave;
+    const semOrigem = chave === composta;
+    if (chavesExistentes.has(chave) || (semOrigem && chavesExistentes.has(composta))) duplicados.push(registro);
+    else if (vistas.has(chave) || (semOrigem && vistas.has(composta))) duplicadosInternos.push(registro);
+    else { vistas.add(chave); vistas.add(composta); novos.push(registro); }
   }
   /* Casos de IRAS: além da chave exata, o MESMO episódio chega de fora com outra grafia
      de topografia ou outra data — planilha externa e relatório do Tasy redescobrem o que

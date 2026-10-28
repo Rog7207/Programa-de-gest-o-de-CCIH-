@@ -6214,6 +6214,19 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       && /anterior: Colonização/.test(culs[0].TriagemRegra) && imp.reclassificarCulturaComoAgente(culs[0], caso) === false, culs[0]);
   }
 
+  /* == 108b. Aba pedida no endereço (#aba / #paciente=…) — abrir em nova aba (28/10/2026) == */
+  {
+    console.log('\n== 108b. Aba no endereço: #culturas, #paciente=123, lixo ==');
+    const fonte = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'utf-8');
+    const trechoAbas = fonte.slice(fonte.indexOf('const ABAS = ['), fonte.indexOf('];', fonte.indexOf('const ABAS = [')) + 2);
+    const trechoFn = fonte.slice(fonte.indexOf('function abaDoEndereco'), fonte.indexOf('\n}\n', fonte.indexOf('function abaDoEndereco')) + 3);
+    const abaDoEndereco = new Function(trechoAbas + '\n' + trechoFn + '\nreturn abaDoEndereco;')();
+    verificar('#culturas abre a aba de culturas', abaDoEndereco('#culturas') && abaDoEndereco('#culturas').aba === 'culturas');
+    verificar('#paciente=123456 abre a ficha com o prontuário', JSON.stringify(abaDoEndereco('#paciente=123456')) === JSON.stringify({ aba: 'paciente', paciente: '123456' }));
+    verificar('#paciente sem número, aba inexistente e lixo não abrem nada',
+      abaDoEndereco('#paciente') === null && abaDoEndereco('#naoexiste') === null && abaDoEndereco('#<script>') === null && abaDoEndereco('') === null);
+  }
+
   /* == 109. Consumo de antibióticos: DDD por prescrição e série mensal DOT/DDD (21/10/2026) == */
   {
     console.log('\n== 109. Consumo de antibióticos (DOT e DDD por 1.000 pacientes-dia) ==');

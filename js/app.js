@@ -199,7 +199,21 @@ async function aposConectar() {
   for (const nome of Object.keys(ESQUEMAS)) avisos.push(...await validarEsquema(nome));
   await config.carregar();
   montarCasca(avisos);
+  /* Aba pedida no endereço (#culturas, #paciente=123): é assim que "abrir em nova aba" no
+     menu e um link de ficha chegam aqui (28/10/2026). */
+  const pedida = abaDoEndereco(location.hash);
+  if (pedida) { app.abaAtual = pedida.aba; if (pedida.paciente) app.pacienteAberto = pedida.paciente; }
   navegar(app.abaAtual, { historico: 'substituir' });
+}
+
+/* Lê "#aba" ou "#paciente=prontuario" do endereço; só abas existentes e ativas. */
+function abaDoEndereco(hash) {
+  const m = /^#([a-z_-]+)(?:=(.+))?$/i.exec(String(hash || '').trim());
+  if (!m) return null;
+  /* A ficha do paciente não está no menu (abre pelo nome em qualquer tela), mas tem endereço. */
+  if (m[1] === 'paciente') return m[2] ? { aba: 'paciente', paciente: decodeURIComponent(m[2]) } : null;
+  const aba = ABAS.find(a => a.id === m[1] && a.ativa);
+  return aba ? { aba: aba.id } : null;
 }
 
 function montarCasca(avisosEsquema) {
@@ -208,11 +222,14 @@ function montarCasca(avisosEsquema) {
     el('div', { class: 'menu-titulo' }, 'CCIH',
       el('span', { class: 'menu-subtitulo', title: app.resumoPasta || '' }, pasta.handle.name),
       app.resumoPasta ? el('span', { class: 'menu-subtitulo' }, app.resumoPasta) : null),
-    ABAS.map(aba => el('button', {
+    /* Link de verdade (href="#aba"): o botão direito do navegador oferece "abrir em nova
+       aba/janela"; o clique normal continua navegando dentro do app. */
+    ABAS.map(aba => el('a', {
       class: 'menu-item' + (aba.ativa ? '' : ' menu-item-inativo'),
       'data-aba': aba.id,
-      title: aba.ativa ? '' : 'Disponível nas próximas fases',
-      onclick: () => { if (aba.ativa) navegar(aba.id); }
+      href: aba.ativa ? '#' + aba.id : null,
+      title: aba.ativa ? 'Botão direito: abrir em nova aba' : 'Disponível nas próximas fases',
+      onclick: e => { e.preventDefault(); if (aba.ativa) navegar(aba.id); }
     }, aba.rotulo)),
     el('button', { class: 'menu-item menu-rodape', title: 'Trocar usuário', onclick: () => location.reload() },
       app.usuario + ' · trocar'));
@@ -265,9 +282,11 @@ function navegar(abaId, opcoes) {
   const atual = (history.state && Number.isFinite(history.state.indice)) ? history.state.indice : 0;
   const indice = modo === 'substituir' ? 0 : atual + 1;
   const estado = { aba: abaId, indice, contexto: contextoAtual() };
+  /* A ficha leva o prontuário no endereço para poder ser aberta/copiada como link. */
+  const endereco = '#' + abaId + (abaId === 'paciente' && app.pacienteAberto ? '=' + encodeURIComponent(app.pacienteAberto) : '');
   try {
-    if (modo === 'substituir') history.replaceState(estado, '', '#' + abaId);
-    else if (modo === 'empilhar') history.pushState(estado, '', '#' + abaId);
+    if (modo === 'substituir') history.replaceState(estado, '', endereco);
+    else if (modo === 'empilhar') history.pushState(estado, '', endereco);
     app.indiceNavegacao = indice;
   } catch (e) { /* file:// sem histórico — a navegação segue sem o botão voltar */ }
   renderizarAba(abaId);

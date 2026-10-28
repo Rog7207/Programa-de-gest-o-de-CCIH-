@@ -221,3 +221,6 @@ tr.linha-mdr td:first-child { border-left: 4px solid #b03a2e; }
 .edicao-campos label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: #3a4a5c; }
 .edicao-campos input, .edicao-campos select, .edicao-campos textarea { font: inherit; padding: 5px 7px; border: 1px solid #c9d2dc; border-radius: 5px; }
 .edicao-historico { white-space: pre-wrap; font-size: 12px; color: #61707f; background: #f6f8fa; padding: 8px; border-radius: 6px; margin-top: 8px; }
+
+/* Botão com cara de link (tela de conexão: "não sou X — trocar nome", 28/10/2026). */
+.botao-link { background: none; border: none; color: #0d3f7a; text-decoration: underline; cursor: pointer; font: inherit; font-size: 13px; padding: 2px 4px; }

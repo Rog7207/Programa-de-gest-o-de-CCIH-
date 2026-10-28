@@ -114,14 +114,32 @@ async function iniciar() {
     return;
   }
   const restaurada = await pasta.restaurar();
-  if (restaurada && !restaurada.precisaPermissao) { mostrarIdentificacao(() => aposConectar()); return; }
+  if (restaurada && !restaurada.precisaPermissao) {
+    /* Aba nova aberta pelo menu (#aba no endereço) pelo mesmo usuário: não pergunta o nome
+       de novo — usa o da aba de origem (28/10/2026). Sem #aba, pergunta: pode ser outra
+       pessoa sentando no mesmo computador. */
+    if (abaNovaDoMesmoUsuario()) { mostrarCarregando('Abrindo os bancos…'); await aposConectar(); return; }
+    mostrarIdentificacao(() => aposConectar()); return;
+  }
   mostrarTelaConexao(restaurada ? restaurada.precisaPermissao : null, await pasta.recentes());
+}
+
+/* Aba aberta pelo menu ("abrir em nova guia") com nome já conhecido neste navegador. */
+function abaNovaDoMesmoUsuario() {
+  return !!(abaDoEndereco(location.hash) && String(app.usuario || '').trim());
 }
 
 function mostrarTelaConexao(handlePendente, recentes) {
   const raiz = document.getElementById('app');
   const campoNome = el('input', { type: 'text', id: 'campo-usuario', placeholder: 'Seu nome (fica registrado nas importações)', value: app.usuario });
   const erro = el('p', { class: 'aviso-erro-texto' });
+  /* Mesmo usuário, aba nova: o Chrome ainda exige UM clique para liberar a pasta, mas o nome
+     fica implícito no botão ("Continuar como …"); "não sou eu" mostra o campo. */
+  const compacta = abaNovaDoMesmoUsuario() && !!handlePendente;
+  if (compacta) campoNome.style.display = 'none';
+  const trocarNome = compacta ? el('button', { class: 'botao-link', style: 'margin-top:6px',
+    onclick: () => { campoNome.style.display = ''; campoNome.value = ''; campoNome.focus(); principal.textContent = 'Reconectar a "' + handlePendente.name + '"'; } },
+    'não sou ' + app.usuario + ' — trocar nome') : null;
 
   const identificar = () => {
     app.usuario = campoNome.value.trim();
@@ -175,19 +193,21 @@ function mostrarTelaConexao(handlePendente, recentes) {
     onclick: () => conectar(async () => {
       if (handlePendente && await pasta.reautorizar(handlePendente)) return;
       await pasta.escolher();
-    }) }, handlePendente ? 'Reconectar a "' + handlePendente.name + '"' : 'Escolher pasta de dados');
+    }) }, compacta ? `Continuar como ${app.usuario} — reconectar a "${handlePendente.name}"`
+      : handlePendente ? 'Reconectar a "' + handlePendente.name + '"' : 'Escolher pasta de dados');
 
   raiz.replaceChildren(el('div', { class: 'tela-central' },
     el('div', { class: 'cartao cartao-conexao' },
       el('h1', {}, 'Aplicativo CCIH'),
       el('p', {}, 'Vigilância de infecções relacionadas à assistência à saúde'),
       campoNome,
-      botoesRecentes.length
+      botoesRecentes.length && !compacta
         ? el('div', {}, el('p', { class: 'texto-suave' }, 'Abrir a pasta de sempre:'), botoesRecentes)
         : null,
-      el('p', { class: 'texto-suave' },
-        'Escolha a pasta de dados da CCIH (na rede do hospital). Na primeira vez, os arquivos do banco são criados automaticamente.'),
-      principal, erro)));
+      el('p', { class: 'texto-suave' }, compacta
+        ? 'Aba nova do mesmo usuário: o navegador pede um clique para liberar a pasta de dados.'
+        : 'Escolha a pasta de dados da CCIH (na rede do hospital). Na primeira vez, os arquivos do banco são criados automaticamente.'),
+      principal, trocarNome, erro)));
 }
 
 async function aposConectar() {

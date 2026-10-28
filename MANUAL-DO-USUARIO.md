@@ -631,8 +631,10 @@ a busca ativa, "Confirmar triagem" vale só para as cirurgias listadas.
 ## 11. As outras abas, em uma linha cada
 
 **Várias abas do navegador ao mesmo tempo**: clique com o **botão direito** num item do menu
-(Culturas, Antibióticos, Reunião CCIH…) e escolha "Abrir link em nova guia"; a aba nova pede
-só "Reconectar à pasta" (um clique) e o nome. A ficha do paciente também tem endereço próprio
+(Culturas, Antibióticos, Reunião CCIH…) e escolha "Abrir link em nova guia"; a aba nova
+entra com o **mesmo nome** da aba de origem — no máximo um clique em "Continuar como … —
+reconectar" (exigência do navegador para liberar a pasta); se for outra pessoa, use "não sou
+… — trocar nome". A ficha do paciente também tem endereço próprio
 (`#paciente=prontuário`), que pode ser copiado da barra do navegador. As abas não se
 atropelam: cada gravação trava o arquivo, relê e só então grava.
 

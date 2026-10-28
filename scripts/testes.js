@@ -2626,6 +2626,23 @@ console.log('\n== 43. Antibióticos: cursos, doses e alertas ==');
     { ID_Prescricao: 'T9', Prontuario: '400', IDOrigem: '7009', Antibiotico: 'Meropenem', DataInicio: '2026-10-01', DataFim: '2026-10-14' },
     { ID_Prescricao: 'D9', Prontuario: '400', Antibiotico: 'Meropenem', Dose: '1 g 8/8h IV', DiaTerapia: '1', DataInicio: '2026-10-10', DataFim: '2026-10-11' }
   ]);
+  /* Edição de registro com rastro (28/10/2026) */
+  const lista = [{ ID_Cultura: 'CUL-1', AvaliacaoCCIH: 'IRAS — ITU', Sitio: 'Sangue', ID_IRAS: 'IRAS-9' }, { ID_Cultura: 'CUL-2', AvaliacaoCCIH: '' }];
+  const ed = imp.editarRegistro(lista, { ID_Cultura: 'CUL-1' }, { AvaliacaoCCIH: 'Colonização', Sitio: 'Sangue', ID_IRAS: '' }, { quem: 'Rogerio', quando: '2026-10-28 10:00', nota: 'engano' });
+  verificar('editarRegistro grava só o que mudou e deixa o rastro de → para no próprio registro',
+    ed.alteracoes.length === 2 && lista[0].AvaliacaoCCIH === 'Colonização' && lista[0].ID_IRAS === '' && lista[0].EditadoPor === 'Rogerio'
+    && /AvaliacaoCCIH "IRAS — ITU" → "Colonização"/.test(lista[0].HistoricoEdicao) && /\(engano\)/.test(lista[0].HistoricoEdicao) && lista[1].EditadoPor === undefined,
+    JSON.stringify(lista[0]));
+  const ed2 = imp.editarRegistro(lista, { ID_Cultura: 'CUL-1' }, { Sitio: 'Urina' }, { quem: 'Maria', quando: '2026-10-29 09:00' });
+  verificar('segunda edição acrescenta linha ao histórico sem apagar a primeira',
+    ed2.alteracoes.length === 1 && lista[0].HistoricoEdicao.split('\n').length === 2 && lista[0].EditadoPor === 'Maria');
+  verificar('sem mudança não marca edição; registro inexistente devolve null',
+    imp.editarRegistro(lista, { ID_Cultura: 'CUL-2' }, { AvaliacaoCCIH: '' }).alteracoes.length === 0 && lista[1].EditadoEm === undefined
+    && imp.editarRegistro(lista, { ID_Cultura: 'CUL-99' }, { Sitio: 'x' }).registro === null);
+  verificar('chave composta (prontuário + antibiótico + CriadoEm) acha a avaliação sem ID',
+    imp.editarRegistro([{ Prontuario: '100', Antibiotico: 'Meropenem', CriadoEm: '2026-10-01 10:00', Avaliacao: 'Correto' }],
+      { Prontuario: '100', Antibiotico: 'Meropenem', CriadoEm: '2026-10-01 10:00' }, { Avaliacao: 'Incorreto' }, { quem: 'X' }).alteracoes[0].para === 'Incorreto');
+
   verificar('dia 1 de terapia no Tasy abre curso novo e corta o previsto anterior na véspera',
     diaUm.length === 2 && diaUm[0].fim === '2026-10-09' && diaUm[1].inicio === '2026-10-10', JSON.stringify(diaUm.map(c => [c.inicio, c.fim])));
 

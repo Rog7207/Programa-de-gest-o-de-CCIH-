@@ -89,6 +89,14 @@ profilaxia 1714, óbitos 836, NISS 3066.
   importação do diário) abre curso novo. Sem diário no dia, nada muda. Vale para cursos, fila,
   alertas e DOT/DDD.
 
+## Edição de registros (28/10/2026)
+- Correção de registro errado acontece na Ficha do paciente ("✎ editar" em cada evento), via
+  `editarRegistro` (importacao.js, puro) e `EDICAO_TIPOS` (ui-edicao.js). Campos editáveis
+  listados por tipo; IDs e rastros de importação não. Nada é apagado — situação "descartado".
+  Rastro no próprio registro: EditadoPor/EditadoEm/HistoricoEdicao (colunas novas, migram
+  sozinhas). Efeitos cruzados: cultura deixa de ser IRAS → descartar caso vinculado (marcado
+  por padrão); caso descartado → reclassificar culturas vinculadas (desmarcado por padrão).
+
 ## Pendências conhecidas
 - Idade não existe no cadastro de pacientes (vem no 2536 e nos óbitos; guardar na internação).
 - Dispositivo-dia só do CTI (NISS); enfermarias sem denominador de dispositivo.

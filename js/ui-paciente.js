@@ -142,14 +142,15 @@ async function montarPaciente(conteudo) {
 
   /* ---- linha do tempo ---- */
   const eventos = [];
-  const juntar = (data, tipo, titulo, detalhe) => {
+  /* `edicao` = { tipo, registro }: o evento ganha o botão "✎ editar" (ui-edicao.js). */
+  const juntar = (data, tipo, titulo, detalhe, edicao) => {
     if (!/^\d{4}-\d{2}-\d{2}/.test(String(data || ''))) return;
-    eventos.push({ data: String(data).slice(0, 10), tipo, titulo, detalhe: detalhe || '' });
+    eventos.push({ data: String(data).slice(0, 10), tipo, titulo, detalhe: detalhe || '', edicao: edicao || null });
   };
   internacoes.forEach(i => {
     juntar(i.DataInternacao, 'internacao', 'Internação',
       [i.SetorAtual, i.Leito ? 'leito ' + i.Leito : '', i.Clinica, i.Atendimento ? 'atendimento ' + i.Atendimento : '']
-        .filter(Boolean).join(' · '));
+        .filter(Boolean).join(' · '), { tipo: 'internacao', registro: i });
     if (i.DataAlta) {
       const morreu = i.Obito === 'S' || /obito/.test(normalizarTexto(i.Desfecho));
       juntar(i.DataAlta, morreu ? 'obito' : 'alta', morreu ? 'Óbito' : 'Alta hospitalar',
@@ -184,7 +185,7 @@ async function montarPaciente(conteudo) {
       [c.Material, c.Setor, c.MecanismoResistencia, c.AvaliacaoCCIH,
         /* Várias amostras da MESMA infecção mostram o mesmo caso — não são várias IRAS. */
         c.ID_IRAS ? `caso ${c.ID_IRAS}` : '',
-        resistentes.length ? 'R: ' + resistentes.join(', ') : ''].filter(Boolean).join(' · '));
+        resistentes.length ? 'R: ' + resistentes.join(', ') : ''].filter(Boolean).join(' · '), { tipo: 'cultura', registro: c });
   });
   /* Um evento por CURSO, não por renovação: o extrato traz janelas de prescrição
      renovadas a cada 1-3 dias, e mostrar cada uma faria parecer que o antibiótico foi
@@ -206,7 +207,7 @@ async function montarPaciente(conteudo) {
     [c.Cirurgiao, c.PotencialContaminacao, c.ASA ? 'ASA ' + c.ASA : '',
       c.DuracaoMin ? c.DuracaoMin + ' min' : '',
       c.ProfilaxiaAntibiotico ? 'profilaxia: ' + c.ProfilaxiaAntibiotico : '',
-      c.ISC === 'S' ? 'ISC: ' + (c.TipoISC || 'sim') : ''].filter(Boolean).join(' · ')));
+      c.ISC === 'S' ? 'ISC: ' + (c.TipoISC || 'sim') : ''].filter(Boolean).join(' · '), { tipo: 'cirurgia', registro: c }));
   dispositivos.forEach(d => {
     juntar(d.DataInstalacao, 'dispositivo', 'Instalado: ' + (d.Dispositivo || d.Categoria || ''), d.Categoria || '');
     if (d.DataRetirada) juntar(d.DataRetirada, 'dispositivo', 'Retirado: ' + (d.Dispositivo || d.Categoria || ''),
@@ -221,20 +222,23 @@ async function montarPaciente(conteudo) {
     if (v.SuspeitaIRAS === 'S') marcas.push('suspeita de IRAS: ' + (v.FocoSuspeito || 'foco não definido'));
     juntar(v.Data, 'uti', 'Visita da CCIH à UTI', [v.Setor, v.Leito ? 'leito ' + v.Leito : '', marcas.join(' · '), v.Observacoes].filter(Boolean).join(' · '));
   });
-  avaliacoesAtb.forEach(a => juntar(a.Data, 'antibiotico', 'Avaliação de ' + a.Antibiotico,
-    [a.Indicacao, a.Avaliacao, a.Recomendacao].filter(Boolean).join(' · ')));
+  avaliacoesAtb.forEach(a => juntar(a.Data, 'antibiotico', 'Avaliação de ' + a.Antibiotico + ' (visita à UTI)',
+    [a.Indicacao, a.Avaliacao, a.Recomendacao].filter(Boolean).join(' · '), { tipo: 'avaliacao_uti', registro: a }));
+  /* Avaliações de stewardship feitas na aba Antibióticos — não apareciam na ficha. */
+  daPessoa(bancos.antibioticos.avaliacoes).forEach(a => juntar(a.DataDados || a.CriadoEm, 'antibiotico', 'Avaliação de ' + a.Antibiotico + ' (stewardship)',
+    [a.Indicacao, a.Avaliacao, a.Recomendacao, a.ParecerTexto, a.Avaliador].filter(Boolean).join(' · '), { tipo: 'avaliacao_atb', registro: a }));
   casosSepse.forEach(s => juntar(s.DataProtocolo, 'sepse', 'Protocolo de sepse aberto',
     [s.Setor, s.SepseConfirmada === 'S' ? 'confirmada' : s.SepseConfirmada === 'N' ? 'descartada' : '',
       s.FocoInfeccioso, s.ClassificacaoNEWS ? 'NEWS ' + s.ClassificacaoNEWS : '',
       s.BundleCompleto === 'S' ? 'bundle completo' : s.BundleCompleto === 'N' ? 'bundle incompleto' : '',
       s.MinutosAntibiotico !== '' && s.MinutosAntibiotico != null ? 'ATB em ' + s.MinutosAntibiotico + ' min' : ''
-    ].filter(Boolean).join(' · ')));
+    ].filter(Boolean).join(' · '), { tipo: 'sepse', registro: s }));
   casosIras.forEach(i => juntar(i.DataInfeccao, 'iras', 'IRAS: ' + (i.Topografia || ''),
     [i.Setor, i.Microrganismo, i.DispositivoAssociado, i.CriterioDiagnostico,
      i.StatusInvestigacao && i.StatusInvestigacao !== 'confirmado' ? i.StatusInvestigacao : '']
-      .filter(Boolean).join(' · ')));
+      .filter(Boolean).join(' · '), { tipo: 'iras', registro: i }));
   precaucoes.forEach(p => {
-    juntar(p.DataInicio, 'isolamento', 'Precaução de ' + (p.TipoPrecaucao || 'contato'), p.Motivo || '');
+    juntar(p.DataInicio, 'isolamento', 'Precaução de ' + (p.TipoPrecaucao || 'contato'), p.Motivo || '', { tipo: 'isolamento', registro: p });
     if (p.DataFim) juntar(p.DataFim, 'isolamento', 'Precaução encerrada', p.TipoPrecaucao || '');
   });
 
@@ -251,7 +255,10 @@ async function montarPaciente(conteudo) {
           el('span', { class: 'evento-data' }, e.data),
           el('span', { class: 'evento-marca', style: 'background:' + (CORES_EVENTO[e.tipo] || '#61707f') }),
           el('div', {}, el('strong', {}, e.titulo),
-            e.detalhe ? el('div', { class: 'texto-suave' }, e.detalhe) : null))))
+            e.detalhe ? el('div', { class: 'texto-suave' }, e.detalhe) : null,
+            e.edicao && e.edicao.registro && e.edicao.registro.EditadoEm ? el('div', { class: 'texto-suave', style: 'font-size:11px' }, `corrigido em ${e.edicao.registro.EditadoEm} por ${e.edicao.registro.EditadoPor || '—'}`) : null),
+          e.edicao && typeof botaoEditarRegistro === 'function'
+            ? botaoEditarRegistro(e.edicao.tipo, e.edicao.registro, () => navegar('paciente', { historico: 'substituir' })) : null)))
       : el('p', { class: 'texto-suave' }, 'Nenhum evento deste tipo.'));
   }
 

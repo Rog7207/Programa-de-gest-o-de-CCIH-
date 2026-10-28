@@ -662,7 +662,15 @@ a busca ativa, "Confirmar triagem" vale só para as cirurgias listadas.
   edite no Excel para ajustar). Pacientes-dia da UTI: censo NISS; do hospital: censo individual.
 - **Ficha do paciente** — tudo sobre uma pessoa numa linha do tempo (internações, culturas,
   antibióticos por curso, cirurgias, dispositivos, sepse, isolamentos, óbito); abre
-  clicando no nome em qualquer tela.
+  clicando no nome em qualquer tela. **Corrigir um registro errado**: cada evento da linha
+  do tempo tem o botão **"✎ editar"** (cultura — classificação, sítio, material, germe,
+  mecanismo; caso de IRAS — topografia, data, setor, dispositivo, situação; avaliação de
+  antibiótico; cirurgia — categoria, ISC, situação da vigilância; isolamento; internação;
+  protocolo de sepse). Nada é apagado: o que estava errado vira "descartado" pelo campo de
+  situação, e toda correção fica registrada no próprio registro (quem, quando e cada campo
+  "de → para", com o motivo que você escrever). Quando uma cultura deixa de ser IRAS, o app
+  oferece descartar o caso vinculado; quando um caso de IRAS é descartado, oferece
+  reclassificar as culturas vinculadas.
 - **Sepse** — indicadores do protocolo (tempos, bundle, desfechos) e perfil
   microbiológico IRAS × admissão.
 - **Surtos** — investigação das suspeitas do painel, com cruzamento automático do que os

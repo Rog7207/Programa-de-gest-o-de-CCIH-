@@ -3862,6 +3862,34 @@ function analisarDose(texto) {
 /* Funde as janelas de prescrição em cursos por paciente+antibiótico.
    Emenda com folga de 1 dia: renovação de segunda para a janela que acabou domingo é o
    mesmo curso. Devolve [{Prontuario, Antibiotico, Setor, inicio, fim, dias, ultima, ids}]. */
+/* ---- Edição de registro com rastro (pedido de 28/10/2026) ----
+   Corrige um registro já gravado (cultura classificada errada, sítio trocado, avaliação de
+   antibiótico, caso de IRAS…) deixando o histórico NO PRÓPRIO registro: quem, quando e cada
+   campo "de → para". `chave` = { campo: valor, ... } identifica a linha (ID próprio ou, nas
+   abas sem ID, a combinação prontuário + antibiótico + CriadoEm). Só grava o que mudou. */
+function editarRegistro(lista, chave, mudancas, opcoes) {
+  const op = opcoes || {};
+  const casa = r => Object.entries(chave).every(([k, v]) => String(r[k] == null ? '' : r[k]).trim() === String(v == null ? '' : v).trim());
+  const registro = (lista || []).find(casa);
+  if (!registro) return { registro: null, alteracoes: [] };
+  const alteracoes = [];
+  for (const [campo, novo] of Object.entries(mudancas || {})) {
+    const de = String(registro[campo] == null ? '' : registro[campo]);
+    const para = String(novo == null ? '' : novo);
+    if (de === para) continue;
+    alteracoes.push({ campo, de, para });
+    registro[campo] = para;
+  }
+  if (!alteracoes.length) return { registro, alteracoes };
+  const quando = op.quando || new Date().toISOString().slice(0, 16).replace('T', ' ');
+  registro.EditadoPor = op.quem || '';
+  registro.EditadoEm = quando;
+  const linha = `${quando} ${op.quem || ''}: ` + alteracoes.map(a => `${a.campo} "${a.de}" → "${a.para}"`).join('; ')
+    + (op.nota ? ` (${op.nota})` : '');
+  registro.HistoricoEdicao = (String(registro.HistoricoEdicao || '').trim() ? registro.HistoricoEdicao + '\n' : '') + linha;
+  return { registro, alteracoes };
+}
+
 /* Prescrição PREVISTA × prescrição DIÁRIA (achado de 23/10/2026). O relatório 2362 do Tasy
    traz o fim PREVISTO (5–14 dias) e só registra suspensão quando alguém suspende de fato;
    esquema que simplesmente deixou de ser prescrito segue "correndo" até o previsto — e emenda
@@ -5051,6 +5079,7 @@ function normalizarDispositivo(valor) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    editarRegistro,
     textoEvolucaoNormalizado,
     normalizarData, normalizarProntuario, normalizarValorAntibiograma,
     sugerirMapeamento, normalizarLinhas, validar, deduplicar, chaveNaturalDe, proximoID,

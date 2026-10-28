@@ -5,7 +5,7 @@ const ESQUEMAS = {
     arquivo: 'pacientes.xlsx',
     abas: {
       pacientes: ['Prontuario', 'Nome', 'DataNascimento', 'Sexo', 'Telefone', 'Descartado', 'DescartadoPor', 'DescartadoEm', 'CriadoPor', 'CriadoEm'],
-      internacoes: ['ID_Internacao', 'Prontuario', 'Atendimento', 'DataInternacao', 'DataAlta', 'SetorAtual', 'Leito', 'Clinica', 'Desfecho', 'Obito', 'CriadoPor', 'CriadoEm'],
+      internacoes: ['ID_Internacao', 'Prontuario', 'Atendimento', 'DataInternacao', 'DataAlta', 'SetorAtual', 'Leito', 'Clinica', 'Desfecho', 'Obito', 'CriadoPor', 'CriadoEm', 'EditadoPor', 'EditadoEm', 'HistoricoEdicao'],
       obitos: ['ID_Obito', 'Prontuario', 'Atendimento', 'Nome', 'DataEntrada', 'DataObito', 'Idade', 'Sexo', 'Medico', 'Setor', 'CriadoPor', 'CriadoEm']
     }
   },
@@ -14,7 +14,7 @@ const ESQUEMAS = {
     abas: {
       culturas: ['ID_Cultura', 'IDOrigem', 'Prontuario', 'DataColeta', 'DataResultado', 'Setor', 'Material', 'Sitio', 'Resultado', 'Microrganismo', 'MecanismoResistencia', 'Antibiograma', 'StatusRevisao', 'AvaliacaoCCIH', 'CriadoPor', 'CriadoEm', 'ID_IRAS',
         /* Regra automática que classificou (ou mandou avaliar por exceção) — 16/10/2026. */
-        'TriagemRegra'],
+        'TriagemRegra', 'EditadoPor', 'EditadoEm', 'HistoricoEdicao'],
       sensibilidade: ['ID_Cultura', 'Antibiotico', 'Resultado']
     }
   },
@@ -38,7 +38,7 @@ const ESQUEMAS = {
         'SituacaoAntibiotico', 'AntibioticoAte1h', 'HemoculturaAntesATB', 'SoroFisiologico1h', 'Lactato1h', 'DebitoUrinario1h',
         'O2ConformeProtocolo', 'ConformeProtocolo', 'BundleCompleto', 'Reavaliado1h', 'Reavaliado3h',
         'EvoluidoConfirmado', 'Medico', 'MotivoNaoConformidade', 'Observacoes',
-        'ExcluidoIndicadores', 'MotivoExclusao', 'CriadoPor', 'CriadoEm']
+        'ExcluidoIndicadores', 'MotivoExclusao', 'CriadoPor', 'CriadoEm', 'EditadoPor', 'EditadoEm', 'HistoricoEdicao']
     }
   },
   antibioticos: {
@@ -49,7 +49,7 @@ const ESQUEMAS = {
          (o DOT usa ela quando existe); DiasSolicitados × DiasLiberados + DataFimCCIH
          registram a intervenção da CCIH sobre o curso. */
       prescricoes: ['ID_Prescricao', 'Prontuario', 'Atendimento', 'IDOrigem', 'Antibiotico', 'Dose', 'Via', 'Frequencia', 'DataInicio', 'DataFim', 'DataSuspensao', 'SuspensoPor', 'DiasSolicitados', 'DiasLiberados', 'DataFimCCIH', 'DiaTerapia', 'Setor', 'Indicacao', 'UltimaEvolucao', 'Restrito', 'ParecerInfecto', 'CriadoPor', 'CriadoEm'],
-      avaliacoes: ['ID_Prescricao', 'Prontuario', 'Antibiotico', 'Indicacao', 'Topografia', 'OrigemInfeccao', 'Avaliacao', 'Recomendacao', 'ParecerTexto', 'Avaliador', 'DataDados', 'CriadoEm'],
+      avaliacoes: ['ID_Prescricao', 'Prontuario', 'Antibiotico', 'Indicacao', 'Topografia', 'OrigemInfeccao', 'Avaliacao', 'Recomendacao', 'ParecerTexto', 'Avaliador', 'DataDados', 'CriadoEm', 'EditadoPor', 'EditadoEm', 'HistoricoEdicao'],
       /* Decisões empíricas registradas pelos médicos assistentes no miniapp: o que foi
          perguntado (Respostas), o que o protocolo sugeriu e o que foi de fato prescrito.
          É a matéria-prima do cruzamento futuro entre conduta e desfecho microbiológico. */
@@ -61,14 +61,14 @@ const ESQUEMAS = {
   cirurgias: {
     arquivo: 'cirurgias.xlsx',
     abas: {
-      cirurgias: ['ID_Cirurgia', 'Prontuario', 'Telefone', 'DataCirurgia', 'Procedimento', 'ProcedimentoNHSN', 'Cirurgiao', 'PotencialContaminacao', 'ASA', 'DuracaoMin', 'IndiceNNIS', 'Atendimento', 'Carater', 'ProfilaxiaAntibiotico', 'ProfilaxiaInicio', 'IntervaloProfilaxia', 'Obito', 'StatusVigilancia', 'VigilanciaPor', 'MensagemEnviadaEm', 'UltimoContato', 'ObservacoesVigilancia', 'ISC', 'TipoISC', 'ID_IRAS', 'InvestigadoPor', 'ValidadoPor', 'ValidadoEm', 'CriadoPor', 'CriadoEm']
+      cirurgias: ['ID_Cirurgia', 'Prontuario', 'Telefone', 'DataCirurgia', 'Procedimento', 'ProcedimentoNHSN', 'Cirurgiao', 'PotencialContaminacao', 'ASA', 'DuracaoMin', 'IndiceNNIS', 'Atendimento', 'Carater', 'ProfilaxiaAntibiotico', 'ProfilaxiaInicio', 'IntervaloProfilaxia', 'Obito', 'StatusVigilancia', 'VigilanciaPor', 'MensagemEnviadaEm', 'UltimoContato', 'ObservacoesVigilancia', 'ISC', 'TipoISC', 'ID_IRAS', 'InvestigadoPor', 'ValidadoPor', 'ValidadoEm', 'CriadoPor', 'CriadoEm', 'EditadoPor', 'EditadoEm', 'HistoricoEdicao']
     }
   },
   uti: {
     arquivo: 'uti.xlsx',
     abas: {
       visitas: ['ID_Visita', 'Data', 'Setor', 'Leito', 'Prontuario', 'CVC', 'CVC_Qtd', 'CVC_Indicacoes', 'CVC_Retirar', 'VM', 'VM_Indicacao', 'VM_Retirar', 'SVD', 'SVD_Indicacao', 'SVD_Retirar', 'NPT', 'SuspeitaIRAS', 'FocoSuspeito', 'Observacoes', 'CriadoPor', 'CriadoEm'],
-      avaliacoes_atb: ['Data', 'Setor', 'Leito', 'Prontuario', 'Antibiotico', 'Indicacao', 'Avaliacao', 'Recomendacao', 'CriadoPor', 'CriadoEm']
+      avaliacoes_atb: ['Data', 'Setor', 'Leito', 'Prontuario', 'Antibiotico', 'Indicacao', 'Avaliacao', 'Recomendacao', 'CriadoPor', 'CriadoEm', 'EditadoPor', 'EditadoEm', 'HistoricoEdicao']
     }
   },
   /* Foto OPERACIONAL das evoluções do Tasy: substituída a cada importação do arquivo
@@ -127,7 +127,7 @@ const ESQUEMAS = {
         'ID_CirurgiaAssociada',
         /* ISC: a data da infecção passa a ser a DATA DA CIRURGIA (padrão da CCIH há anos);
            a data em que a infecção foi detectada fica aqui. */
-        'DataDeteccao'],
+        'DataDeteccao', 'EditadoPor', 'EditadoEm', 'HistoricoEdicao'],
       /* Fichas de notificação impressas: o arquivo fica em fichas/ dentro da pasta de dados
          (registro do que foi usado na digitação); Casos = IDs separados por ';'. */
       fichas: ['ID_Ficha', 'Arquivo', 'Casos', 'CriadoPor', 'CriadoEm']
@@ -162,7 +162,7 @@ const ESQUEMAS = {
     arquivo: 'isolamentos.xlsx',
     abas: {
       /* Observacoes: diário datado e assinado da CCIH sobre o isolamento (16/09/2026). */
-      precaucoes: ['ID_Precaucao', 'Prontuario', 'Setor', 'Leito', 'TipoPrecaucao', 'Motivo', 'DataInternacao', 'DataInicio', 'DataFim', 'Status', 'VistoEm', 'Observacoes', 'CriadoPor', 'CriadoEm'],
+      precaucoes: ['ID_Precaucao', 'Prontuario', 'Setor', 'Leito', 'TipoPrecaucao', 'Motivo', 'DataInternacao', 'DataInicio', 'DataFim', 'Status', 'VistoEm', 'Observacoes', 'CriadoPor', 'CriadoEm', 'EditadoPor', 'EditadoEm', 'HistoricoEdicao'],
       decisoes: ['ID_Cultura', 'Prontuario', 'Decisao', 'Justificativa', 'CriadoPor', 'CriadoEm']
     }
   },
@@ -183,7 +183,7 @@ const ESQUEMAS = {
          reversível — nada é apagado. */
       casos: ['ID_Caso', 'Prontuario', 'Agravo', 'CID', 'Prazo', 'EpisodioInicio', 'Fonte', 'DataSinal',
         'Status', 'Observacoes', 'NumeroSinan', 'NotificarPor', 'NotificarEm', 'DigitadoPor', 'DigitadoEm',
-        'DescartadoPor', 'DescartadoEm', 'ExcluidoPor', 'ExcluidoEm', 'CriadoPor', 'CriadoEm', 'AtualizadoPor', 'AtualizadoEm']
+        'DescartadoPor', 'DescartadoEm', 'ExcluidoPor', 'ExcluidoEm', 'CriadoPor', 'CriadoEm', 'AtualizadoPor', 'AtualizadoEm', 'EditadoPor', 'EditadoEm', 'HistoricoEdicao']
     }
   },
   config: {

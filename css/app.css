@@ -213,3 +213,10 @@ tr.linha-mdr td:first-child { border-left: 4px solid #b03a2e; }
 .bench-nivel-4 { background: #b00020; }
 .bench-fontes { margin: 10px 0; font-size: 13px; }
 .bench-fontes li { margin-bottom: 4px; }
+
+/* Edição de registros na ficha do paciente (28/10/2026). */
+.evento-editar { margin-left: auto; font-size: 12px; padding: 1px 8px; white-space: nowrap; }
+.edicao-campos { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px 16px; margin: 10px 0; }
+.edicao-campos label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: #3a4a5c; }
+.edicao-campos input, .edicao-campos select, .edicao-campos textarea { font: inherit; padding: 5px 7px; border: 1px solid #c9d2dc; border-radius: 5px; }
+.edicao-historico { white-space: pre-wrap; font-size: 12px; color: #61707f; background: #f6f8fa; padding: 8px; border-radius: 6px; margin-top: 8px; }

@@ -97,6 +97,15 @@ profilaxia 1714, óbitos 836, NISS 3066.
   sozinhas). Efeitos cruzados: cultura deixa de ser IRAS → descartar caso vinculado (marcado
   por padrão); caso descartado → reclassificar culturas vinculadas (desmarcado por padrão).
 
+## Vigilância de colonização (03/11/2026)
+- Aba "Colonização" (js/colonizacao.js puro + ui-colonizacao.js). Sítio do swab em
+  `SitioSwab` (importação lê o material cru; `preencher-sitio-swab.js` reprocessa os PDFs).
+  Grupos: nasal adulto / retal-orofaringe fora da UTI / UTI adulto / outros. Positivo =
+  carbapenem-R, MRSA, VRE (ESBL fora). UTI: rotina 4º dia e a cada 7 (em revisão) → acusa
+  > 9 dias sem swab; aquisição = negativo → positivo em ≤ 45 d; cluster = 2+ aquisições do
+  mesmo mecanismo na semana. SGB: alerta próprio (profilaxia intraparto), não isolamento.
+  Descolonização do MRSA nasal registrada na própria cultura (DescolonizacaoEm/Obs).
+
 ## Pendências conhecidas
 - Idade não existe no cadastro de pacientes (vem no 2536 e nos óbitos; guardar na internação).
 - Dispositivo-dia só do CTI (NISS); enfermarias sem denominador de dispositivo.

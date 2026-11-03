@@ -4124,6 +4124,12 @@ function montarLinhaImportada(registro, tipo, id, usuario, agora, tempoCorte) {
     }
   } else if (tipo === 'culturas') {
     linha.Antibiograma = registro.Antibiograma || '';
+    /* Sítio do swab de vigilância (retal/orofaringe/nasal…) vem do material CRU do laudo —
+       o vocabulário reduz tudo a "Swab de vigilância" (03/11/2026). */
+    if (typeof sitioDoSwab === 'function') {
+      const bruto = (registro._originais && registro._originais.Material) || registro.Material;
+      linha.SitioSwab = sitioDoSwab(bruto) || sitioDoSwab(registro.Material) || '';
+    }
     const classificacao = classificacaoCanonica(registro.AvaliacaoCCIH);
     /* Relatório que já vem classificado pela CCIH entra revisado — não faz sentido
        pedir de novo uma revisão que o serviço já fez. */

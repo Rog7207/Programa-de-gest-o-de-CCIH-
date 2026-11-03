@@ -14,7 +14,7 @@ const ESQUEMAS = {
     abas: {
       culturas: ['ID_Cultura', 'IDOrigem', 'Prontuario', 'DataColeta', 'DataResultado', 'Setor', 'Material', 'Sitio', 'Resultado', 'Microrganismo', 'MecanismoResistencia', 'Antibiograma', 'StatusRevisao', 'AvaliacaoCCIH', 'CriadoPor', 'CriadoEm', 'ID_IRAS',
         /* Regra automática que classificou (ou mandou avaliar por exceção) — 16/10/2026. */
-        'TriagemRegra', 'EditadoPor', 'EditadoEm', 'HistoricoEdicao'],
+        'TriagemRegra', 'SitioSwab', 'VigilanciaVistoPor', 'VigilanciaVistoEm', 'DescolonizacaoEm', 'DescolonizacaoObs', 'EditadoPor', 'EditadoEm', 'HistoricoEdicao'],
       sensibilidade: ['ID_Cultura', 'Antibiotico', 'Resultado']
     }
   },

@@ -17,6 +17,7 @@ global.normalizarProntuario = imp.normalizarProntuario;
 global.germeDaCultura = imp.germeDaCultura;
 global.prescricaoAtiva = imp.prescricaoAtiva;
 global.grupoTopografia = imp.grupoTopografia;
+global.sitioDoSwab = require(path.join(__dirname, '..', 'js', 'colonizacao.js')).sitioDoSwab;
 
 const pastaAmostras = path.join(__dirname, '..', 'amostras');
 let passaram = 0, falharam = 0;
@@ -6228,6 +6229,77 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     verificar('#paciente=123456 abre a ficha com o prontuário', JSON.stringify(abaDoEndereco('#paciente=123456')) === JSON.stringify({ aba: 'paciente', paciente: '123456' }));
     verificar('#paciente sem número, aba inexistente e lixo não abrem nada',
       abaDoEndereco('#paciente') === null && abaDoEndereco('#naoexiste') === null && abaDoEndereco('#<script>') === null && abaDoEndereco('') === null);
+  }
+
+  /* == 108c. Vigilância de colonização (swabs) — 03/11/2026 == */
+  {
+    console.log('\n== 108c. Colonização: sítio do swab, grupos, aquisições na UTI, sem swab > 9 d, SGB ==');
+    global.inferirMecanismo = require(path.join(__dirname, '..', 'js', 'alertas.js')).inferirMecanismo;
+    global.internadosAgora = imp.internadosAgora;
+    const col = require(path.join(__dirname, '..', 'js', 'colonizacao.js'));
+    verificar('sítio pelo material cru do laudo (retal/orofaringe/nasal/perianal/vaginal; genérico = vazio)',
+      col.sitioDoSwab('Swab retal') === 'retal' && col.sitioDoSwab('SWR - CULTURA DE VIGILANCIA - SWAB RETAL') === 'retal'
+      && col.sitioDoSwab('WBO') === 'orofaringe' && col.sitioDoSwab('Swab de Orofaringe') === 'orofaringe' && col.sitioDoSwab('SWAB ORAL') === 'orofaringe'
+      && col.sitioDoSwab('Swab Nasal') === 'nasal' && col.sitioDoSwab('CAMPP - CAMP TESTE - CULTURA SWAB PERIANAL') === 'perianal'
+      && col.sitioDoSwab('Swab vaginal') === 'vaginal' && col.sitioDoSwab('Swab Axilar') === 'axilar' && col.sitioDoSwab('Swab') === '' && col.sitioDoSwab('SW') === '');
+    verificar('grupo: nasal adulto / retal fora da UTI / retal na UTI / pediátrico e SGB e sem sítio em outros',
+      col.grupoDoSwab({ SitioSwab: 'nasal', Setor: 'Unidade 05' }) === 'nasal_adulto'
+      && col.grupoDoSwab({ SitioSwab: 'retal', Setor: 'Emergência' }) === 'admissao_adulto'
+      && col.grupoDoSwab({ SitioSwab: 'orofaringe', Setor: 'CTI - Dr. Joaquim' }) === 'uti_adulto'
+      && col.grupoDoSwab({ SitioSwab: 'retal', Setor: 'UTI Neonatal / Pediátrica' }) === 'outros'
+      && col.grupoDoSwab({ SitioSwab: 'perianal', Setor: 'Centro Obstétrico' }) === 'outros'
+      && col.grupoDoSwab({ SitioSwab: '', Setor: 'CTI' }) === 'outros');
+    const r1 = col.resultadoDoSwab({ Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: 'ESBL' }, []);
+    const r2 = col.resultadoDoSwab({ Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: '' }, [{ Antibiotico: 'Meropenem', Resultado: 'R' }]);
+    const r3 = col.resultadoDoSwab({ Microrganismo: 'Streptococcus agalactiae (grupo B)', MecanismoResistencia: '' }, []);
+    verificar('positivo = carbapenem-R / MRSA / VRE (ESBL não); SGB marcado à parte', !r1.positivo && r2.positivo && /carbapen/i.test(r2.mecanismo) && !r3.positivo && r3.sgb);
+
+    const hoje = '2026-11-03';
+    const cti = 'CTI - Dr. Joaquim';
+    const bancosCol = {
+      culturas: { culturas: [
+        /* paciente 1 na UTI: negativo em 06/10, positivo CRE em 13/10 = aquisição; sem precaução */
+        { ID_Cultura: 'S1', Prontuario: '1', DataColeta: '2026-10-06', Setor: cti, Material: 'Swab de vigilância', SitioSwab: 'retal', Microrganismo: '', StatusRevisao: 'triagem' },
+        { ID_Cultura: 'S2', Prontuario: '1', DataColeta: '2026-10-13', Setor: cti, Material: 'Swab de vigilância', SitioSwab: 'retal', Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: 'Resistente a carbapenêmicos', StatusRevisao: 'triagem' },
+        /* paciente 2 na UTI: já positivo no primeiro swab (não é aquisição), em precaução */
+        { ID_Cultura: 'S3', Prontuario: '2', DataColeta: '2026-10-14', Setor: cti, Material: 'Swab de vigilância', SitioSwab: 'orofaringe', Microrganismo: 'Acinetobacter spp', MecanismoResistencia: 'Resistente a carbapenêmicos', StatusRevisao: 'triagem' },
+        /* paciente 5 na UTI, mesma semana que o 1: segunda aquisição de CRE → cluster */
+        { ID_Cultura: 'S7', Prontuario: '5', DataColeta: '2026-10-07', Setor: cti, Material: 'Swab de vigilância', SitioSwab: 'retal', Microrganismo: '', StatusRevisao: 'triagem' },
+        { ID_Cultura: 'S8', Prontuario: '5', DataColeta: '2026-10-15', Setor: cti, Material: 'Swab de vigilância', SitioSwab: 'retal', Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: 'Resistente a carbapenêmicos', StatusRevisao: 'triagem' },
+        /* nasal MRSA em adulto com cirurgia cardíaca; sem descolonização */
+        { ID_Cultura: 'S4', Prontuario: '3', DataColeta: '2026-10-20', Setor: 'Unidade 12', Material: 'Swab de vigilância', SitioSwab: 'nasal', Microrganismo: 'Staphylococcus aureus', MecanismoResistencia: 'MRSA', StatusRevisao: 'triagem' },
+        /* SGB em swab vaginal */
+        { ID_Cultura: 'S5', Prontuario: '4', DataColeta: '2026-10-22', Setor: 'Centro Obstétrico', Material: 'Swab vaginal (pesquisa de SGB)', SitioSwab: 'vaginal', Microrganismo: 'Streptococcus agalactiae (grupo B)', StatusRevisao: 'triagem' },
+        /* fora da janela de 90 dias */
+        { ID_Cultura: 'S6', Prontuario: '9', DataColeta: '2026-06-01', Setor: 'Emergência', Material: 'Swab de vigilância', SitioSwab: 'retal', Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: 'Resistente a carbapenêmicos', StatusRevisao: 'triagem' }
+      ], sensibilidade: [] },
+      pacientes: { pacientes: [{ Prontuario: '1', Nome: 'UM' }, { Prontuario: '2', Nome: 'DOIS' }, { Prontuario: '6', Nome: 'SEIS' }],
+        internacoes: [{ Prontuario: '1', Atendimento: 'A1', DataInternacao: '2026-10-01', DataAlta: '', SetorAtual: cti },
+          { Prontuario: '6', Atendimento: 'A6', DataInternacao: '2026-10-20', DataAlta: '', SetorAtual: cti },
+          { Prontuario: '7', Atendimento: 'A7', DataInternacao: '2026-11-01', DataAlta: '', SetorAtual: cti }] },
+      denominadores: { passagem_setor: [] },
+      isolamentos: { precaucoes: [{ Prontuario: '2', TipoPrecaucao: 'Contato', DataInicio: '2026-10-14', DataFim: '' }] },
+      cirurgias: { cirurgias: [{ ID_Cirurgia: 'C1', Prontuario: '3', DataCirurgia: '2026-10-28', ProcedimentoNHSN: 'Revascularização do miocárdio' }] }
+    };
+    const p = col.painelColonizacao(bancosCol, hoje, { dias: 90, semanas: 6 });
+    verificar('janela de 90 dias: swab de junho fica fora; 4 grupos presentes',
+      p.abas.admissao_adulto.linhas.length === 0 && p.abas.uti_adulto.linhas.length === 5 && p.abas.nasal_adulto.linhas.length === 1 && p.abas.outros.linhas.length === 1,
+      JSON.stringify(Object.fromEntries(Object.entries(p.abas).map(([k, v]) => [k, v.linhas.length]))));
+    const s2 = p.abas.uti_adulto.linhas.find(s => s.cultura.ID_Cultura === 'S2'), s3 = p.abas.uti_adulto.linhas.find(s => s.cultura.ID_Cultura === 'S3');
+    verificar('aquisição na UTI: negativo → positivo é aquisição; positivo no primeiro swab não é', s2.aquisicao === true && !s3.aquisicao);
+    verificar('precaução ativa cruzada com isolamentos: S3 em precaução, S2 sem', s3.emPrecaucao && !s2.emPrecaucao && p.abas.uti_adulto.resumo.semPrecaucao === 2);
+    const semanaCluster = p.uti.semanas.find(w => w.semana === '2026-10-12');
+    verificar('semana 12–18/10: 2 aquisições de CRE → cluster', semanaCluster && semanaCluster.aquisicoes === 2 && semanaCluster.cluster.length === 1 && /2×/.test(semanaCluster.cluster[0]), JSON.stringify(semanaCluster));
+    verificar('UTI sem swab > 9 dias: paciente 1 (último 13/10 = 21 d) e 6 (nunca, internado há 14 d); 7 internado há 2 d não',
+      p.uti.semSwab.map(x => x.prontuario).sort().join() === '1,6' && p.uti.semSwab.find(x => x.prontuario === '1').dias === 21, JSON.stringify(p.uti.semSwab));
+    const nasal = p.abas.nasal_adulto.linhas[0];
+    verificar('nasal MRSA: cirurgia cardíaca cruzada e sem descolonização registrada',
+      nasal.positivo && nasal.cirurgiaCardiaca && nasal.cirurgiaCardiaca.ID_Cirurgia === 'C1' && p.abas.nasal_adulto.resumo.mrsaSemDescolonizacao === 1);
+    const tipos = p.alertas.map(a => a.tipo);
+    verificar('alertas: MDR sem precaução (3: S2, S8 e o MRSA nasal), SGB (1), cluster (1), sem swab (2)',
+      tipos.filter(t => t === 'sem_precaucao').length === 3 && tipos.filter(t => t === 'sgb').length === 1 && tipos.filter(t => t === 'cluster').length === 1 && tipos.filter(t => t === 'sem_swab').length === 2, JSON.stringify(tipos));
+    verificar('montarLinhaImportada grava SitioSwab a partir do material cru',
+      imp.montarLinhaImportada({ Prontuario: '1', DataColeta: '2026-11-01', Material: 'Swab de vigilância', _originais: { Material: 'Swab Retal' } }, 'culturas', 'CUL-1', 'x', 'y').SitioSwab === 'retal');
   }
 
   /* == 109. Consumo de antibióticos: DDD por prescrição e série mensal DOT/DDD (21/10/2026) == */

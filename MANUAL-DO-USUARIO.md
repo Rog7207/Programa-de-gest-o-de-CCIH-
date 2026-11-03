@@ -668,6 +668,19 @@ atropelam: cada gravação trava o arquivo, relê e só então grava.
   apresentações fica no `config.xlsx`, aba `ddd_antibioticos` (semente da OMS, confirmada pela
   CCIH para meropenem 1 g, vancomicina 500 mg, metronidazol comprimido 400 mg e sulfa 800/160;
   edite no Excel para ajustar). Pacientes-dia da UTI: censo NISS; do hospital: censo individual.
+- **Colonização** — controle das culturas de vigilância (swabs). O laudo diz o sítio
+  (retal, orofaringe, nasal, axilar; perianal/vaginal = pesquisa de SGB) e a importação o
+  guarda; o histórico sem sítio cai em "Outros" (`scripts/preencher-sitio-swab.js` recupera o
+  sítio relendo os laudos PDF guardados em `importados/`). Quatro abas: **Nasal — adultos**
+  (rastreio de MRSA pré-operatório: cruza com cirurgia cardíaca e registra a
+  **descolonização**), **Retal/orofaringe — fora da UTI** (admissão/transferidos),
+  **Retal/orofaringe — UTI adulto** (vigilância semanal: tabela semana a semana com
+  rastreados, positivos, **aquisições** — negativo → positivo na UTI — e **cluster** de 2+
+  aquisições do mesmo mecanismo; lista de internados há mais de 9 dias sem swab) e
+  **Outros** (neo/pediátrica, SGB, sem sítio). Positivo de vigilância = carbapenem-R, MRSA ou
+  VRE (ESBL não entra). Alertas: MDR sem precaução de contato ativa, **Streptococcus do grupo
+  B** (se gestante, avaliar profilaxia intraparto — não é isolamento), UTI sem swab e cluster.
+  "Marcar visto" e a descolonização ficam gravados na cultura, com rastro.
 - **Ficha do paciente** — tudo sobre uma pessoa numa linha do tempo (internações, culturas,
   antibióticos por curso, cirurgias, dispositivos, sepse, isolamentos, óbito); abre
   clicando no nome em qualquer tela. **Corrigir um registro errado**: cada evento da linha

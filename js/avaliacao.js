@@ -106,12 +106,16 @@ function montarDadosAvaliacao(bancos, hoje) {
 
     const temMismatch = alertas.some(a => a.includes('resistente a'));
     const maiorUso = Math.max(0, ...prescricoes.map(p => Number(dias(p.DataInicio)) || 0));
+    /* Do mais recentemente prescrito para o mais antigo (pedido de 03/11/2026) — dentro do
+       paciente e entre pacientes (pelo início mais recente). */
+    prescricoes.sort((a, b) => String(b.DataInicio).localeCompare(String(a.DataInicio)));
+    const inicioMaisRecente = String((prescricoes[0] || {}).DataInicio || '').slice(0, 10);
     pacientes.push({
       prontuario,
       nome: nomes.get(prontuario) || '',
       setor: (prescricoes[0] || {}).Setor || (culturasPaciente[0] || {}).setor || '',
       prioridade: (temMismatch ? 2 : 0) + (alertas.length ? 1 : 0),
-      maiorUso,
+      maiorUso, inicioMaisRecente,
       alertas: [...new Set(alertas)],
       prescricoes: prescricoes.map(p => ({
         id: p.ID_Prescricao, atb: p.Antibiotico, dose: p.Dose, via: p.Via, freq: p.Frequencia,
@@ -121,7 +125,7 @@ function montarDadosAvaliacao(bancos, hoje) {
       culturas: culturasPaciente
     });
   }
-  pacientes.sort((a, b) => b.prioridade - a.prioridade || b.maiorUso - a.maiorUso);
+  pacientes.sort((a, b) => b.inicioMaisRecente.localeCompare(a.inicioMaisRecente) || b.prioridade - a.prioridade || b.maiorUso - a.maiorUso);
   return { pacientes, totalPrescricoes: pendentes.length, totalCulturas: culturasPendentesTodas.length };
 }
 

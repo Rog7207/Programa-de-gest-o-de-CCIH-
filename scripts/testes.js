@@ -330,8 +330,11 @@ console.log('\n== 11. Avaliação remota de antimicrobianos ==');
   };
   const dados = av.montarDadosAvaliacao(bancos, '2026-08-19');
   verificar('avaliada e encerrada fora; 2 pacientes pendentes', dados.pacientes.length === 2, dados.pacientes.map(p => p.prontuario));
-  const maria = dados.pacientes[0];
-  verificar('paciente com incompatibilidade priorizado', maria.prontuario === '0012345', dados.pacientes.map(p => p.prontuario));
+  /* Ordem (03/11/2026): do mais recentemente prescrito para o mais antigo — 777 (14/08) antes
+     de Maria (10/08); a prioridade por alerta só desempata. */
+  verificar('pacientes do mais recentemente prescrito para o mais antigo', dados.pacientes.map(p => p.prontuario).join() === '777,0012345', dados.pacientes.map(p => p.prontuario));
+  const maria = dados.pacientes[1];
+  verificar('paciente com incompatibilidade continua com prioridade marcada', maria.prontuario === '0012345' && maria.prioridade >= 2, maria.prioridade);
   verificar('alerta cultura × prescrição', maria.alertas.some(a => a.includes('resistente a Meropenem')), maria.alertas);
   verificar('multirresistente inferido no alerta', maria.alertas.some(a => a.includes('carbapen')), maria.alertas);
   verificar('antimicrobiano prévio listado', maria.previos.length === 1 && maria.previos[0].atb === 'Vancomicina', maria.previos);

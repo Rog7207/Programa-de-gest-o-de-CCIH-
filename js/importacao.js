@@ -99,11 +99,13 @@ const REGRAS_NHSN = [
   [/duodenopancreat|pancreatectomia|hepatectomia|figado|anastomosebileo|biliodigest|viabiliar|viasbiliares/, 'BILI'],
   [/enterectomia|intestinodelgado|jejunostomia|ileostomia|enterostomia|delgado/, 'SB'],
   [/toracotom|toracic|lobectomiapulmon|pulmon|pulmao|ressecaoemcunha|pneumectomia|mediastin|corticacaopulmon/, 'THOR'],
+  /* Ordem importa (05/11/2026): ponte femuro-poplítea é vascular periférico, não
+     revascularização do miocárdio; derivação ventricular (com válvula) é VSHN, não cardíaca. */
+  [/bypassvascular|enxertovascular|femoropoplite|femuropoplite|poplite|aortobifemoral|endarterectomia/, 'PVBY'],
+  [/derivacaoventric|ventriculoperiton|ventriculostomia/, 'VSHN'],
   [/revasculariz|pontedesafena|pontecoronar/, 'CBGB'],
   [/valv|reconstrucaodaraizdaaorta|tubovalvado|cirurgiacardiac|comunicacaointeratrial|comunicacaointerventric|pericardiec|dissec+[a-z]*daaorta/, 'CARD'],
   [/marcapasso|ressincroniz|cardioversor|desfibrilador|estimulacaocardiaca/, 'PACE'],
-  [/derivacaoventric|ventriculoperiton|ventriculostomia/, 'VSHN'],
-  [/bypassvascular|enxertovascular|femoropoplite|aortobifemoral|endarterectomia/, 'PVBY'],
   [/laringectomia|esvaziamentocervical|glossectomia|parotidectomia|maxilectomia|faringolaring|dissec+aoradicaldopesc|cervicotomia|tumordocavum/, 'NECK'],
   [/laparotomiaexplorad/, 'XLAP'], [/herni/, 'HER']
 ];
@@ -3713,7 +3715,10 @@ function aplicarObitos(internacoes, obitos) {
 /* fimDias 150 (era 120): decisão da CCIH do HNSC em 23/09/2026 — a fila acumulada de maio a
    agosto ainda merece uma tentativa de contato antes de encerrar "sem contato". */
 const JANELA_VIGILANCIA = { inicioDias: 30, fimDias: 150, implanteDias: 90 };
-const PROCEDIMENTO_COM_IMPLANTE = /protese|artroplastia|implante|marcapasso|osteossintese|osteosintese|\btela\b|valvar/;
+/* "Implante" = vigilância de 90 dias. Além das próteses, entram aqui (05/11/2026, lista de 90
+   dias do NHSN usada pela Anvisa) a derivação ventricular INTERNA (shunt) e a revascularização
+   do miocárdio (fios esternais). DVE/subgaleal é externa: não é implante. */
+const PROCEDIMENTO_COM_IMPLANTE = /protese|artroplastia|implante|marcapasso|osteossintese|osteosintese|\btela\b|valvar|derivacaoventricular(?!.*(extern|subgaleal))|sistemadederivacaoventricular|ventriculoperiton|revascularizacao(?!.*(femor|femur|poplit|perifer|membro))(?=.*(miocard|coronar))|pontedesafena|pontecoronar/;
 const PROCEDIMENTO_CESARIANA = /cesariana|cesarea|cesaria/;
 
 /* Categorias que uma cirurgia pode ter para fins de vigilância pós-alta, e quais delas
@@ -3749,6 +3754,46 @@ function categoriaDeVigilancia(cirurgia) {
      LIMPAS para a vigilância pós-alta mesmo sem o campo preenchido. */
   const presumida = contaminacaoPresumida(cirurgia.Procedimento);
   return presumida || 'sem_classificacao';
+}
+
+/* Procedimentos de notificação mensal à Anvisa (decisão da CCIH, 05/11/2026): cesariana,
+   artroplastia PRIMÁRIA de quadril e de joelho, implante de prótese mamária, derivação
+   ventricular INTERNA e revascularização do miocárdio. Classifica pelo texto CRU do
+   procedimento (não só pela categoria NHSN) e diz por que uma parecida fica de fora. */
+const PROCEDIMENTOS_ANVISA = [
+  ['CSEC', 'Parto cesáreo'], ['HPRO', 'Artroplastia primária de quadril'], ['KPRO', 'Artroplastia primária de joelho'],
+  ['BRST_PROTESE', 'Implante de prótese mamária'], ['VSHN', 'Derivação ventricular interna'], ['CBGB', 'Revascularização do miocárdio']
+];
+const ROTULO_ANVISA = Object.fromEntries(PROCEDIMENTOS_ANVISA);
+function procedimentoAnvisa(cirurgia) {
+  const t = normalizarTexto(cirurgia.Procedimento) + ' ' + normalizarTexto(cirurgia.ProcedimentoNHSN);
+  const fora = (codigo, motivo) => ({ codigo: '', candidato: codigo, rotulo: ROTULO_ANVISA[codigo], motivo });
+  const entra = (codigo, nota) => ({ codigo, candidato: codigo, rotulo: ROTULO_ANVISA[codigo], motivo: '', nota: nota || '' });
+  if (/cesarian|cesarea|cesaria/.test(t)) return entra('CSEC');
+  if (/(artroplast|protese).*(quadril|coxofemor)|(quadril|coxofemor).*(artroplast|protese)/.test(t)) {
+    if (/revis|reconstru|retirada|luxac|conversao/.test(t)) return fora('HPRO', 'revisão/reconstrução/retirada — não é artroplastia primária');
+    if (/parcial/.test(t)) return entra('HPRO', 'artroplastia parcial — confirmar se a CCIH notifica');
+    if (/qualquertecnica/.test(t)) return entra('HPRO', 'nome genérico ("qualquer técnica") — confirmar se é primária');
+    return entra('HPRO');
+  }
+  if (/(artroplast|protese).*joelho|joelho.*(artroplast|protese)/.test(t)) {
+    if (/revis|reconstru|retirada/.test(t)) return fora('KPRO', 'revisão/reconstrução/retirada — não é artroplastia primária');
+    return entra('KPRO');
+  }
+  if (/mama|mamari|mastopex|mamoplast/.test(t)) {
+    if (/protese|expansor|implante|inclusao/.test(t)) return entra('BRST_PROTESE');
+    if (/mamariafemininanaoestetica|plasticamamaria/.test(t)) return fora('BRST_PROTESE', 'plástica mamária sem menção a prótese — confirmar no prontuário se houve implante');
+    return fora('BRST_PROTESE', 'cirurgia de mama sem prótese (mastectomia/segmentectomia/mastopexia) — não entra');
+  }
+  if (/derivacaoventric|ventriculoperiton|ventriculostomia/.test(t)) {
+    if (/extern|subgaleal|ventriculostomia/.test(t)) return fora('VSHN', 'derivação ventricular EXTERNA — não entra');
+    return entra('VSHN');
+  }
+  if (/revasculariz|pontedesafena|pontecoronar/.test(t)) {
+    if (/femor|femur|poplit|perifer|membro|tromboendarter/.test(t)) return fora('CBGB', 'revascularização periférica (ponte femuro-poplítea) — não é do miocárdio');
+    return entra('CBGB', /valv/.test(t) ? 'com troca valvar associada' : '');
+  }
+  return { codigo: '', candidato: '', rotulo: '', motivo: '' };
 }
 
 function classificarParaVigilancia(cirurgia, categoriasVigiadas) {
@@ -5085,7 +5130,7 @@ function normalizarDispositivo(valor) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    editarRegistro,
+    editarRegistro, procedimentoAnvisa, PROCEDIMENTOS_ANVISA,
     textoEvolucaoNormalizado,
     normalizarData, normalizarProntuario, normalizarValorAntibiograma,
     sugerirMapeamento, normalizarLinhas, validar, deduplicar, chaveNaturalDe, proximoID,

@@ -107,6 +107,15 @@ profilaxia 1714, óbitos 836, NISS 3066.
   mesmo mecanismo na semana. SGB: alerta próprio (profilaxia intraparto), não isolamento.
   Descolonização do MRSA nasal registrada na própria cultura (DescolonizacaoEm/Obs).
 
+## ISC de notificação à Anvisa (05/11/2026)
+- Seis procedimentos (cesariana, artroplastia PRIMÁRIA de quadril e joelho, prótese mamária,
+  derivação ventricular INTERNA, revascularização do miocárdio) classificados pelo nome cru
+  (`procedimentoAnvisa`, importacao.js); relatório `relatorioISCAnvisa` com efetividade e lista
+  de problemas. Correções no classificador: DVI é VSHN (caía em "Cirurgia cardíaca"); ponte
+  femuro-poplítea é PVBY (caía em RM). DVI e RM passaram a 90 dias (lista NHSN/Anvisa).
+- Achado no banco local (jun–out/2026): efetividade baixíssima — cesárea 19% com desfecho após
+  a janela, quadril/joelho 0% (sob vigilância sem contato); 35 RM "dispensadas" na triagem.
+
 ## Pendências conhecidas
 - Idade não existe no cadastro de pacientes (vem no 2536 e nos óbitos; guardar na internação).
 - Dispositivo-dia só do CTI (NISS); enfermarias sem denominador de dispositivo.

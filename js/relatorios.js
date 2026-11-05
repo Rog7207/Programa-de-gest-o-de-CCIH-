@@ -610,6 +610,81 @@ function relatorioPosAlta(bancos, setoresEscopo, inicio, fim) {
       ['Taxa de ISC', relPct(isc.length, comDesfecho)]] };
 }
 
+/* ---- 7b. ISC — procedimentos de notificação mensal à Anvisa (05/11/2026) ----
+   Para cada um dos 6 procedimentos: quantas cirurgias no período, se estão na vigilância
+   pós-alta (e com que prazo), se a vigilância foi efetiva (desfecho conhecido quando a janela
+   venceu) e ISC por tipo. Lista os PROBLEMAS que fariam a notificação sair errada: cirurgia
+   candidata classificada em outra categoria, dispensada na triagem, pendente de triagem,
+   janela errada, nome ambíguo. */
+function relatorioISCAnvisa(bancos, setoresEscopo, inicio, fim) {
+  const hoje = String(bancos.hoje || (typeof hojeISO === 'function' ? hojeISO() : fim)).slice(0, 10);
+  const todas = ((bancos.cirurgias || {}).cirurgias || []).filter(c => relPeriodo(c.DataCirurgia, inicio, fim));
+  const casosIras = ((bancos.iras || {}).casos || []);
+  const st = c => String(c.StatusVigilancia || 'pendente');
+  const RESPOSTAS = ['sem infecção', 'em investigação', 'infecção confirmada'];
+  const janelaDe = c => categoriaDeVigilancia(c) === 'implante' ? ISC_JANELA_IMPLANTE_DIAS : ISC_JANELA_DIAS;
+  const addDias = (iso, n) => new Date(Date.parse(String(iso).slice(0, 10) + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+  const tipoIsc = c => {
+    const t = normalizarTexto(c.TipoISC) + ' ' + normalizarTexto((casosIras.find(k => k.ID_IRAS === c.ID_IRAS) || {}).Topografia);
+    return /orgao|espaco|cavidade/.test(t) ? 'órgão/espaço' : /profund/.test(t) ? 'profunda' : /superfic/.test(t) ? 'superficial' : 'tipo não informado';
+  };
+  const classificadas = todas.map(c => ({ c, a: procedimentoAnvisa(c) }));
+  const dentro = classificadas.filter(x => x.a.codigo);
+  const candidatasFora = classificadas.filter(x => !x.a.codigo && x.a.candidato);
+
+  const linhasPanorama = [], problemas = [], mensal = new Map();
+  for (const [codigo, rotulo] of PROCEDIMENTOS_ANVISA) {
+    const lista = dentro.filter(x => x.a.codigo === codigo);
+    const cir = lista.map(x => x.c);
+    const janelaVencida = cir.filter(c => addDias(c.DataCirurgia, janelaDe(c)) <= hoje);
+    const comDesfecho = janelaVencida.filter(c => c.ISC === 'S' || normalizarTexto(c.StatusVigilancia) === 'seminfeccao');
+    const isc = cir.filter(c => c.ISC === 'S');
+    const porTipo = relContar(isc, tipoIsc);
+    const janelaEsperada = ['CSEC'].includes(codigo) ? ISC_JANELA_DIAS : ISC_JANELA_IMPLANTE_DIAS;
+    linhasPanorama.push([rotulo, cir.length,
+      cir.filter(c => ['sob vigilância', 'mensagem enviada'].concat(RESPOSTAS).concat(['encerrada sem contato', 'encerrada — óbito', 'encerrada — número incorreto']).includes(st(c))).length,
+      cir.filter(c => st(c) === 'pendente').length, cir.filter(c => st(c) === 'dispensada').length,
+      janelaVencida.length, `${comDesfecho.length} (${relPct(comDesfecho.length, janelaVencida.length)})`,
+      isc.length ? `${isc.length} (${porTipo.map(([t, n]) => `${n} ${t}`).join(', ')})` : '0',
+      relPct(isc.length, comDesfecho.length || cir.length), janelaEsperada + ' d']);
+    for (const x of lista) {
+      const c = x.c;
+      const mes = String(c.DataCirurgia).slice(0, 7);
+      const k = mes + '|' + rotulo;
+      const m = mensal.get(k) || { mes, rotulo, cirurgias: 0, isc: 0, desfecho: 0 };
+      m.cirurgias++; if (c.ISC === 'S') m.isc++; if (c.ISC === 'S' || normalizarTexto(c.StatusVigilancia) === 'seminfeccao') m.desfecho++;
+      mensal.set(k, m);
+      const base = [String(c.DataCirurgia).slice(0, 10), c.Prontuario, rotulo, String(c.Procedimento || '').slice(0, 60)];
+      if (st(c) === 'dispensada') problemas.push([...base, 'dispensada na triagem — procedimento de notificação obrigatória deveria estar em vigilância']);
+      else if (st(c) === 'pendente' && addDias(c.DataCirurgia, 7) <= hoje) problemas.push([...base, 'pendente de triagem há mais de 7 dias']);
+      else if (['sob vigilância'].includes(st(c)) && addDias(c.DataCirurgia, janelaDe(c)) <= hoje) problemas.push([...base, 'janela de vigilância vencida sem contato registrado']);
+      if (janelaDe(c) !== janelaEsperada) problemas.push([...base, `janela de ${janelaDe(c)} dias — esperado ${janelaEsperada} (categoria de vigilância "${categoriaDeVigilancia(c)}")`]);
+      if (codigo !== 'CSEC' && !String(c.ProcedimentoNHSN || '').trim()) problemas.push([...base, 'sem categoria NHSN — revisar vocabulário de procedimentos']);
+      if (x.a.nota) problemas.push([...base, 'conferir: ' + x.a.nota]);
+    }
+  }
+  const linhasMensal = [...mensal.values()].sort((a, b) => a.mes.localeCompare(b.mes) || a.rotulo.localeCompare(b.rotulo))
+    .map(m => [m.mes, m.rotulo, m.cirurgias, m.isc, relPct(m.isc, m.desfecho || m.cirurgias), m.desfecho]);
+  const linhasFora = candidatasFora.map(x => [String(x.c.DataCirurgia).slice(0, 10), x.c.Prontuario, x.a.rotulo, String(x.c.Procedimento || '').slice(0, 70), String(x.c.ProcedimentoNHSN || ''), x.a.motivo])
+    .sort((a, b) => b[0].localeCompare(a[0]));
+
+  const secoes = [
+    { titulo: 'Panorama por procedimento', tipo: 'tabela',
+      colunas: ['Procedimento', 'Cirurgias', 'Entraram na vigilância', 'Pendentes de triagem', 'Dispensadas', 'Janela vencida', 'Com desfecho (efetividade)', 'ISC (tipo)', 'Taxa de ISC', 'Janela'],
+      linhas: linhasPanorama },
+    { titulo: 'Para a notificação mensal (cirurgias × ISC por mês)', tipo: 'tabela',
+      colunas: ['Mês', 'Procedimento', 'Cirurgias', 'ISC', 'Taxa', 'Com desfecho conhecido'], linhas: linhasMensal },
+    { titulo: `Problemas a resolver antes de notificar (${problemas.length})`, tipo: 'tabela',
+      colunas: ['Data', 'Prontuário', 'Procedimento', 'Nome no relatório', 'Problema'], linhas: problemas.sort((a, b) => b[0].localeCompare(a[0])) },
+    { titulo: `Parecidas que ficam de fora (${linhasFora.length}) — conferir`, tipo: 'tabela',
+      colunas: ['Data', 'Prontuário', 'Procedimento Anvisa', 'Nome no relatório', 'Categoria NHSN', 'Motivo'], linhas: linhasFora },
+    { titulo: 'Critérios', tipo: 'texto', corpo: 'Procedimentos: cesariana; artroplastia primária de quadril e de joelho (revisões ficam de fora); implante de prótese mamária (mastectomia/segmentectomia/mastopexia sem prótese ficam de fora); derivação ventricular interna (DVE/subgaleal fica de fora); revascularização do miocárdio (ponte periférica fica de fora). Janela: 30 dias na cesariana e 90 dias nos demais (implante). Efetividade = cirurgias com janela vencida que têm desfecho conhecido (sem infecção ou ISC). Taxa de ISC = ISC ÷ cirurgias com desfecho conhecido. A ISC é a registrada na vigilância pós-alta/aba Infecções (ISC = S na cirurgia).' }
+  ];
+  const totalCir = dentro.length, totalIsc = dentro.filter(x => x.c.ISC === 'S').length;
+  return { titulo: 'ISC — procedimentos de notificação à Anvisa', secoes,
+    resumo: [['Cirurgias de notificação', totalCir], ['ISC nelas', totalIsc], ['Problemas a resolver', problemas.length]] };
+}
+
 /* ---- 8. Resumo executivo ---- */
 function relatorioResumoExecutivo(bancos, setoresEscopo, inicio, fim) {
   const partes = [
@@ -1504,6 +1579,7 @@ const RELATORIOS_PADRAO = [
   ['isolamentos', 'Isolamentos e precauções', relatorioIsolamentos],
   ['sepse', 'Protocolo de sepse', relatorioSepse],
   ['pos_alta', 'ISC e vigilância pós-alta', relatorioPosAlta],
+  ['isc_anvisa', 'ISC — procedimentos de notificação à Anvisa', relatorioISCAnvisa],
   ['executivo', 'Resumo executivo', relatorioResumoExecutivo]
 ];
 
@@ -1656,7 +1732,7 @@ function setoresEmUso(bancos) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { relatorioIRAS, casosParaRelatorio, pacientesDiaDoCenso, pacientesDiaDasPassagens, relatorioMicrobiologico, relatorioHigiene,
-    relatorioAntibioticos, relatorioIsolamentos, relatorioSepse, relatorioPosAlta,
+    relatorioAntibioticos, relatorioIsolamentos, relatorioSepse, relatorioPosAlta, relatorioISCAnvisa,
     relatorioResumoExecutivo, RELATORIOS_PADRAO, BANCOS_RELATORIOS, setoresEmUso, pacientesDia, pacientesDiaDoCenso,
     relMediana, relDiasEntre, mesAnteriorIntervalo,
     diasDeDispositivo, taxasPorDispositivo, grupoDoDispositivo, grupoDispositivoDaIRAS, indicadoresReuniao, utilizacaoDispositivos, avaliacoesUTIReuniao, compararComBenchmarks, posicaoNoBenchmark, BENCHMARKS_EXTERNOS,

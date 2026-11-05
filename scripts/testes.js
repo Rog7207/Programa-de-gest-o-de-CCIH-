@@ -6305,6 +6305,59 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       imp.montarLinhaImportada({ Prontuario: '1', DataColeta: '2026-11-01', Material: 'Swab de vigilância', _originais: { Material: 'Swab Retal' } }, 'culturas', 'CUL-1', 'x', 'y').SitioSwab === 'retal');
   }
 
+  /* == 108d. ISC — procedimentos de notificação à Anvisa (05/11/2026) == */
+  {
+    console.log('\n== 108d. Procedimentos Anvisa: classificação pelo nome cru, janelas, relatório ==');
+    const pa = imp.procedimentoAnvisa;
+    verificar('cesariana, artroplastia primária de quadril/joelho, prótese de mama, DVI e RM entram',
+      pa({ Procedimento: 'OPERAÇÃO CESARIANA EM GESTAÇÃO DE ALTO RISCO' }).codigo === 'CSEC'
+      && pa({ Procedimento: 'Artroplastia Total Primaria Do Quadril Não Cimentada / Híbrida' }).codigo === 'HPRO'
+      && pa({ Procedimento: 'ARTROPLASTIA TOTAL PRIMÁRIA DO JOELHO' }).codigo === 'KPRO'
+      && pa({ Procedimento: 'Reconstrução Da Mama Com Prótese E/Ou Expansor' }).codigo === 'BRST_PROTESE'
+      && pa({ Procedimento: 'Inclusão De Protese De Mama' }).codigo === 'BRST_PROTESE'
+      && pa({ Procedimento: 'Sistema De Derivação Ventricular Interna Com Válvulas Ou Revisões' }).codigo === 'VSHN'
+      && pa({ Procedimento: 'DERIVAÇÃO VENTRICULAR PARA PERITÔNEO / ÁTRIO / PLEURA / RAQUE' }).codigo === 'VSHN'
+      && pa({ Procedimento: 'TROCA VALVAR C/ REVASCULARIZAÇÃO MIOCÁRDICA' }).codigo === 'CBGB');
+    const r1 = pa({ Procedimento: 'ARTROPLASTIA TOTAL DE JOELHO - REVISÃO / RECONSTRUÇÃO' }), r2 = pa({ Procedimento: 'Derivação Ventricular Externar-Subgaleal Externa' }),
+      r3 = pa({ Procedimento: 'Revascularização Por Ponte / Tromboendarterectomia Femuro-Poplítea Proximal' }), r4 = pa({ Procedimento: 'Mastopexia' }),
+      r5 = pa({ Procedimento: 'PLASTICA MAMÁRIA FEMININA NAO ESTETICA' });
+    verificar('revisão de joelho, DVE, ponte femuro-poplítea e mastopexia ficam de fora com motivo; plástica mamária sem prótese pede conferência',
+      !r1.codigo && r1.candidato === 'KPRO' && /primária/.test(r1.motivo) && !r2.codigo && /EXTERNA/.test(r2.motivo)
+      && !r3.codigo && /periférica/.test(r3.motivo) && !r4.codigo && /sem prótese/.test(r4.motivo) && !r5.codigo && /confirmar/.test(r5.motivo), JSON.stringify([r1, r2, r3, r4, r5]));
+    verificar('classificador NHSN: DVI vai para VSHN (não cardíaca) e ponte femuro-poplítea para PVBY (não RM)',
+      imp.classificarProcedimentoNHSN('Sistema De Derivação Ventricular Interna Com Válvulas Ou Revisões').codigo === 'VSHN'
+      && imp.classificarProcedimentoNHSN('Revascularização Por Ponte / Tromboendarterectomia Femuro-Poplítea Proximal').codigo === 'PVBY'
+      && imp.classificarProcedimentoNHSN('Revascularização Miocárdica S/ Uso De Extracorpórea').codigo === 'CBGB');
+    verificar('janela de 90 dias: DVI e RM são "implante"; DVE e ponte periférica não',
+      imp.categoriaDeVigilancia({ Procedimento: 'Derivação Ventricular Para Peritôneo / Átrio / Pleura / Raque' }) === 'implante'
+      && imp.categoriaDeVigilancia({ Procedimento: 'Revascularização Do Miocárdio' }) === 'implante'
+      && imp.categoriaDeVigilancia({ Procedimento: 'Derivação Ventricular Externa' }) !== 'implante'
+      && imp.categoriaDeVigilancia({ Procedimento: 'Revascularização Por Ponte Femuro-Poplítea Proximal', PotencialContaminacao: 'Limpa' }) === 'limpa');
+
+    global.procedimentoAnvisa = imp.procedimentoAnvisa; global.PROCEDIMENTOS_ANVISA = imp.PROCEDIMENTOS_ANVISA;
+    global.categoriaDeVigilancia = imp.categoriaDeVigilancia; global.ISC_JANELA_DIAS = imp.ISC_JANELA_DIAS; global.ISC_JANELA_IMPLANTE_DIAS = imp.ISC_JANELA_IMPLANTE_DIAS;
+    const rel = require(path.join(__dirname, '..', 'js', 'relatorios.js'));
+    const bancosA = { hoje: '2026-11-05', iras: { casos: [] }, cirurgias: { cirurgias: [
+      { ID_Cirurgia: '1', Prontuario: 'P1', DataCirurgia: '2026-08-01', Procedimento: 'Cesariana', ProcedimentoNHSN: 'Cesariana', StatusVigilancia: 'sem infecção' },
+      { ID_Cirurgia: '2', Prontuario: 'P2', DataCirurgia: '2026-08-02', Procedimento: 'Cesariana', ProcedimentoNHSN: 'Cesariana', StatusVigilancia: 'infecção confirmada', ISC: 'S', TipoISC: 'superficial' },
+      { ID_Cirurgia: '3', Prontuario: 'P3', DataCirurgia: '2026-08-03', Procedimento: 'Cesariana', ProcedimentoNHSN: 'Cesariana', StatusVigilancia: 'sob vigilância' },
+      { ID_Cirurgia: '4', Prontuario: 'P4', DataCirurgia: '2026-08-10', Procedimento: 'Revascularização Do Miocárdio', ProcedimentoNHSN: 'Revascularização do miocárdio', StatusVigilancia: 'dispensada' },
+      { ID_Cirurgia: '5', Prontuario: 'P5', DataCirurgia: '2026-10-20', Procedimento: 'Artroplastia Total Primária Do Joelho', ProcedimentoNHSN: 'Artroplastia de joelho', StatusVigilancia: 'pendente' },
+      { ID_Cirurgia: '6', Prontuario: 'P6', DataCirurgia: '2026-08-15', Procedimento: 'Derivação Ventricular Externa', ProcedimentoNHSN: 'Derivação ventricular', StatusVigilancia: 'dispensada' },
+      { ID_Cirurgia: '7', Prontuario: 'P7', DataCirurgia: '2026-05-01', Procedimento: 'Cesariana', ProcedimentoNHSN: 'Cesariana', StatusVigilancia: 'sem infecção' }
+    ] } };
+    const r = rel.relatorioISCAnvisa(bancosA, null, '2026-08-01', '2026-10-31');
+    const pan = r.secoes[0].linhas, ces = pan.find(l => l[0] === 'Parto cesáreo'), rm = pan.find(l => l[0] === 'Revascularização do miocárdio');
+    verificar('panorama cesárea: 3 cirurgias, 3 janela vencida, 2 com desfecho (67%), 1 ISC superficial, janela 30 d; maio fica fora',
+      ces[1] === 3 && ces[5] === 3 && /^2 \(67%\)/.test(ces[6]) && /1 \(1 superficial\)/.test(ces[7]) && ces[9] === '30 d', JSON.stringify(ces));
+    verificar('RM: 1 cirurgia, dispensada, janela 90 d', rm[1] === 1 && rm[4] === 1 && rm[9] === '90 d', JSON.stringify(rm));
+    const prob = r.secoes[2].linhas.map(l => l[4]);
+    verificar('problemas: RM dispensada; cesárea sob vigilância com janela vencida; joelho pendente há > 7 dias',
+      prob.some(p => /dispensada/.test(p)) && prob.some(p => /vencida sem contato/.test(p)) && prob.some(p => /pendente de triagem/.test(p)), JSON.stringify(prob));
+    verificar('DVE aparece em "parecidas que ficam de fora" com o motivo', r.secoes[3].linhas.length === 1 && /EXTERNA/.test(r.secoes[3].linhas[0][5]));
+    verificar('mensal: ago/2026 cesárea 3 cirurgias e 1 ISC', r.secoes[1].linhas.some(l => l[0] === '2026-08' && l[1] === 'Parto cesáreo' && l[2] === 3 && l[3] === 1));
+  }
+
   /* == 109. Consumo de antibióticos: DDD por prescrição e série mensal DOT/DDD (21/10/2026) == */
   {
     console.log('\n== 109. Consumo de antibióticos (DOT e DDD por 1.000 pacientes-dia) ==');

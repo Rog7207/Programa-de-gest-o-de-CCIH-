@@ -462,6 +462,14 @@ pendências abertas.
 
 ## 8. Notificação de IRAS — dupla assinatura
 
+A aba **Infecções** é dividida em cinco abas internas (05/11/2026): **A confirmar** (suspeitas
+aguardando a segunda assinatura, mais os cartões de duplicatas e de indeterminados), **A digitar
+no Tasy** (confirmadas aguardando a ficha/digitação), **Confirmadas e digitadas** (o que já é
+IRAS oficial, com busca; clique na linha para ver/trocar o agente ou a cirurgia),
+**Indicadores** (período, setor, série, gráficos e tabelas) e **Evoluções com sinais** (termos
+de infecção achados nas evoluções do Tasy — apartados porque trazem muita infecção
+comunitária; abra a suspeita só quando fizer sentido).
+
 Toda suspeita de infecção hospitalar — venha da revisão de culturas, da avaliação remota,
 do miniapp da UTI ou da vigilância pós-alta — entra como **"em investigação"**. A
 notificação oficial só nasce na **aba Infecções**, onde um segundo profissional:

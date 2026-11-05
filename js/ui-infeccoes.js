@@ -98,8 +98,32 @@ async function montarInfeccoes(conteudo) {
     .map(([v, r]) => el('option', { value: v }, r)));
   const area = el('div', {});
 
+  /* ---- Abas internas (pedido de 05/11/2026): a confirmar · a digitar · confirmadas ·
+     indicadores · evoluções. Cada bloco continua desenhando no seu próprio contêiner; a aba
+     só mostra um painel por vez. As evoluções com sinais ficam numa aba à parte porque
+     trazem muita infecção comunitária. ---- */
+  const paineis = { confirmar: el('div', {}), digitar: el('div', {}), confirmadas: el('div', {}), indicadores: el('div', {}), evolucoes: el('div', {}) };
+  const ABAS_INF = [
+    ['confirmar', 'A confirmar', () => casos.filter(k => k.StatusInvestigacao === 'em investigação').length],
+    ['digitar', 'A digitar no Tasy', () => casos.filter(k => k.StatusInvestigacao === 'confirmado' && String(k.DataInfeccao || '').slice(0, 10) >= (config.conciliacaoDesde || '') && !String(k.ForaDigitacaoEm || '').trim()).length],
+    ['confirmadas', 'Confirmadas e digitadas', () => casos.filter(k => k.StatusInvestigacao === 'digitado' || k.StatusInvestigacao === 'confirmado').length],
+    ['indicadores', 'Indicadores', () => null],
+    ['evolucoes', 'Evoluções com sinais', () => (paineis.evolucoes.querySelector('tbody') || { children: [] }).children.length]
+  ];
+  if (!ABAS_INF.some(([id]) => id === app.abaInfeccoes)) app.abaInfeccoes = 'confirmar';
+  const barraAbasInf = el('div', { class: 'abas-tela', role: 'tablist' });
+  function desenharAbasInf() {
+    barraAbasInf.replaceChildren(...ABAS_INF.map(([id, rotulo, conta]) => {
+      const n = conta();
+      return el('button', { class: 'aba-tela' + (id === app.abaInfeccoes ? ' aba-tela-atual' : ''), role: 'tab',
+        onclick: () => { app.abaInfeccoes = id; desenharAbasInf(); } }, rotulo + (n === null ? '' : ` (${fmtInt(n)})`));
+    }));
+    for (const [id] of ABAS_INF) paineis[id].style.display = id === app.abaInfeccoes ? '' : 'none';
+  }
+  conteudo.append(barraAbasInf, paineis.confirmar, paineis.digitar, paineis.confirmadas, paineis.indicadores, paineis.evolucoes);
+
   [campoDe, campoAte, selSetor, selSerie].forEach(c => c.addEventListener('change', desenhar));
-  conteudo.append(el('div', { class: 'cartao' },
+  paineis.indicadores.append(el('div', { class: 'cartao' },
     el('div', { class: 'linha-campos' },
       el('label', {}, 'De: ', campoDe), el('label', {}, 'Até: ', campoAte),
       el('label', {}, 'Setor: ', selSetor), el('label', {}, 'Série: ', selSerie)),
@@ -125,7 +149,7 @@ async function montarInfeccoes(conteudo) {
      AQUI, quando um segundo profissional confirma — ou morre como descartada, com o rastro
      de quem decidiu. */
   const areaSuspeitas = el('div', {});
-  conteudo.insertBefore(areaSuspeitas, area);
+  paineis.confirmar.append(areaSuspeitas);
 
   /* ---- Digitação no Tasy: fichas e conciliação (CCIH do HNSC, 22/09/2026) ----
      Confirmada aqui → ficha impressa (2 por página, arquivo guardado em fichas/) → digitada
@@ -133,14 +157,14 @@ async function montarInfeccoes(conteudo) {
      conciliação marca o caso como DIGITADO. A partir da data de início da conciliação, só o
      digitado conta nos relatórios. */
   const areaDigitacao = el('div', {});
-  conteudo.insertBefore(areaDigitacao, area);
+  paineis.digitar.append(areaDigitacao);
 
   /* ---- Evoluções que sugerem infecção (pedido de 25/09/2026) ----
      Busca determinística no texto da última evolução (febre, secreção purulenta, PAV, ITU,
      sepse…, com negações tratadas). Lista quem NÃO tem caso de IRAS nos últimos 14 dias; a
      suspeita abre com um clique e segue para a dupla assinatura como qualquer outra. */
   const areaEvolucoes = el('div', {});
-  conteudo.insertBefore(areaEvolucoes, area);
+  paineis.evolucoes.append(areaEvolucoes);
   function desenharEvolucoes() {
     const evolucoes = (bancoEvolucoes.evolucoes || []).filter(e => String(e.SinaisInfeccao || '').trim());
     if (!evolucoes.length) { areaEvolucoes.replaceChildren(); return; }
@@ -301,7 +325,7 @@ async function montarInfeccoes(conteudo) {
      o banco acumulou duplicatas de antes — e fundir REMOVE linhas, então só acontece com
      clique e confirmação, nunca sozinho. */
   const areaDuplicatas = el('div', {});
-  conteudo.insertBefore(areaDuplicatas, area);
+  paineis.confirmar.append(areaDuplicatas);
 
   function desenharDuplicatas() {
     const grupos = agruparCasosIrasDuplicados(casos, undefined, identidadeDe);
@@ -383,7 +407,7 @@ async function montarInfeccoes(conteudo) {
   /* ---- Indeterminados (decisão da CCIH, 21/10/2026): casos que um sistema antigo marcou como
      IRAS sem verificação. Fora das estatísticas até serem checados aqui. ---- */
   const areaIndeterminados = el('div', {});
-  conteudo.insertBefore(areaIndeterminados, area);
+  paineis.confirmar.append(areaIndeterminados);
   function desenharIndeterminados() {
     const indet = casos.filter(casoIndeterminado).sort((a, b) => String(b.DataInfeccao).localeCompare(String(a.DataInfeccao)));
     const aMarcar = marcarIndeterminados(JSON.parse(JSON.stringify(casos)), []).casos.length;
@@ -446,7 +470,7 @@ async function montarInfeccoes(conteudo) {
   function desenharSuspeitas() {
     const suspeitas = casos.filter(k => k.StatusInvestigacao === 'em investigação')
       .sort((a, b) => String(b.DataInfeccao).localeCompare(String(a.DataInfeccao)));
-    if (!suspeitas.length) { areaSuspeitas.replaceChildren(); return; }
+    if (!suspeitas.length) { areaSuspeitas.replaceChildren(el('div', { class: 'cartao' }, el('p', { class: 'texto-suave' }, 'Nenhuma suspeita aguardando confirmação.'))); return; }
     const tabela = el('table', { class: 'tabela' },
       el('thead', {}, el('tr', {}, ['Data', 'Paciente', 'Topografia', 'Setor', 'Origem', 'Notificou'].map(c => el('th', {}, c)))),
       el('tbody', {}, suspeitas.map(k => el('tr', { class: 'linha-clicavel', onclick: e => detalharSuspeita(k, e.currentTarget) },
@@ -791,6 +815,37 @@ async function montarInfeccoes(conteudo) {
     ].filter(Boolean));
   }
 
+  /* ---- Confirmadas e digitadas: a lista do que já é IRAS oficial, com busca. Clique na
+     linha para ver/trocar o agente ou a cirurgia (editarAgente). ---- */
+  const areaConfirmadas = el('div', {});
+  paineis.confirmadas.append(areaConfirmadas);
+  function desenharConfirmadas() {
+    const lista = casos.filter(k => k.StatusInvestigacao === 'digitado' || k.StatusInvestigacao === 'confirmado')
+      .sort((a, b) => String(b.DataInfeccao).localeCompare(String(a.DataInfeccao)));
+    const busca = el('input', { type: 'text', style: 'flex:1;min-width:260px', placeholder: 'Buscar: nome, prontuário, topografia, setor, agente ou data', value: app.buscaInfeccoes || '' });
+    const corpo = el('div', {});
+    const desenharLista = () => {
+      app.buscaInfeccoes = busca.value;
+      const f = lista.filter(k => casaBuscaLivre(busca.value, [nomes.get(normalizarProntuario(k.Prontuario)), k.Prontuario, k.Topografia, k.Setor, k.Microrganismo, k.DataInfeccao, k.ID_IRAS]));
+      corpo.replaceChildren(
+        el('p', { class: 'texto-suave' }, `${fmtInt(f.length)} caso(s)${f.length > 300 ? ' (mostrando os 300 mais recentes)' : ''} · ${fmtInt(f.filter(k => k.StatusInvestigacao === 'digitado').length)} digitado(s) no Tasy, ${fmtInt(f.filter(k => k.StatusInvestigacao === 'confirmado').length)} confirmado(s) aguardando digitação. Clique na linha para ver/trocar o agente ou a cirurgia; para corrigir outros campos, use "✎ editar" na ficha do paciente.`),
+        f.length ? el('table', { class: 'tabela' },
+          el('thead', {}, el('tr', {}, ['Data', 'Paciente', 'Setor', 'Topografia', 'Agente', 'Situação', 'Ficha', 'Notificou / Confirmou / Digitou'].map(c => el('th', {}, c)))),
+          el('tbody', {}, f.slice(0, 300).map(k => el('tr', { class: 'linha-clicavel', onclick: e => editarAgente(k, e.currentTarget) },
+            [k.DataInfeccao, nomes.get(normalizarProntuario(k.Prontuario)) || k.Prontuario, k.Setor, k.Topografia,
+             (k.Microrganismo || '') + (k.ID_CulturaAgente ? ' ✓' : ''), k.StatusInvestigacao, k.FichaEm,
+             [k.CriadoPor, k.ConfirmadoPor, k.DigitadoPor].filter(Boolean).join(' / ')].map(v => el('td', {}, String(v || '')))))))
+          : el('p', { class: 'texto-suave' }, 'Nenhum caso.'));
+    };
+    busca.addEventListener('input', desenharLista);
+    areaConfirmadas.replaceChildren(el('div', { class: 'cartao' },
+      el('h2', {}, 'Confirmadas e digitadas'),
+      el('div', { class: 'linha-campos' }, el('label', { style: 'flex:1;display:flex;gap:8px;align-items:center' }, '🔎 ', busca)),
+      corpo));
+    desenharLista();
+  }
+  desenharConfirmadas();
+
   function exportar() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filtradasAtuais.map(c => ({
@@ -812,4 +867,5 @@ async function montarInfeccoes(conteudo) {
   }
 
   desenhar();
+  desenharAbasInf();
 }

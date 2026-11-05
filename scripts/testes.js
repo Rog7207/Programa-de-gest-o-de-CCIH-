@@ -5203,7 +5203,7 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     window: { open: () => null }, localStorage: { getItem: () => null, setItem: () => {} },
     TIPOS_ISC: { superficial: 'ISC incisional superficial' },
     JANELA_VIGILANCIA: imp.JANELA_VIGILANCIA || { inicioDias: 30, fimDias: 120, implanteDias: 90 },
-    classificarParaVigilancia: imp.classificarParaVigilancia,
+    classificarParaVigilancia: imp.classificarParaVigilancia, etapa90: imp.etapa90, contato90Respondido: imp.contato90Respondido, JANELA_VIGILANCIA: imp.JANELA_VIGILANCIA,
     diasDesde: imp.diasDesde, telefoneWhatsApp: imp.telefoneWhatsApp,
     mensagemVigilancia: imp.mensagemVigilancia, linkWhatsApp: imp.linkWhatsApp,
     normalizarProntuario: imp.normalizarProntuario,
@@ -6387,8 +6387,10 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
         { ID_Cirurgia: '3', Prontuario: 'P3', DataCirurgia: '2026-08-07', Procedimento: 'Cesariana', ProcedimentoNHSN: 'Cesariana', StatusVigilancia: 'sob vigilância' },
         { ID_Cirurgia: '4', Prontuario: 'P4', DataCirurgia: '2026-07-07', Procedimento: 'Cesariana', ProcedimentoNHSN: 'Cesariana', StatusVigilancia: 'sem infecção' },
         { ID_Cirurgia: '5', Prontuario: 'P5', DataCirurgia: '2026-06-10', Procedimento: 'Artroplastia Total Primária Do Joelho', ProcedimentoNHSN: 'Artroplastia de joelho', StatusVigilancia: 'infecção confirmada', ISC: 'S', TipoISC: 'órgão/espaço' },
-        { ID_Cirurgia: '6', Prontuario: 'P6', DataCirurgia: '2026-06-11', Procedimento: 'Artroplastia Total Primária Do Joelho', ProcedimentoNHSN: 'Artroplastia de joelho', StatusVigilancia: 'sem infecção' },
+        /* prótese: "sem infecção" aos 30 d só vale como resposta com o contato de 90 dias registrado */
+        { ID_Cirurgia: '6', Prontuario: 'P6', DataCirurgia: '2026-06-11', Procedimento: 'Artroplastia Total Primária Do Joelho', ProcedimentoNHSN: 'Artroplastia de joelho', StatusVigilancia: 'sem infecção', Contato90Em: '2026-09-12', Contato90Por: 'Enf' },
         { ID_Cirurgia: '7', Prontuario: 'P7', DataCirurgia: '2026-07-11', Procedimento: 'Artroplastia Total Primária Do Joelho', ProcedimentoNHSN: 'Artroplastia de joelho', StatusVigilancia: 'sem infecção' },
+        { ID_Cirurgia: '9', Prontuario: 'P9', DataCirurgia: '2026-06-12', Procedimento: 'Artroplastia Total Primária Do Joelho', ProcedimentoNHSN: 'Artroplastia de joelho', StatusVigilancia: 'sem infecção' },
         { ID_Cirurgia: '8', Prontuario: 'P8', DataCirurgia: '2026-08-12', Procedimento: 'Herniorrafia Inguinal', ProcedimentoNHSN: 'Herniorrafia', PotencialContaminacao: 'Limpa', StatusVigilancia: 'sem infecção' }
       ] },
       iras: { casos: [
@@ -6411,8 +6413,14 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       /cirurgias de 08\/2026/.test(t30.titulo) && t30.linhas[0][1] === 3 && t30.linhas[0][2] === 2 && t30.linhas[0][3] === 1 && t30.linhas[0][4] === '33%' && /1 incisional/.test(t30.linhas[0][5]), JSON.stringify(t30.linhas[0]));
     verificar('outras cirurgias em vigilância (30 d): a herniorrafia limpa de agosto conta; julho não', t30.linhas[1][1] === 1);
     const joelho = t90.linhas.find(l => /joelho/.test(l[0]));
-    verificar('90 dias vencidos em setembro = cirurgias de junho: 2 joelhos, 2 respostas, 1 ISC órgão/cavidade, 50%',
-      /06\/2026/.test(t90.titulo) && joelho[1] === 2 && joelho[2] === 2 && joelho[3] === 1 && joelho[4] === '50%' && /1 órgão\/cavidade/.test(joelho[5]), JSON.stringify(joelho));
+    verificar('90 dias vencidos em setembro = cirurgias de junho: 3 joelhos, 2 respostas (ISC + contato de 90 d; o "sem infecção" só de 30 d não conta), 1 ISC órgão/cavidade, 33%',
+      /06\/2026/.test(t90.titulo) && joelho[1] === 3 && joelho[2] === 2 && joelho[3] === 1 && joelho[4] === '33%' && /1 órgão\/cavidade/.test(joelho[5]), JSON.stringify(joelho));
+    verificar('etapa90: prótese sem infecção aos 30 d → "aguardando" antes de 90 d, "a fazer" depois, "feito" com Contato90Em; cesariana não tem etapa',
+      imp.etapa90({ Procedimento: 'Artroplastia Total Primária Do Joelho', StatusVigilancia: 'sem infecção', DataCirurgia: '2026-08-20' }, '2026-11-05') === 'aguardando'
+      && imp.etapa90({ Procedimento: 'Artroplastia Total Primária Do Joelho', StatusVigilancia: 'sem infecção', DataCirurgia: '2026-07-20' }, '2026-11-05') === 'a fazer'
+      && imp.etapa90({ Procedimento: 'Artroplastia Total Primária Do Joelho', StatusVigilancia: 'sem infecção', DataCirurgia: '2026-07-20', Contato90Em: '2026-10-20' }, '2026-11-05') === 'feito'
+      && imp.etapa90({ Procedimento: 'Cesariana', StatusVigilancia: 'sem infecção', DataCirurgia: '2026-07-20' }, '2026-11-05') === ''
+      && imp.contato90Respondido({ Contato90Em: 'sem contato' }) === false && imp.contato90Respondido({ Contato90Em: '2026-10-20' }) === true);
     const uti = r.secoes[2];
     verificar('UTI adulto: 100 pacientes-dia; CVC 50 dias, 1 IPCS (descartada fora) = 20/1.000, utilização 50%',
       uti.itens[0][1] === 100 && /^50 · 1 · 20 · 50%$/.test(uti.itens[1][1]) && /^40 · 1 · 25 · 40%$/.test(uti.itens[2][1]), JSON.stringify(uti.itens));

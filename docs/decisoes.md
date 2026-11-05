@@ -124,6 +124,13 @@ profilaxia 1714, óbitos 836, NISS 3066.
 - Achado no banco local (jun–out/2026): efetividade baixíssima — cesárea 19% com desfecho após
   a janela, quadril/joelho 0% (sob vigilância sem contato); 35 RM "dispensadas" na triagem.
 
+## Contato de 90 dias e dispensas (05/11/2026)
+- Decisão dele: reabrir TODAS as cirurgias de notificação à Anvisa dispensadas na triagem
+  (`reabrir-cirurgias-anvisa.js`, 50 reabertas na cópia de 05/11) e organizar o contato de 90
+  dias: aba "Contato de 90 dias" na Pós-alta (`etapa90`: prótese + "sem infecção" aos 30 d →
+  aguardando/a fazer/feito; Contato90Em/Contato90Por; "sem contato" quando não respondeu).
+  Relatórios Anvisa: prótese só tem resposta/desfecho com o contato de 90 d ou ISC.
+
 ## Relatório ANVISA (05/11/2026)
 - `relatorioAnvisa` (Relatórios → "Relatório ANVISA (notificação mensal)"): só números. Mês de
   vigilância = mês do fim do período. ISC 30 d = cirurgias do mês anterior ao de vigilância;

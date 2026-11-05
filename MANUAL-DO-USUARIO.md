@@ -628,6 +628,15 @@ a busca ativa, "Confirmar triagem" vale só para as cirurgias listadas.
 
 ---
 
+**Contato de 90 dias (prótese/implante)**: nas cirurgias com prótese a vigilância tem duas
+etapas. O contato de 30 dias segue o fluxo normal (Enviados → "Registrar resposta" → sem
+infecção). Aos 90 dias a cirurgia reaparece na aba **"Contato de 90 dias"**, com o botão
+"Registrar contato de 90 d": sem infecção (grava a data do 2º contato), abrir investigação
+de ISC ou sem resposta. O rodapé diz quantas ainda vão completar 90 dias. Nos relatórios da
+Anvisa, para prótese só conta como resposta o contato de 90 dias (ou a ISC). Cirurgias de
+notificação à Anvisa não podem ser dispensadas na triagem (`scripts/reabrir-cirurgias-anvisa.js`
+reabre as que foram).
+
 **Relatório "ISC — procedimentos de notificação à Anvisa"** (aba Relatórios): cesariana,
 artroplastia primária de quadril e de joelho, implante de prótese mamária, derivação
 ventricular interna e revascularização do miocárdio, identificados pelo **nome cru** do

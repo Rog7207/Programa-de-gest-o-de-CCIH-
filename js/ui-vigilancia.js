@@ -390,7 +390,10 @@ async function montarVigilancia(conteudo) {
      O que a enfermeira ouviu (a conversa) e o que ela acha (a avaliação) são registros
      separados no diário — quem valida depois lê os dois. O mesmo card resolve os dois
      desfechos: sem infecção ou abrir investigação de ISC. */
-  function cartaoResposta(c, tr) {
+  /* opcoes.etapa90: contato de 90 dias de cirurgia com prótese — "sem infecção" grava
+     Contato90Em em vez de mudar a situação (que já é "sem infecção" desde os 30 d). */
+  function cartaoResposta(c, tr, opcoes) {
+    const etapa90 = !!(opcoes && opcoes.etapa90);
     const campoConversa = el('textarea', { rows: 3, style: 'width:100%',
       placeholder: 'o que o paciente/família relatou na conversa (ferida, febre, secreção, retorno…)' });
     const campoAvaliacao = el('textarea', { rows: 2, style: 'width:100%',
@@ -408,7 +411,8 @@ async function montarVigilancia(conteudo) {
       try {
         await mudarStatusCirurgia(c.ID_Cirurgia, alvo => {
           registrarDiario(alvo);
-          alvo.StatusVigilancia = 'sem infecção';
+          if (etapa90) { anotar(alvo, '', 'Contato de 90 dias: sem infecção.'); alvo.Contato90Em = hoje; alvo.Contato90Por = app.usuario; }
+          else alvo.StatusVigilancia = 'sem infecção';
           alvo.UltimoContato = hoje;
         });
         recarregar();
@@ -421,8 +425,8 @@ async function montarVigilancia(conteudo) {
       try {
         await mudarStatusCirurgia(c.ID_Cirurgia, alvo => {
           registrarDiario(alvo);
-          anotar(alvo, '', 'Sem resposta às tentativas de contato.');
-          alvo.StatusVigilancia = 'encerrada sem contato';
+          if (etapa90) { anotar(alvo, '', 'Contato de 90 dias: sem resposta.'); alvo.Contato90Em = 'sem contato'; alvo.Contato90Por = app.usuario; }
+          else { anotar(alvo, '', 'Sem resposta às tentativas de contato.'); alvo.StatusVigilancia = 'encerrada sem contato'; }
         });
         recarregar();
       } catch (e) { msg.textContent = e.message; }
@@ -462,7 +466,7 @@ async function montarVigilancia(conteudo) {
     };
 
     detalharNaLinha(tr, el('div', { class: 'cartao cartao-detalhe' },
-      el('h2', {}, 'Resposta da vigilância — ' + (nomeDe(c) || c.Prontuario)),
+      el('h2', {}, (etapa90 ? 'Contato de 90 dias — ' : 'Resposta da vigilância — ') + (nomeDe(c) || c.Prontuario)),
       el('label', {}, 'Relato do paciente (a conversa): ', campoConversa),
       el('label', {}, 'Avaliação da enfermagem: ', campoAvaliacao),
       el('div', { class: 'linha-campos' },
@@ -534,6 +538,35 @@ async function montarVigilancia(conteudo) {
                 } catch (e) { alert(e.message); }
               } }, 'Encerrar sem contato')
             : botaoReverter(c, 'sob vigilância', alvo => { alvo.MensagemEnviadaEm = ''; })))))));
+  }
+
+  /* ---- 4b. Contato de 90 dias (prótese/implante): segunda etapa da vigilância (05/11/2026) ----
+     "Sem infecção" aos 30 dias não fecha uma prótese: aos 90 dias há um segundo contato,
+     gravado em Contato90Em. A fila mostra o que já completou 90 dias; o rodapé diz quantas
+     ainda vão chegar lá. */
+  const contato90AFazer = banco.cirurgias.filter(c => doMes(c) && !faleceu(c) && etapa90(c, hoje) === 'a fazer')
+    .sort((a, b) => String(a.DataCirurgia).localeCompare(String(b.DataCirurgia)));
+  const contato90Aguardando = banco.cirurgias.filter(c => doMes(c) && !faleceu(c) && etapa90(c, hoje) === 'aguardando').length;
+  function secaoContato90(lista) {
+    const rodape = el('p', { class: 'texto-suave' },
+      `Cirurgias com prótese/implante que já passaram de ${JANELA_VIGILANCIA.implanteDias} dias e tiveram "sem infecção" no contato de 30 dias. `
+      + (contato90Aguardando ? `${fmtInt(contato90Aguardando)} ainda não completaram ${JANELA_VIGILANCIA.implanteDias} dias e entrarão aqui depois.` : ''));
+    if (!lista.length) return el('div', { class: 'cartao' }, el('p', { class: 'texto-suave' }, buscaAtiva() ? 'Nenhum contato de 90 dias com esta busca.' : 'Nenhum contato de 90 dias pendente.'), rodape);
+    return el('div', { class: 'cartao' },
+      el('h2', {}, `Contato de 90 dias — ${fmtInt(lista.length)} a fazer`),
+      el('table', { class: 'tabela' },
+        el('thead', {}, el('tr', {}, ['Cirurgia', 'Paciente', 'Procedimento', 'Contato de 30 d', 'Contato', 'Desfecho aos 90 d'].map(t => el('th', {}, t)))),
+        el('tbody', {}, lista.map(c => el('tr', {},
+          el('td', {}, c.DataCirurgia, el('span', { class: 'texto-suave' }, ` (${idadePosOp(c)}d)`)),
+          el('td', { class: 'linha-clicavel', onclick: () => abrirPaciente(c.Prontuario) }, nomeDe(c) || c.Prontuario),
+          el('td', {}, String(c.Procedimento || '').slice(0, 50), seloImplante(c)),
+          el('td', {}, c.UltimoContato ? `sem infecção em ${c.UltimoContato}` : 'sem infecção'),
+          el('td', {}, linhaContato(c, true)),
+          el('td', {}, el('div', { class: 'linha-botoes' },
+            el('button', { class: 'botao-primario', title: 'Registrar o contato de 90 dias (sem infecção, investigação ou sem resposta)',
+              onclick: e => cartaoResposta(c, e.currentTarget.closest('tr'), { etapa90: true }) }, '📞 Registrar contato de 90 d'),
+            botaoMaisObservacao(c))))))),
+      rodape);
   }
 
   /* ---- 5. Em investigação: validar ---- */
@@ -653,12 +686,13 @@ async function montarVigilancia(conteudo) {
     { id: 'triagem', rotulo: 'Triagem', lista: () => triagem.filter(casa) },
     { id: 'envio', rotulo: 'Aguardando envio', lista: () => sobVigilancia.filter(casa) },
     { id: 'enviados', rotulo: 'Enviados', lista: () => enviadas.filter(casa) },
+    { id: 'contato90', rotulo: 'Contato de 90 dias', lista: () => contato90AFazer.filter(casa) },
     { id: 'investigacao', rotulo: 'Em investigação', lista: () => investigacoes.filter(casa) },
     { id: 'encerradas', rotulo: 'Encerradas', lista: () => [].concat(...encerradasTodas).filter(casa) }
   ];
   if (!ABAS_VIG.some(a => a.id === app.abaVigilancia)) {
     /* 1ª abertura: a primeira aba com trabalho a fazer */
-    app.abaVigilancia = (ABAS_VIG.slice(0, 4).find(a => a.lista().length) || ABAS_VIG[0]).id;
+    app.abaVigilancia = (ABAS_VIG.slice(0, 5).find(a => a.lista().length) || ABAS_VIG[0]).id;
   }
   campoBusca.value = app.buscaVigilancia || '';
   const barraAbas = el('div', { class: 'abas-tela', role: 'tablist' });
@@ -694,6 +728,7 @@ async function montarVigilancia(conteudo) {
       aba === 'triagem' ? secaoTriagem(lista)
       : aba === 'envio' ? el('div', {}, cartaoModelo, secaoAguardandoEnvio(lista))
       : aba === 'enviados' ? secaoEnviados(lista)
+      : aba === 'contato90' ? secaoContato90(lista)
       : aba === 'investigacao' ? secaoInvestigacao(lista)
       : secaoEncerradas(l => l.filter(casa)));
   }

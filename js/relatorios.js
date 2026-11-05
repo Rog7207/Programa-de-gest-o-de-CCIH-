@@ -640,7 +640,10 @@ function relatorioISCAnvisa(bancos, setoresEscopo, inicio, fim) {
     const lista = dentro.filter(x => x.a.codigo === codigo);
     const cir = lista.map(x => x.c);
     const janelaVencida = cir.filter(c => addDias(c.DataCirurgia, janelaDe(c)) <= hoje);
-    const comDesfecho = janelaVencida.filter(c => c.ISC === 'S' || normalizarTexto(c.StatusVigilancia) === 'seminfeccao');
+    /* Nos procedimentos de 90 dias, "sem infecção" aos 30 d não é desfecho: precisa do
+       contato de 90 dias (Contato90Em). */
+    const desfechoDe = c => c.ISC === 'S' || (normalizarTexto(c.StatusVigilancia) === 'seminfeccao' && (janelaDe(c) === ISC_JANELA_DIAS || (typeof contato90Respondido === 'function' && contato90Respondido(c))));
+    const comDesfecho = janelaVencida.filter(desfechoDe);
     const isc = cir.filter(c => c.ISC === 'S');
     const porTipo = relContar(isc, tipoIsc);
     const janelaEsperada = ['CSEC'].includes(codigo) ? ISC_JANELA_DIAS : ISC_JANELA_IMPLANTE_DIAS;
@@ -661,6 +664,7 @@ function relatorioISCAnvisa(bancos, setoresEscopo, inicio, fim) {
       if (st(c) === 'dispensada') problemas.push([...base, 'dispensada na triagem — procedimento de notificação obrigatória deveria estar em vigilância']);
       else if (st(c) === 'pendente' && addDias(c.DataCirurgia, 7) <= hoje) problemas.push([...base, 'pendente de triagem há mais de 7 dias']);
       else if (['sob vigilância'].includes(st(c)) && addDias(c.DataCirurgia, janelaDe(c)) <= hoje) problemas.push([...base, 'janela de vigilância vencida sem contato registrado']);
+      else if (st(c) === 'sem infecção' && janelaDe(c) === ISC_JANELA_IMPLANTE_DIAS && addDias(c.DataCirurgia, janelaDe(c)) <= hoje && !(typeof contato90Respondido === 'function' && contato90Respondido(c)) && !/sem contato/i.test(String(c.Contato90Em || ''))) problemas.push([...base, 'sem infecção aos 30 dias, mas falta o contato de 90 dias (aba Pós-alta → Contato de 90 dias)']);
       if (janelaDe(c) !== janelaEsperada) problemas.push([...base, `janela de ${janelaDe(c)} dias — esperado ${janelaEsperada} (categoria de vigilância "${categoriaDeVigilancia(c)}")`]);
       if (codigo !== 'CSEC' && !String(c.ProcedimentoNHSN || '').trim()) problemas.push([...base, 'sem categoria NHSN — revisar vocabulário de procedimentos']);
       if (c.ISC === 'S' && tipoIsc(c) === 'superficial' && (diasAteDeteccao(c) || 0) > 30) problemas.push([...base, `ISC superficial detectada ${diasAteDeteccao(c)} dias após a cirurgia — pela NT 03/2025 a superficial só conta até 30 dias`]);
@@ -721,8 +725,9 @@ function relatorioAnvisa(bancos, setoresEscopo, inicio, fim) {
     const t = normalizarTexto(c.TipoISC) + ' ' + normalizarTexto((casoDe(c) || {}).Topografia);
     return /orgao|espaco|cavidade/.test(t) ? 'órgão/cavidade' : /superfic|profund|incisional/.test(t) ? 'incisional' : 'sem tipo';
   };
-  const linhaCirurgias = (rotulo, lista) => {
-    const respostas = lista.filter(c => RESPOSTAS.includes(st(c))).length;
+  const linhaCirurgias = (rotulo, lista, de90) => {
+    /* Tabela de 90 dias: a resposta que vale é a do contato de 90 dias (ou a ISC). */
+    const respostas = lista.filter(c => de90 ? (c.ISC === 'S' || ['em investigação', 'infecção confirmada'].includes(st(c)) || (typeof contato90Respondido === 'function' && contato90Respondido(c))) : RESPOSTAS.includes(st(c))).length;
     const isc = lista.filter(c => c.ISC === 'S');
     const inc = isc.filter(c => tipoIsc(c) === 'incisional').length, org = isc.filter(c => tipoIsc(c) === 'órgão/cavidade').length;
     return [rotulo, lista.length, respostas, isc.length, relPct(isc.length, lista.length), `${inc} incisional · ${org} órgão/cavidade${isc.length - inc - org ? ' · ' + (isc.length - inc - org) + ' sem tipo' : ''}`];
@@ -739,7 +744,7 @@ function relatorioAnvisa(bancos, setoresEscopo, inicio, fim) {
   /* 90 dias: cirurgias de três meses antes do mês de vigilância */
   const m90 = _mesRelativo(mesVig.mes, -3);
   const c90 = cirurgiasTodas.filter(c => relPeriodo(c.DataCirurgia, m90.inicio, m90.fim));
-  const linhas90 = PROCEDIMENTOS_ANVISA.filter(([cod]) => cod !== 'CSEC').map(([cod, rotulo]) => linhaCirurgias(rotulo, c90.filter(c => anvisaDe(c).codigo === cod)));
+  const linhas90 = PROCEDIMENTOS_ANVISA.filter(([cod]) => cod !== 'CSEC').map(([cod, rotulo]) => linhaCirurgias(rotulo, c90.filter(c => anvisaDe(c).codigo === cod), true));
 
   /* UTI: censo NISS + IRAS do mês de vigilância + agentes com resistência */
   const sens = indiceSensibilidade(bancos);

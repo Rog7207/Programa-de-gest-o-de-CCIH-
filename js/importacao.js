@@ -3810,6 +3810,21 @@ function procedimentoAnvisa(cirurgia) {
   return { codigo: '', candidato: '', rotulo: '', motivo: '' };
 }
 
+/* Contato de 90 dias (05/11/2026): nas cirurgias com prótese/implante a vigilância tem DUAS
+   etapas — o contato de 30 dias (que fecha "sem infecção") e um segundo contato aos 90 dias,
+   registrado em Contato90Em/Contato90Por ("sem contato" quando o paciente não respondeu). */
+function etapa90(cirurgia, hoje) {
+  if (categoriaDeVigilancia(cirurgia) !== 'implante') return '';
+  if (String(cirurgia.StatusVigilancia || '') !== 'sem infecção') return '';
+  if (String(cirurgia.Contato90Em || '').trim()) return 'feito';
+  const dias = diasDesde(cirurgia.DataCirurgia, hoje);
+  if (dias === null) return '';
+  return dias >= JANELA_VIGILANCIA.implanteDias ? 'a fazer' : 'aguardando';
+}
+function contato90Respondido(cirurgia) {
+  return /^\d{4}-\d{2}-\d{2}/.test(String(cirurgia.Contato90Em || '').trim());
+}
+
 /* Reimportação do relatório do centro cirúrgico: a cirurgia já existe, mas o arquivo novo
    traz o que faltava (telefone — o arquivo de setembro/2026 veio com a coluna vazia e o
    seguinte com os números; caráter; cirurgião). Completa só campos VAZIOS. */
@@ -5164,7 +5179,7 @@ function normalizarDispositivo(valor) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    editarRegistro, procedimentoAnvisa, PROCEDIMENTOS_ANVISA, atualizarCirurgiasExistentes,
+    editarRegistro, procedimentoAnvisa, PROCEDIMENTOS_ANVISA, atualizarCirurgiasExistentes, etapa90, contato90Respondido, JANELA_VIGILANCIA,
     textoEvolucaoNormalizado,
     normalizarData, normalizarProntuario, normalizarValorAntibiograma,
     sugerirMapeamento, normalizarLinhas, validar, deduplicar, chaveNaturalDe, proximoID,

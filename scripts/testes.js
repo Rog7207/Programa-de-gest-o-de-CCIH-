@@ -6248,7 +6248,10 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       && col.grupoDoSwab({ SitioSwab: 'orofaringe', Setor: 'CTI - Dr. Joaquim' }) === 'uti_adulto'
       && col.grupoDoSwab({ SitioSwab: 'retal', Setor: 'UTI Neonatal / Pediátrica' }) === 'outros'
       && col.grupoDoSwab({ SitioSwab: 'perianal', Setor: 'Centro Obstétrico' }) === 'outros'
-      && col.grupoDoSwab({ SitioSwab: '', Setor: 'CTI' }) === 'outros');
+      /* sem sítio (laudo genérico "Swab de vigilância") segue o SETOR — decisão de 05/11/2026 */
+      && col.grupoDoSwab({ SitioSwab: '', Setor: 'CTI' }) === 'uti_adulto'
+      && col.grupoDoSwab({ SitioSwab: '', Setor: 'Unidade 08' }) === 'admissao_adulto'
+      && col.grupoDoSwab({ SitioSwab: '', Material: 'Swab vaginal (pesquisa de SGB)', Setor: 'Centro Obstétrico' }) === 'outros');
     const r1 = col.resultadoDoSwab({ Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: 'ESBL' }, []);
     const r2 = col.resultadoDoSwab({ Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: '' }, [{ Antibiotico: 'Meropenem', Resultado: 'R' }]);
     const r3 = col.resultadoDoSwab({ Microrganismo: 'Streptococcus agalactiae (grupo B)', MecanismoResistencia: '' }, []);

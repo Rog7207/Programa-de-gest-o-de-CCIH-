@@ -7,7 +7,7 @@ const COLONIZACAO_ABAS = [
   ['nasal_adulto', 'Nasal — adultos', 'Rastreio de MRSA (pré-operatório de cirurgia cardíaca).'],
   ['admissao_adulto', 'Retal/orofaringe — fora da UTI', 'Admissão e transferidos de outras instituições: gram-negativos resistentes.'],
   ['uti_adulto', 'Retal/orofaringe — UTI adulto', 'Vigilância semanal da UTI (4º dia e a cada 7): aquisições e clusters.'],
-  ['outros', 'Outros', 'Neonatal/pediátrica, pesquisa de SGB e swabs sem sítio identificado no laudo.']
+  ['outros', 'Outros', 'Neonatal/pediátrica e pesquisa de SGB (perianal/vaginal).']
 ];
 
 async function montarColonizacao(conteudo) {
@@ -55,7 +55,7 @@ async function montarColonizacao(conteudo) {
 
     const partes = [
       el('div', { class: 'linha-campos' }, el('label', {}, 'Período: ', selDias),
-        painel.semSitio ? el('span', { class: 'texto-suave' }, `${fmtInt(painel.semSitio)} swab(s) do período sem sítio no laudo (ficam em "Outros").`) : null),
+        painel.semSitio ? el('span', { class: 'texto-suave' }, `${fmtInt(painel.semSitio)} swab(s) do período sem sítio no laudo (entram pelo setor; sítio "—").`) : null),
       cartaoAlertas, abasEl,
       el('div', { class: 'cartao' },
         el('p', { class: 'texto-suave' }, descricao),

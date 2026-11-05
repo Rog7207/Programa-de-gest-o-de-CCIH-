@@ -40,11 +40,14 @@ function ehSwabVigilancia(cultura) {
 function _setorUTIAdultoCol(setor) { const s = String(setor || ''); return /\bcti\b|\buti\b/i.test(s) && !/neonat|pedi|bercario/i.test(s); }
 function _setorPediatricoCol(setor) { return /neonat|pedi|bercario|rn\b/i.test(String(setor || '')); }
 
-/* Grupo (aba) de um swab. */
+/* Grupo (aba) de um swab. Decisão de 05/11/2026: separar só por SETOR — muito swab retal/
+   oral chega como "Swab de vigilância" sem sítio e não pode cair em "outros". Só o nasal em
+   adulto tem aba própria; pediátrico e pesquisa de SGB vão para "outros". */
 function grupoDoSwab(cultura) {
   const sitio = String(cultura.SitioSwab || '').trim();
   const ped = _setorPediatricoCol(cultura.Setor);
-  if (ped || !sitio || sitio === 'perianal' || sitio === 'vaginal') return 'outros';
+  const sgb = sitio === 'perianal' || sitio === 'vaginal' || /sgb|grupob/.test(normalizarTexto(cultura.Material));
+  if (ped || sgb) return 'outros';
   if (sitio === 'nasal') return 'nasal_adulto';
   return _setorUTIAdultoCol(cultura.Setor) ? 'uti_adulto' : 'admissao_adulto';
 }

@@ -100,7 +100,8 @@ profilaxia 1714, óbitos 836, NISS 3066.
 ## Vigilância de colonização (03/11/2026)
 - Aba "Colonização" (js/colonizacao.js puro + ui-colonizacao.js). Sítio do swab em
   `SitioSwab` (importação lê o material cru; `preencher-sitio-swab.js` reprocessa os PDFs).
-  Grupos: nasal adulto / retal-orofaringe fora da UTI / UTI adulto / outros. Positivo =
+  Grupos por SETOR (05/11/2026: muito swab chega sem sítio): nasal adulto (aba própria) /
+  fora da UTI / UTI adulto / outros (pediátrico e SGB). Positivo =
   carbapenem-R, MRSA, VRE (ESBL fora). UTI: rotina 4º dia e a cada 7 (em revisão) → acusa
   > 9 dias sem swab; aquisição = negativo → positivo em ≤ 45 d; cluster = 2+ aquisições do
   mesmo mecanismo na semana. SGB: alerta próprio (profilaxia intraparto), não isolamento.

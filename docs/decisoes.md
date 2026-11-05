@@ -113,6 +113,14 @@ profilaxia 1714, óbitos 836, NISS 3066.
   (`procedimentoAnvisa`, importacao.js); relatório `relatorioISCAnvisa` com efetividade e lista
   de problemas. Correções no classificador: DVI é VSHN (caía em "Cirurgia cardíaca"); ponte
   femuro-poplítea é PVBY (caía em RM). DVI e RM passaram a 90 dias (lista NHSN/Anvisa).
+- 05/11/2026 (2ª rodada): nome ÚNICO por procedimento no classificador — "Prótese de mama"
+  (só com menção a prótese/expansor/implante; o resto segue "Cirurgia de mama"), "Derivação
+  ventricular interna" × "Derivação ventricular externa", "Revisão de artroplastia de
+  quadril/joelho" separadas das primárias (parcial e "qualquer técnica" entram como
+  primárias — decisão dele: todas entram). Prazo pela NT 03/2025: superficial 30 d sempre;
+  profunda/órgão 90 d nos 5 procedimentos com implante. Reimportação de cirurgia agora
+  completa telefone/caráter vazios (`atualizarCirurgiasExistentes`); retroativo com
+  `scripts/preencher-telefones-cirurgias.js`; `reclassificar-cirurgias.js` aplica os nomes.
 - Achado no banco local (jun–out/2026): efetividade baixíssima — cesárea 19% com desfecho após
   a janela, quadril/joelho 0% (sob vigilância sem contato); 35 RM "dispensadas" na triagem.
 

@@ -631,9 +631,13 @@ a busca ativa, "Confirmar triagem" vale só para as cirurgias listadas.
 **Relatório "ISC — procedimentos de notificação à Anvisa"** (aba Relatórios): cesariana,
 artroplastia primária de quadril e de joelho, implante de prótese mamária, derivação
 ventricular interna e revascularização do miocárdio, identificados pelo **nome cru** do
-procedimento (revisões, DVE, ponte periférica e cirurgia de mama sem prótese ficam de fora,
-listadas à parte com o motivo). Para cada um: cirurgias, quantas entraram na vigilância,
-pendentes de triagem, dispensadas, janela vencida (30 d na cesariana, 90 d nos demais),
+procedimento, com **um nome único por procedimento** no vocabulário ("Prótese de mama" só com
+menção a prótese; "Derivação ventricular interna"; "Artroplastia de quadril/joelho" = primária,
+"Revisão de artroplastia…" à parte; revisões, DVE, ponte periférica e cirurgia de mama sem
+prótese ficam de fora, listadas com o motivo). Prazo pela NT 03/2025 da Anvisa: **superficial
+até 30 dias sempre; profunda e órgão/cavidade até 90 dias** nos cinco procedimentos com
+implante (cesariana: 30). Para cada um: cirurgias, quantas entraram na vigilância,
+pendentes de triagem, dispensadas, janela vencida,
 **efetividade** (desfecho conhecido quando a janela venceu), ISC por tipo e taxa; tabela mês ×
 procedimento para a notificação; e a lista de **problemas a resolver antes de notificar**
 (dispensada na triagem, pendente há mais de 7 dias, janela vencida sem contato, nome ambíguo).

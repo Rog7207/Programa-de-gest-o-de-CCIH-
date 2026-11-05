@@ -624,10 +624,13 @@ function relatorioISCAnvisa(bancos, setoresEscopo, inicio, fim) {
   const RESPOSTAS = ['sem infecção', 'em investigação', 'infecção confirmada'];
   const janelaDe = c => categoriaDeVigilancia(c) === 'implante' ? ISC_JANELA_IMPLANTE_DIAS : ISC_JANELA_DIAS;
   const addDias = (iso, n) => new Date(Date.parse(String(iso).slice(0, 10) + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+  const casoDe = c => casosIras.find(k => k.ID_IRAS === c.ID_IRAS) || null;
   const tipoIsc = c => {
-    const t = normalizarTexto(c.TipoISC) + ' ' + normalizarTexto((casosIras.find(k => k.ID_IRAS === c.ID_IRAS) || {}).Topografia);
+    const t = normalizarTexto(c.TipoISC) + ' ' + normalizarTexto((casoDe(c) || {}).Topografia);
     return /orgao|espaco|cavidade/.test(t) ? 'órgão/espaço' : /profund/.test(t) ? 'profunda' : /superfic/.test(t) ? 'superficial' : 'tipo não informado';
   };
+  /* NT 03/2025: superficial conta só até 30 dias, mesmo nos procedimentos de 90. */
+  const diasAteDeteccao = c => { const k = casoDe(c); const d = k ? String(k.DataDeteccao || k.DataInfeccao || '').slice(0, 10) : ''; return /^\d{4}-/.test(d) ? Math.round((Date.parse(d + 'T00:00:00Z') - Date.parse(String(c.DataCirurgia).slice(0, 10) + 'T00:00:00Z')) / 864e5) : null; };
   const classificadas = todas.map(c => ({ c, a: procedimentoAnvisa(c) }));
   const dentro = classificadas.filter(x => x.a.codigo);
   const candidatasFora = classificadas.filter(x => !x.a.codigo && x.a.candidato);
@@ -660,7 +663,8 @@ function relatorioISCAnvisa(bancos, setoresEscopo, inicio, fim) {
       else if (['sob vigilância'].includes(st(c)) && addDias(c.DataCirurgia, janelaDe(c)) <= hoje) problemas.push([...base, 'janela de vigilância vencida sem contato registrado']);
       if (janelaDe(c) !== janelaEsperada) problemas.push([...base, `janela de ${janelaDe(c)} dias — esperado ${janelaEsperada} (categoria de vigilância "${categoriaDeVigilancia(c)}")`]);
       if (codigo !== 'CSEC' && !String(c.ProcedimentoNHSN || '').trim()) problemas.push([...base, 'sem categoria NHSN — revisar vocabulário de procedimentos']);
-      if (x.a.nota) problemas.push([...base, 'conferir: ' + x.a.nota]);
+      if (c.ISC === 'S' && tipoIsc(c) === 'superficial' && (diasAteDeteccao(c) || 0) > 30) problemas.push([...base, `ISC superficial detectada ${diasAteDeteccao(c)} dias após a cirurgia — pela NT 03/2025 a superficial só conta até 30 dias`]);
+      if (c.ISC === 'S' && tipoIsc(c) === 'tipo não informado') problemas.push([...base, 'ISC sem tipo (superficial/profunda/órgão) — a notificação pede o tipo']);
     }
   }
   const linhasMensal = [...mensal.values()].sort((a, b) => a.mes.localeCompare(b.mes) || a.rotulo.localeCompare(b.rotulo))
@@ -678,7 +682,7 @@ function relatorioISCAnvisa(bancos, setoresEscopo, inicio, fim) {
       colunas: ['Data', 'Prontuário', 'Procedimento', 'Nome no relatório', 'Problema'], linhas: problemas.sort((a, b) => b[0].localeCompare(a[0])) },
     { titulo: `Parecidas que ficam de fora (${linhasFora.length}) — conferir`, tipo: 'tabela',
       colunas: ['Data', 'Prontuário', 'Procedimento Anvisa', 'Nome no relatório', 'Categoria NHSN', 'Motivo'], linhas: linhasFora },
-    { titulo: 'Critérios', tipo: 'texto', corpo: 'Procedimentos: cesariana; artroplastia primária de quadril e de joelho (revisões ficam de fora); implante de prótese mamária (mastectomia/segmentectomia/mastopexia sem prótese ficam de fora); derivação ventricular interna (DVE/subgaleal fica de fora); revascularização do miocárdio (ponte periférica fica de fora). Janela: 30 dias na cesariana e 90 dias nos demais (implante). Efetividade = cirurgias com janela vencida que têm desfecho conhecido (sem infecção ou ISC). Taxa de ISC = ISC ÷ cirurgias com desfecho conhecido. A ISC é a registrada na vigilância pós-alta/aba Infecções (ISC = S na cirurgia).' }
+    { titulo: 'Critérios (NT GVIMS/GGTES/DIRE3/ANVISA nº 03/2025)', tipo: 'texto', corpo: 'Procedimentos de notificação nacional: cesariana; implante de prótese de quadril e de joelho PRIMÁRIA (revisões ficam de fora); implante de prótese mamária (só com menção a prótese/expansor/implante); derivação ventricular interna (DVE/subgaleal fica de fora); revascularização do miocárdio (ponte periférica fica de fora). Prazo: ISC incisional superficial conta até 30 dias em qualquer procedimento; ISC incisional profunda e de órgão/cavidade contam até 90 dias nos cinco procedimentos com implante e até 30 dias na cesariana (dia 1 = data da cirurgia). Efetividade = cirurgias com janela vencida que têm desfecho conhecido (sem infecção ou ISC). Taxa de ISC = ISC ÷ cirurgias com desfecho conhecido.' }
   ];
   const totalCir = dentro.length, totalIsc = dentro.filter(x => x.c.ISC === 'S').length;
   return { titulo: 'ISC — procedimentos de notificação à Anvisa', secoes,
@@ -1630,12 +1634,11 @@ const BENCHMARKS_EXTERNOS = {
       referencias: [{ fonte: 'anvisa2024', media: 2.6, p10: 0, p25: 0, p50: 0, p75: 3.9, p90: 8.7, n: 1817 }] },
     { id: 'isc_kpro', tipo: 'isc', categorias: ['Artroplastia de joelho'], rotulo: 'ISC — artroplastia primária de joelho (por 100)',
       referencias: [{ fonte: 'anvisa2024', media: 1.9, p10: 0, p25: 0, p50: 0, p75: 2.5, p90: 5.8, n: 1772 }] },
-    { id: 'isc_brst', tipo: 'isc', categorias: ['Cirurgia de mama'], rotulo: 'ISC — cirurgia de mama (por 100)',
-      nota: 'Anvisa acompanha só o implante de prótese mamária; aqui entra toda cirurgia de mama.',
+    { id: 'isc_brst', tipo: 'isc', categorias: ['Prótese de mama'], rotulo: 'ISC — implante de prótese mamária (por 100)',
       referencias: [{ fonte: 'anvisa2024', media: 1.3, p10: 0, p25: 0, p50: 0, p75: 1.4, p90: 5.4, n: 1783 }] },
     { id: 'isc_card', tipo: 'isc', categorias: ['Cirurgia cardíaca', 'Revascularização do miocárdio'], rotulo: 'ISC — cirurgia cardíaca (por 100)',
       referencias: [{ fonte: 'anvisa2024', media: 6.2, p10: 0, p25: 0, p50: 3.4, p75: 8.7, p90: 14.6, n: 1333 }] },
-    { id: 'isc_neuro', tipo: 'isc', categorias: ['Craniotomia', 'Derivação ventricular', 'Neurocirurgia (outras)'], rotulo: 'ISC — cirurgia neurológica (por 100)',
+    { id: 'isc_neuro', tipo: 'isc', categorias: ['Craniotomia', 'Derivação ventricular interna', 'Derivação ventricular externa', 'Neurocirurgia (outras)'], rotulo: 'ISC — cirurgia neurológica (por 100)',
       referencias: [{ fonte: 'anvisa2024', media: 2.8, p10: 0, p25: 0, p50: 0, p75: 5.2, p90: 12.5, n: 1493 }] },
     { id: 'higiene', tipo: 'percentual', rotulo: 'Adesão à higiene das mãos (%)', maiorMelhor: true,
       referencias: [{ fonte: 'omsHigiene', alvo: 70 }] },

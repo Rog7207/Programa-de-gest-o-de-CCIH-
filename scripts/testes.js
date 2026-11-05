@@ -1106,8 +1106,9 @@ console.log('\n== 84. Classificação de procedimento cirúrgico em categoria NH
   verificar('redução de fratura -> FX', cl('Tratamento Cirurgico De Fratura Do Femur (Sintese)').codigo === 'FX');
   verificar('prótese de quadril -> HPRO', cl('Artroplastia Total De Quadril').codigo === 'HPRO');
   verificar('RTU de próstata -> PRST (decisão da CCIH)', cl('Ressecção Transuretral De Próstata').codigo === 'PRST');
-  verificar('reconstrução de mama com prótese -> BRST (mama)',
-    cl('Reconstrução Da Mama Com Prótese E/Ou Expansor').codigo === 'BRST');
+  verificar('reconstrução de mama com prótese -> Prótese de mama (categoria própria, 05/11/2026); mastectomia segue em Cirurgia de mama',
+    imp.classificarProcedimentoNHSN('Reconstrução Da Mama Com Prótese E/Ou Expansor').categoria === 'Prótese de mama'
+    && imp.classificarProcedimentoNHSN('Mastectomia Radical Com Linfadenectomia Axilar Em Oncologia').categoria === 'Cirurgia de mama');
   verificar('anatomia escondida em oncologia é resgatada (nefroureterectomia -> NEPH)',
     cl('Nefroureterectomia Total Em Oncologia').codigo === 'NEPH');
   /* Nível 2: categoria própria. */
@@ -6321,9 +6322,21 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     const r1 = pa({ Procedimento: 'ARTROPLASTIA TOTAL DE JOELHO - REVISÃO / RECONSTRUÇÃO' }), r2 = pa({ Procedimento: 'Derivação Ventricular Externar-Subgaleal Externa' }),
       r3 = pa({ Procedimento: 'Revascularização Por Ponte / Tromboendarterectomia Femuro-Poplítea Proximal' }), r4 = pa({ Procedimento: 'Mastopexia' }),
       r5 = pa({ Procedimento: 'PLASTICA MAMÁRIA FEMININA NAO ESTETICA' });
-    verificar('revisão de joelho, DVE, ponte femuro-poplítea e mastopexia ficam de fora com motivo; plástica mamária sem prótese pede conferência',
+    verificar('revisão de joelho, DVE, ponte femuro-poplítea, mastopexia e plástica mamária sem prótese ficam de fora com motivo',
       !r1.codigo && r1.candidato === 'KPRO' && /primária/.test(r1.motivo) && !r2.codigo && /EXTERNA/.test(r2.motivo)
-      && !r3.codigo && /periférica/.test(r3.motivo) && !r4.codigo && /sem prótese/.test(r4.motivo) && !r5.codigo && /confirmar/.test(r5.motivo), JSON.stringify([r1, r2, r3, r4, r5]));
+      && !r3.codigo && /periférica/.test(r3.motivo) && !r4.codigo && /sem menção a prótese/.test(r4.motivo) && !r5.codigo && /sem menção a prótese/.test(r5.motivo), JSON.stringify([r1, r2, r3, r4, r5]));
+    verificar('nomes únicos: revisões, DVE e artroplastias parciais/"qualquer técnica" (entram como primárias)',
+      imp.classificarProcedimentoNHSN('ARTROPLASTIA TOTAL DE JOELHO - REVISÃO / RECONSTRUÇÃO').categoria === 'Revisão de artroplastia de joelho'
+      && imp.classificarProcedimentoNHSN('Artroplastia De Revisão Ou Reconstrução Do Quadril').categoria === 'Revisão de artroplastia de quadril'
+      && imp.classificarProcedimentoNHSN('Derivação Ventricular Externar-Subgaleal Externa').categoria === 'Derivação ventricular externa'
+      && imp.classificarProcedimentoNHSN('Artroplastia Parcial De Quadril').categoria === 'Artroplastia de quadril'
+      && pa({ Procedimento: 'Artroplastia (Qualquer Técnica Ou Versão De Quadril) - Tratamento Cirúrgico' }).codigo === 'HPRO'
+      && imp.classificarProcedimentoNHSN('Tratamento Cirurgico De Luxacao Coxo-Femoral Traumatica / Pos-Artroplastia').categoria !== 'Artroplastia de quadril');
+    const ex = [{ Prontuario: 'P1', DataCirurgia: '2026-09-03', Procedimento: 'Cesariana', Telefone: '', Carater: '' }];
+    verificar('reimportação completa telefone e caráter vazios da cirurgia existente (sem sobrescrever)',
+      imp.atualizarCirurgiasExistentes(ex, [{ Prontuario: 'P1', DataCirurgia: '2026-09-03', Procedimento: 'Cesariana', Telefone: '51999990000', Carater: 'Eletiva' }]) === 1
+      && ex[0].Telefone === '51999990000' && ex[0].Carater === 'Eletiva'
+      && imp.atualizarCirurgiasExistentes(ex, [{ Prontuario: 'P1', DataCirurgia: '2026-09-03', Procedimento: 'Cesariana', Telefone: '000' }]) === 0 && ex[0].Telefone === '51999990000');
     verificar('classificador NHSN: DVI vai para VSHN (não cardíaca) e ponte femuro-poplítea para PVBY (não RM)',
       imp.classificarProcedimentoNHSN('Sistema De Derivação Ventricular Interna Com Válvulas Ou Revisões').codigo === 'VSHN'
       && imp.classificarProcedimentoNHSN('Revascularização Por Ponte / Tromboendarterectomia Femuro-Poplítea Proximal').codigo === 'PVBY'

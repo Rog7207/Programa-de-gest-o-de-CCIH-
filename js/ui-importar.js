@@ -183,6 +183,8 @@ async function importarArquivoAutomatico(arquivo) {
     if (tipo === 'internacoes') {
       internacoesAtualizadas = atualizarInternacoesExistentes(existentes, validos);
     }
+    /* Cirurgia reimportada completa telefone/caráter que faltavam (05/11/2026). */
+    if (tipo === 'cirurgias') internacoesAtualizadas = atualizarCirurgiasExistentes(existentes, validos);
     const gerarID = proximoID(existentes, definicao.campoID, definicao.prefixoID);
     const tempoCorte = config.tempoCortePorProcedimento();
     const linhasSensibilidade = [];

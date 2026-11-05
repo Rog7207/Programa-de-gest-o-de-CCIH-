@@ -70,8 +70,12 @@ const NHSN_CATEGORIAS = [
   ['NEPH', 'Nefrectomia'], ['OVRY', 'Cirurgia de ovário'], ['PACE', 'Implante de marca-passo'],
   ['PRST', 'Cirurgia de próstata'], ['PVBY', 'Bypass vascular periférico'], ['REC', 'Cirurgia de reto'],
   ['SB', 'Cirurgia de intestino delgado'], ['SPLE', 'Esplenectomia'], ['THOR', 'Cirurgia torácica'],
-  ['THYR', 'Tireoidectomia'], ['VHYS', 'Histerectomia vaginal'], ['VSHN', 'Derivação ventricular'],
-  ['XLAP', 'Laparotomia exploradora']
+  ['THYR', 'Tireoidectomia'], ['VHYS', 'Histerectomia vaginal'], ['VSHN', 'Derivação ventricular interna'],
+  ['XLAP', 'Laparotomia exploradora'],
+  /* Códigos próprios (05/11/2026) para os procedimentos de notificação à Anvisa terem nome
+     único: prótese de mama separada da cirurgia de mama; revisão de artroplastia separada da
+     primária (só a primária é notificada). */
+  ['BRSTP', 'Prótese de mama'], ['HPROR', 'Revisão de artroplastia de quadril'], ['KPROR', 'Revisão de artroplastia de joelho']
 ];
 const NHSN_NOME = Object.fromEntries(NHSN_CATEGORIAS);
 
@@ -80,8 +84,14 @@ const REGRAS_NHSN = [
   [/colecist|coledoc/, 'CHOL'], [/apendicec/, 'APPY'], [/cesarian|cesarea|cesaria/, 'CSEC'],
   [/craniotom|craniectom|cranioplast|tumorcerebral|meningiom|hematomaintracran|hematomasubdural|hematomaextradural|craniofar|basedocranio|tumordabasedocranio/, 'CRAN'], [/laminectom/, 'LAM'],
   [/artrodese|fusaodecoluna|fusaovertebr|artrodeseco/, 'FUSN'],
-  [/(protese|artroplastia).*(quadril|coxofemor)|(quadril|coxofemor).*(protese|artroplastia)/, 'HPRO'],
-  [/(protese|artroplastia).*joelho|joelho.*(protese|artroplastia)/, 'KPRO'],
+  /* Revisão/reconstrução/retirada de prótese NÃO é artroplastia primária (Anvisa notifica só a
+     primária); luxação pós-artroplastia é tratamento de luxação (FX), não prótese. */
+  [/^(?=.*(artroplast|protese))(?=.*(quadril|coxofemor))(?=.*(revis|reconstru|retirada|conversao))/, 'HPROR'],
+  [/^(?=.*(artroplast|protese))(?=.*joelho)(?=.*(revis|reconstru|retirada|conversao))/, 'KPROR'],
+  [/^(?!.*luxac)(?:(protese|artroplastia).*(quadril|coxofemor)|(quadril|coxofemor).*(protese|artroplastia))/, 'HPRO'],
+  [/^(?!.*luxac)(?:(protese|artroplastia).*joelho|joelho.*(protese|artroplastia))/, 'KPRO'],
+  /* Prótese de mama: só com menção a prótese/expansor/implante (decisão de 05/11/2026). */
+  [/^(?=.*(mama|mamari|mastopex|mamoplast))(?=.*(protese|expansor|implante|inclusao))/, 'BRSTP'],
   /* Artroscopia com "redução artroscópica de fraturas" no rótulo é artroscopia (própria), não FX. */
   [/^(?!.*artroscop).*(?:reducaoaberta|osteossintese|osteosintese|fratura|epifisiodese|transposicaodafibula|luxac)/, 'FX'],
   [/amputa/, 'AMP'],
@@ -102,7 +112,7 @@ const REGRAS_NHSN = [
   /* Ordem importa (05/11/2026): ponte femuro-poplítea é vascular periférico, não
      revascularização do miocárdio; derivação ventricular (com válvula) é VSHN, não cardíaca. */
   [/bypassvascular|enxertovascular|femoropoplite|femuropoplite|poplite|aortobifemoral|endarterectomia/, 'PVBY'],
-  [/derivacaoventric|ventriculoperiton|ventriculostomia/, 'VSHN'],
+  [/^(?!.*(extern|subgaleal))(?:derivacaoventric|ventriculoperiton|sistemadederivacao)/, 'VSHN'],
   [/revasculariz|pontedesafena|pontecoronar/, 'CBGB'],
   [/valv|reconstrucaodaraizdaaorta|tubovalvado|cirurgiacardiac|comunicacaointeratrial|comunicacaointerventric|pericardiec|dissec+[a-z]*daaorta/, 'CARD'],
   [/marcapasso|ressincroniz|cardioversor|desfibrilador|estimulacaocardiaca/, 'PACE'],
@@ -110,6 +120,7 @@ const REGRAS_NHSN = [
   [/laparotomiaexplorad/, 'XLAP'], [/herni/, 'HER']
 ];
 const REGRAS_PROPRIA = [
+  [/derivacaoventric.*(extern|subgaleal)|ventriculostomia/, 'Derivação ventricular externa'],
   [/desbridamento|debridamento|fasceitenecrot/, 'Desbridamento'],
   [/duploj/, 'Cateter duplo J (urológico)'],
   [/ureterolitotrip|ureterorrenolitotrip|litotrips|calculoemureter|calculonauretra|nefrolitotripsia|extracaoendoscopica.*calculo|ureterolitotomia|ureterorrenolitotomia/, 'Litíase urinária (endoscópica)'],
@@ -175,8 +186,8 @@ function classificarProcedimentoNHSN(nome) {
    ferida infectada ou fratura exposta não é limpa. Categorias do classificador presumidas
    limpas — o resto é "não limpa" (potencialmente contaminada por padrão, salvo os sinais). */
 const CATEGORIAS_LIMPAS = new Set([
-  'BRST', 'HER', 'THYR', 'HPRO', 'KPRO', 'FUSN', 'LAM', 'CRAN', 'CARD', 'CBGB', 'PVBY', 'PACE', 'VSHN', 'SPLE',
-  'Artroscopia', 'Varizes',
+  'BRST', 'BRSTP', 'HER', 'THYR', 'HPRO', 'HPROR', 'KPRO', 'KPROR', 'FUSN', 'LAM', 'CRAN', 'CARD', 'CBGB', 'PVBY', 'PACE', 'VSHN', 'SPLE',
+  'Artroscopia', 'Varizes', 'Derivação ventricular externa',
   'Plástica (outras)', 'Neurocirurgia (outras)', 'Vascular (outras)', 'Ortopedia (outras)'
 ]);
 function contaminacaoPresumida(procedimento) {
@@ -3765,35 +3776,44 @@ const PROCEDIMENTOS_ANVISA = [
   ['BRST_PROTESE', 'Implante de prótese mamária'], ['VSHN', 'Derivação ventricular interna'], ['CBGB', 'Revascularização do miocárdio']
 ];
 const ROTULO_ANVISA = Object.fromEntries(PROCEDIMENTOS_ANVISA);
+const CATEGORIA_ANVISA = { 'Cesariana': 'CSEC', 'Artroplastia de quadril': 'HPRO', 'Artroplastia de joelho': 'KPRO',
+  'Prótese de mama': 'BRST_PROTESE', 'Derivação ventricular interna': 'VSHN', 'Revascularização do miocárdio': 'CBGB' };
 function procedimentoAnvisa(cirurgia) {
-  const t = normalizarTexto(cirurgia.Procedimento) + ' ' + normalizarTexto(cirurgia.ProcedimentoNHSN);
   const fora = (codigo, motivo) => ({ codigo: '', candidato: codigo, rotulo: ROTULO_ANVISA[codigo], motivo });
-  const entra = (codigo, nota) => ({ codigo, candidato: codigo, rotulo: ROTULO_ANVISA[codigo], motivo: '', nota: nota || '' });
-  if (/cesarian|cesarea|cesaria/.test(t)) return entra('CSEC');
-  if (/(artroplast|protese).*(quadril|coxofemor)|(quadril|coxofemor).*(artroplast|protese)/.test(t)) {
-    if (/revis|reconstru|retirada|luxac|conversao/.test(t)) return fora('HPRO', 'revisão/reconstrução/retirada — não é artroplastia primária');
-    if (/parcial/.test(t)) return entra('HPRO', 'artroplastia parcial — confirmar se a CCIH notifica');
-    if (/qualquertecnica/.test(t)) return entra('HPRO', 'nome genérico ("qualquer técnica") — confirmar se é primária');
-    return entra('HPRO');
-  }
-  if (/(artroplast|protese).*joelho|joelho.*(artroplast|protese)/.test(t)) {
-    if (/revis|reconstru|retirada/.test(t)) return fora('KPRO', 'revisão/reconstrução/retirada — não é artroplastia primária');
-    return entra('KPRO');
-  }
-  if (/mama|mamari|mastopex|mamoplast/.test(t)) {
-    if (/protese|expansor|implante|inclusao/.test(t)) return entra('BRST_PROTESE');
-    if (/mamariafemininanaoestetica|plasticamamaria/.test(t)) return fora('BRST_PROTESE', 'plástica mamária sem menção a prótese — confirmar no prontuário se houve implante');
-    return fora('BRST_PROTESE', 'cirurgia de mama sem prótese (mastectomia/segmentectomia/mastopexia) — não entra');
-  }
-  if (/derivacaoventric|ventriculoperiton|ventriculostomia/.test(t)) {
-    if (/extern|subgaleal|ventriculostomia/.test(t)) return fora('VSHN', 'derivação ventricular EXTERNA — não entra');
-    return entra('VSHN');
-  }
-  if (/revasculariz|pontedesafena|pontecoronar/.test(t)) {
-    if (/femor|femur|poplit|perifer|membro|tromboendarter/.test(t)) return fora('CBGB', 'revascularização periférica (ponte femuro-poplítea) — não é do miocárdio');
-    return entra('CBGB', /valv/.test(t) ? 'com troca valvar associada' : '');
-  }
+  const entra = codigo => ({ codigo, candidato: codigo, rotulo: ROTULO_ANVISA[codigo], motivo: '', nota: '' });
+  /* 1) pela categoria (nome único) já gravada; 2) pelo classificador sobre o nome cru, para
+     linhas antigas ainda não reclassificadas. */
+  const categoria = String(cirurgia.ProcedimentoNHSN || '').trim();
+  const cat = CATEGORIA_ANVISA[categoria] ? categoria : classificarProcedimentoNHSN(cirurgia.Procedimento).categoria;
+  if (CATEGORIA_ANVISA[cat]) return entra(CATEGORIA_ANVISA[cat]);
+  const t = normalizarTexto(cirurgia.Procedimento);
+  if (cat === 'Revisão de artroplastia de quadril') return fora('HPRO', 'revisão/reconstrução/retirada — não é artroplastia primária');
+  if (cat === 'Revisão de artroplastia de joelho') return fora('KPRO', 'revisão/reconstrução/retirada — não é artroplastia primária');
+  if (cat === 'Derivação ventricular externa') return fora('VSHN', 'derivação ventricular EXTERNA — não entra');
+  if (/luxac/.test(t) && /quadril|coxofemor/.test(t) && /artroplast|protese/.test(t)) return fora('HPRO', 'tratamento de luxação pós-artroplastia — não é implante de prótese');
+  if (/mama|mamari|mastopex|mamoplast/.test(t)) return fora('BRST_PROTESE', 'cirurgia de mama sem menção a prótese — não entra');
+  if (/revasculariz/.test(t)) return fora('CBGB', 'revascularização periférica (ponte femuro-poplítea) — não é do miocárdio');
   return { codigo: '', candidato: '', rotulo: '', motivo: '' };
+}
+
+/* Reimportação do relatório do centro cirúrgico: a cirurgia já existe, mas o arquivo novo
+   traz o que faltava (telefone — o arquivo de setembro/2026 veio com a coluna vazia e o
+   seguinte com os números; caráter; cirurgião). Completa só campos VAZIOS. */
+function atualizarCirurgiasExistentes(existentes, registros) {
+  const porChave = new Map();
+  for (const e of existentes) porChave.set(chaveNaturalDe(e, 'cirurgias'), e);
+  let atualizadas = 0;
+  for (const r of registros) {
+    const alvo = porChave.get(chaveNaturalDe(r, 'cirurgias'));
+    if (!alvo) continue;
+    let mudou = false;
+    for (const campo of ['Telefone', 'Carater', 'Cirurgiao', 'PotencialContaminacao', 'ASA', 'Atendimento']) {
+      const novo = String(r[campo] == null ? '' : r[campo]).trim();
+      if (novo && !String(alvo[campo] == null ? '' : alvo[campo]).trim()) { alvo[campo] = novo; mudou = true; }
+    }
+    if (mudou) atualizadas++;
+  }
+  return atualizadas;
 }
 
 function classificarParaVigilancia(cirurgia, categoriasVigiadas) {
@@ -5130,7 +5150,7 @@ function normalizarDispositivo(valor) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    editarRegistro, procedimentoAnvisa, PROCEDIMENTOS_ANVISA,
+    editarRegistro, procedimentoAnvisa, PROCEDIMENTOS_ANVISA, atualizarCirurgiasExistentes,
     textoEvolucaoNormalizado,
     normalizarData, normalizarProntuario, normalizarValorAntibiograma,
     sugerirMapeamento, normalizarLinhas, validar, deduplicar, chaveNaturalDe, proximoID,

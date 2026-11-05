@@ -6371,6 +6371,59 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     verificar('mensal: ago/2026 cesárea 3 cirurgias e 1 ISC', r.secoes[1].linhas.some(l => l[0] === '2026-08' && l[1] === 'Parto cesáreo' && l[2] === 3 && l[3] === 1));
   }
 
+  /* == 108f. Relatório ANVISA — notificação mensal (05/11/2026) == */
+  {
+    console.log('\n== 108f. Relatório ANVISA: janelas de 30/90 d por mês de vigilância, UTI adulto/neonatal ==');
+    global.procedimentoAnvisa = imp.procedimentoAnvisa; global.PROCEDIMENTOS_ANVISA = imp.PROCEDIMENTOS_ANVISA;
+    global.categoriaDeVigilancia = imp.categoriaDeVigilancia; global.ISC_JANELA_DIAS = imp.ISC_JANELA_DIAS; global.ISC_JANELA_IMPLANTE_DIAS = imp.ISC_JANELA_IMPLANTE_DIAS;
+    global.inferirMecanismo = require(path.join(__dirname, '..', 'js', 'alertas.js')).inferirMecanismo;
+    const rel = require(path.join(__dirname, '..', 'js', 'relatorios.js'));
+    const cti = 'CTI - Dr. Joaquim';
+    const b = {
+      cirurgias: { cirurgias: [
+        /* mês de vigilância = setembro: 30 d → cirurgias de AGOSTO; 90 d → cirurgias de JUNHO */
+        { ID_Cirurgia: '1', Prontuario: 'P1', DataCirurgia: '2026-08-05', Procedimento: 'Cesariana', ProcedimentoNHSN: 'Cesariana', StatusVigilancia: 'sem infecção' },
+        { ID_Cirurgia: '2', Prontuario: 'P2', DataCirurgia: '2026-08-06', Procedimento: 'Cesariana', ProcedimentoNHSN: 'Cesariana', StatusVigilancia: 'infecção confirmada', ISC: 'S', TipoISC: 'superficial' },
+        { ID_Cirurgia: '3', Prontuario: 'P3', DataCirurgia: '2026-08-07', Procedimento: 'Cesariana', ProcedimentoNHSN: 'Cesariana', StatusVigilancia: 'sob vigilância' },
+        { ID_Cirurgia: '4', Prontuario: 'P4', DataCirurgia: '2026-07-07', Procedimento: 'Cesariana', ProcedimentoNHSN: 'Cesariana', StatusVigilancia: 'sem infecção' },
+        { ID_Cirurgia: '5', Prontuario: 'P5', DataCirurgia: '2026-06-10', Procedimento: 'Artroplastia Total Primária Do Joelho', ProcedimentoNHSN: 'Artroplastia de joelho', StatusVigilancia: 'infecção confirmada', ISC: 'S', TipoISC: 'órgão/espaço' },
+        { ID_Cirurgia: '6', Prontuario: 'P6', DataCirurgia: '2026-06-11', Procedimento: 'Artroplastia Total Primária Do Joelho', ProcedimentoNHSN: 'Artroplastia de joelho', StatusVigilancia: 'sem infecção' },
+        { ID_Cirurgia: '7', Prontuario: 'P7', DataCirurgia: '2026-07-11', Procedimento: 'Artroplastia Total Primária Do Joelho', ProcedimentoNHSN: 'Artroplastia de joelho', StatusVigilancia: 'sem infecção' },
+        { ID_Cirurgia: '8', Prontuario: 'P8', DataCirurgia: '2026-08-12', Procedimento: 'Herniorrafia Inguinal', ProcedimentoNHSN: 'Herniorrafia', PotencialContaminacao: 'Limpa', StatusVigilancia: 'sem infecção' }
+      ] },
+      iras: { casos: [
+        { ID_IRAS: 'I1', Prontuario: 'U1', DataInfeccao: '2026-09-10', Setor: cti, Topografia: 'IPCS com confirmação laboratorial', Microrganismo: 'Klebsiella pneumoniae', ID_CulturaAgente: 'C1', StatusInvestigacao: 'confirmado' },
+        { ID_IRAS: 'I2', Prontuario: 'U2', DataInfeccao: '2026-09-12', Setor: cti, Topografia: 'PAV', Microrganismo: 'Acinetobacter spp', StatusInvestigacao: 'confirmado' },
+        { ID_IRAS: 'I3', Prontuario: 'U3', DataInfeccao: '2026-09-15', Setor: cti, Topografia: 'IPCS clínica', Microrganismo: 'Klebsiella pneumoniae', StatusInvestigacao: 'descartado' },
+        { ID_IRAS: 'I4', Prontuario: 'N1', DataInfeccao: '2026-09-20', Setor: 'UTI Neonatal / Pediátrica', Topografia: 'IPCS clínica', Microrganismo: 'Staphylococcus coagulase-negativo', StatusInvestigacao: 'confirmado' }
+      ] },
+      denominadores: { dispositivos_dia: [1, 2, 3, 4, 5].flatMap(d => [
+        { Data: '2026-09-0' + d, Competencia: '2026-09', Setor: cti, Dispositivo: 'Pacientes-dia', Contagem: 20 },
+        { Data: '2026-09-0' + d, Competencia: '2026-09', Setor: cti, Dispositivo: 'Cateter venoso central', Contagem: 10 },
+        { Data: '2026-09-0' + d, Competencia: '2026-09', Setor: cti, Dispositivo: 'Ventilação mecânica', Contagem: 8 },
+        { Data: '2026-09-0' + d, Competencia: '2026-09', Setor: cti, Dispositivo: 'Sonda vesical de demora', Contagem: 12 }]) },
+      culturas: { culturas: [{ ID_Cultura: 'C1', Prontuario: 'U1', Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: '' }],
+        sensibilidade: [{ ID_Cultura: 'C1', Antibiotico: 'Meropenem', Resultado: 'R' }, { ID_Cultura: 'C1', Antibiotico: 'Ceftriaxona', Resultado: 'R' }, { ID_Cultura: 'C1', Antibiotico: 'Polimixina B', Resultado: 'S' }] }
+    };
+    const r = rel.relatorioAnvisa(b, null, '2026-09-01', '2026-09-30');
+    const t30 = r.secoes[0], t90 = r.secoes[1];
+    verificar('30 dias vencidos em setembro = cirurgias de agosto: 3 cesarianas, 2 respostas, 1 ISC incisional, 33%',
+      /cirurgias de 08\/2026/.test(t30.titulo) && t30.linhas[0][1] === 3 && t30.linhas[0][2] === 2 && t30.linhas[0][3] === 1 && t30.linhas[0][4] === '33%' && /1 incisional/.test(t30.linhas[0][5]), JSON.stringify(t30.linhas[0]));
+    verificar('outras cirurgias em vigilância (30 d): a herniorrafia limpa de agosto conta; julho não', t30.linhas[1][1] === 1);
+    const joelho = t90.linhas.find(l => /joelho/.test(l[0]));
+    verificar('90 dias vencidos em setembro = cirurgias de junho: 2 joelhos, 2 respostas, 1 ISC órgão/cavidade, 50%',
+      /06\/2026/.test(t90.titulo) && joelho[1] === 2 && joelho[2] === 2 && joelho[3] === 1 && joelho[4] === '50%' && /1 órgão\/cavidade/.test(joelho[5]), JSON.stringify(joelho));
+    const uti = r.secoes[2];
+    verificar('UTI adulto: 100 pacientes-dia; CVC 50 dias, 1 IPCS (descartada fora) = 20/1.000, utilização 50%',
+      uti.itens[0][1] === 100 && /^50 · 1 · 20 · 50%$/.test(uti.itens[1][1]) && /^40 · 1 · 25 · 40%$/.test(uti.itens[2][1]), JSON.stringify(uti.itens));
+    const ag = r.secoes[3].linhas.find(l => /Klebsiella/.test(l[0]));
+    verificar('agente da IPCS com antibiograma: Klebsiella R a carbapenem e cefalosporina, S a polimixina',
+      ag && ag[1] === 1 && ag[2] === 1 && ag[3] === 1 && ag[4] === 1 && ag[7] === 0, JSON.stringify(ag));
+    const neo = r.secoes[5];
+    verificar('UTI neonatal sem NISS: pacientes-dia "—" mas a IPCS conta', /sem censo NISS/.test(neo.itens[0][1]) && /^— · 1 · — · —$/.test(neo.itens[1][1]), JSON.stringify(neo.itens));
+    verificar('nenhum nome ou prontuário no relatório', !JSON.stringify(r.secoes).includes('P1') && !JSON.stringify(r.secoes).includes('U1'));
+  }
+
   /* == 108e. Colunas gêmeas: duas "Telefone", a mapeada vazia (05/11/2026) == */
   {
     console.log('\n== 108e. Duas colunas "Telefone" no relatório do centro cirúrgico ==');

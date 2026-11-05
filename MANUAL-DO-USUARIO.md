@@ -642,6 +642,19 @@ pendentes de triagem, dispensadas, janela vencida,
 procedimento para a notificação; e a lista de **problemas a resolver antes de notificar**
 (dispensada na triagem, pendente há mais de 7 dias, janela vencida sem contato, nome ambíguo).
 
+**Relatório ANVISA (notificação mensal)** (aba Relatórios; o mês de vigilância é o do fim do
+período escolhido — padrão: mês anterior): **só números**, no recorte dos formulários da Anvisa
+(NT 01/2026 e 02/2026, envio até o dia 15). Tabela 1: cirurgias cuja vigilância de **30 dias
+venceu** no mês (cesarianas realizadas no mês anterior ao de vigilância; mais a linha "outras
+cirurgias em vigilância", de uso interno); tabela 2: cirurgias com prótese/implante cuja
+vigilância de **90 dias venceu** (realizadas três meses antes). Colunas: cirurgias realizadas,
+respostas da pós-alta, ISC, % ISC (ISC ÷ realizadas) e ISC por tipo (incisional · órgão/
+cavidade). Em seguida, **UTI adulto** e **UTI neonatal**: pacientes-dia, dispositivo-dia,
+nº de IPCS/PAV/ITU-AC, densidade por 1.000 e taxa de utilização (censo NISS do mês), e os
+**agentes** da IPCS e da ITU-AC com nº de casos e resistência a carbapenem, cefalosporina de
+3ª/4ª, oxacilina, vancomicina e polimixina (antibiograma da cultura vinculada ao caso).
+Nenhum nome ou prontuário sai neste relatório.
+
 ## 11. As outras abas, em uma linha cada
 
 **Várias abas do navegador ao mesmo tempo**: clique com o **botão direito** num item do menu

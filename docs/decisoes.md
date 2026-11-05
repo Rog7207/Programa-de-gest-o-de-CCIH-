@@ -124,6 +124,17 @@ profilaxia 1714, óbitos 836, NISS 3066.
 - Achado no banco local (jun–out/2026): efetividade baixíssima — cesárea 19% com desfecho após
   a janela, quadril/joelho 0% (sob vigilância sem contato); 35 RM "dispensadas" na triagem.
 
+## Relatório ANVISA (05/11/2026)
+- `relatorioAnvisa` (Relatórios → "Relatório ANVISA (notificação mensal)"): só números. Mês de
+  vigilância = mês do fim do período. ISC 30 d = cirurgias do mês anterior ao de vigilância;
+  90 d = cirurgias de 3 meses antes (decisão dele: "30 dias vencidos = dois meses atrás, 90 =
+  quatro meses atrás", contados a partir de hoje). Colunas: realizadas, respostas, ISC, %
+  (ISC ÷ realizadas), tipo. Depois UTI adulto e neonatal (NISS + IRAS + agentes/resistência).
+  Hospital não tem oftalmologia (catarata só em mutirão) nem diálise crônica própria (pontos
+  de HD na UTI; enfermaria vai a clínica terceirizada) → formulários de endoftalmite e diálise
+  não se aplicam. Faltam no relatório: consumo de antimicrobianos em gramas (26 prioritários)
+  e consumo de álcool/sabonete por pacientes-dia na UTI; UTI neonatal por faixa de peso.
+
 ## Pendências conhecidas
 - Idade não existe no cadastro de pacientes (vem no 2536 e nos óbitos; guardar na internação).
 - Dispositivo-dia só do CTI (NISS); enfermarias sem denominador de dispositivo.

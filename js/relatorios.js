@@ -689,6 +689,111 @@ function relatorioISCAnvisa(bancos, setoresEscopo, inicio, fim) {
     resumo: [['Cirurgias de notificação', totalCir], ['ISC nelas', totalIsc], ['Problemas a resolver', problemas.length]] };
 }
 
+/* ---- 7c. Relatório ANVISA — notificação mensal (05/11/2026) ----
+   Só números, no recorte dos formulários da Anvisa (NT 01/2026 e 02/2026). O mês de
+   vigilância é o do FIM do período escolhido (padrão: mês anterior). ISC: as cirurgias cuja
+   janela VENCEU no mês de vigilância — 30 dias → cirurgias do mês anterior ao de vigilância;
+   90 dias (prótese/implante) → cirurgias de três meses antes. UTI adulto e neonatal:
+   pacientes-dia, dispositivo-dia, densidades, utilização e agentes com resistência. */
+function _mesRelativo(mesISO, delta) {
+  const [a, m] = mesISO.split('-').map(Number);
+  const total = a * 12 + (m - 1) + delta;
+  const ano = Math.floor(total / 12), mes = total % 12 + 1;
+  const ultimo = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+  const mm = String(mes).padStart(2, '0');
+  return { mes: `${ano}-${mm}`, inicio: `${ano}-${mm}-01`, fim: `${ano}-${mm}-${String(ultimo).padStart(2, '0')}` };
+}
+const RESISTENCIAS_ANVISA = [
+  ['carbapenem', /meropenem|imipenem|ertapenem/],
+  ['cefalosporina 3ª/4ª', /ceftriaxon|cefotaxim|ceftazidim|cefepim/],
+  ['oxacilina', /oxacilin|cefoxitin/],
+  ['vancomicina', /vancomicin|teicoplanin/],
+  ['polimixina', /polimixin|colistin/]
+];
+function relatorioAnvisa(bancos, setoresEscopo, inicio, fim) {
+  const mesVig = _mesRelativo(String(fim).slice(0, 7), 0);
+  const casosTodos = ((bancos.iras || {}).casos || []).filter(_casoValeReuniao);
+  const cirurgiasTodas = ((bancos.cirurgias || {}).cirurgias || []);
+  const st = c => String(c.StatusVigilancia || 'pendente');
+  const RESPOSTAS = ['sem infecção', 'em investigação', 'infecção confirmada'];
+  const casoDe = c => casosTodos.find(k => k.ID_IRAS === c.ID_IRAS) || null;
+  const tipoIsc = c => {
+    const t = normalizarTexto(c.TipoISC) + ' ' + normalizarTexto((casoDe(c) || {}).Topografia);
+    return /orgao|espaco|cavidade/.test(t) ? 'órgão/cavidade' : /superfic|profund|incisional/.test(t) ? 'incisional' : 'sem tipo';
+  };
+  const linhaCirurgias = (rotulo, lista) => {
+    const respostas = lista.filter(c => RESPOSTAS.includes(st(c))).length;
+    const isc = lista.filter(c => c.ISC === 'S');
+    const inc = isc.filter(c => tipoIsc(c) === 'incisional').length, org = isc.filter(c => tipoIsc(c) === 'órgão/cavidade').length;
+    return [rotulo, lista.length, respostas, isc.length, relPct(isc.length, lista.length), `${inc} incisional · ${org} órgão/cavidade${isc.length - inc - org ? ' · ' + (isc.length - inc - org) + ' sem tipo' : ''}`];
+  };
+  const colunasCir = ['Cirurgia', 'Cirurgias realizadas', 'Respostas da pós-alta', 'ISC', '% ISC (ISC ÷ realizadas)', 'ISC por tipo'];
+  /* 30 dias: cirurgias do mês anterior ao de vigilância */
+  const m30 = _mesRelativo(mesVig.mes, -1);
+  const c30 = cirurgiasTodas.filter(c => relPeriodo(c.DataCirurgia, m30.inicio, m30.fim));
+  const anvisaDe = c => (typeof procedimentoAnvisa === 'function' ? procedimentoAnvisa(c) : { codigo: '' });
+  const cesarianas = c30.filter(c => anvisaDe(c).codigo === 'CSEC');
+  const outras30 = c30.filter(c => anvisaDe(c).codigo !== 'CSEC' && categoriaDeVigilancia(c) !== 'implante' && categoriaDeVigilancia(c) !== 'nao_cirurgico'
+    && ['sob vigilância', 'mensagem enviada', 'encerrada sem contato', 'encerrada — óbito', 'encerrada — número incorreto'].concat(RESPOSTAS).includes(st(c)));
+  const linhas30 = [linhaCirurgias('Cesariana (Anvisa)', cesarianas), linhaCirurgias('Outras cirurgias em vigilância (30 d, uso interno)', outras30)];
+  /* 90 dias: cirurgias de três meses antes do mês de vigilância */
+  const m90 = _mesRelativo(mesVig.mes, -3);
+  const c90 = cirurgiasTodas.filter(c => relPeriodo(c.DataCirurgia, m90.inicio, m90.fim));
+  const linhas90 = PROCEDIMENTOS_ANVISA.filter(([cod]) => cod !== 'CSEC').map(([cod, rotulo]) => linhaCirurgias(rotulo, c90.filter(c => anvisaDe(c).codigo === cod)));
+
+  /* UTI: censo NISS + IRAS do mês de vigilância + agentes com resistência */
+  const sens = indiceSensibilidade(bancos);
+  const culturas = ((bancos.culturas || {}).culturas || []);
+  const blocoUTI = (rotulo, filtroSetor) => {
+    const setores = [...new Set(((bancos.denominadores || {}).dispositivos_dia || []).map(l => String(l.Setor || '').trim()))].filter(s => s && filtroSetor(s));
+    const casos = casosTodos.filter(k => relPeriodo(k.DataInfeccao, mesVig.inicio, mesVig.fim) && filtroSetor(k.Setor));
+    const util = setores.length ? utilizacaoDispositivos(bancos, casos, mesVig.inicio, mesVig.fim, setores) : null;
+    const linha = disp => { const l = util && util.linhas.find(x => x.dispositivo === disp); return l ? [l.dias, l.iras, l.densidade === null ? '—' : l.densidade, l.utilizacao === null ? '—' : Math.round(l.utilizacao * 100) + '%'] : ['—', casos.filter(k => grupoDispositivoDaIRAS(k) === disp).length, '—', '—']; };
+    const indicadores = [
+      ['Pacientes-dia na UTI', util ? util.pacientesDia : '— (sem censo NISS)'],
+      ['Cateter central-dia · IPCS · densidade/1.000 · utilização', linha('Cateter central').join(' · ')],
+      ['Ventilação mecânica-dia · PAV · densidade/1.000 · utilização', linha('Ventilação mecânica').join(' · ')],
+      ['Cateter vesical-dia · ITU-AC · densidade/1.000 · utilização', linha('Sonda vesical').join(' · ')]
+    ];
+    /* agentes: um por caso, pelo campo Microrganismo; resistência pelo antibiograma da cultura-agente */
+    const agentes = grupo => {
+      const m = new Map();
+      for (const k of casos.filter(k => grupoDispositivoDaIRAS(k) === grupo)) {
+        const nome = String(k.Microrganismo || '').trim() || '(sem agente informado)';
+        const acc = m.get(nome) || { n: 0, testados: 0, r: Object.fromEntries(RESISTENCIAS_ANVISA.map(([r]) => [r, 0])) };
+        acc.n++;
+        const painel = sens.get(k.ID_CulturaAgente) || [];
+        const cultura = culturas.find(c => c.ID_Cultura === k.ID_CulturaAgente);
+        const mec = normalizarTexto((cultura || {}).MecanismoResistencia || '');
+        if (painel.length || mec) acc.testados++;
+        for (const [rot, re] of RESISTENCIAS_ANVISA) {
+          const resistente = painel.some(s => s.Resultado === 'R' && re.test(normalizarTexto(s.Antibiotico)))
+            || (rot === 'carbapenem' && /carbapen|kpc|ndm/.test(mec)) || (rot === 'oxacilina' && /mrsa/.test(mec)) || (rot === 'vancomicina' && /vre/.test(mec)) || (rot === 'cefalosporina 3ª/4ª' && /esbl/.test(mec));
+          if (resistente) acc.r[rot]++;
+        }
+        m.set(nome, acc);
+      }
+      return [...m.entries()].sort((a, b) => b[1].n - a[1].n).map(([nome, a]) => [nome, a.n, a.testados, ...RESISTENCIAS_ANVISA.map(([rot]) => a.r[rot])]);
+    };
+    const colunasAg = ['Microrganismo', 'Nº de casos', 'Com antibiograma', ...RESISTENCIAS_ANVISA.map(([r]) => 'R a ' + r)];
+    return [
+      { titulo: `${rotulo} — ${mesVig.mes.split('-').reverse().join('/')}${setores.length ? ' (' + setores.join(', ') + ')' : ''}`, tipo: 'numeros', itens: indicadores },
+      { titulo: `${rotulo} — agentes da IPCS e resistência`, tipo: 'tabela', colunas: colunasAg, linhas: agentes('Cateter central') },
+      { titulo: `${rotulo} — agentes da ITU-AC e resistência`, tipo: 'tabela', colunas: colunasAg, linhas: agentes('Sonda vesical') }
+    ];
+  };
+  const rotMes = m => m.mes.split('-').reverse().join('/');
+  const secoes = [
+    { titulo: `ISC — vigilância de 30 dias vencida em ${rotMes(mesVig)} (cirurgias de ${rotMes(m30)})`, tipo: 'tabela', colunas: colunasCir, linhas: linhas30 },
+    { titulo: `ISC — vigilância de 90 dias vencida em ${rotMes(mesVig)} (cirurgias com prótese/implante de ${rotMes(m90)})`, tipo: 'tabela', colunas: colunasCir, linhas: linhas90 },
+    ...blocoUTI('UTI adulto', _setorUTIAdulto),
+    ...blocoUTI('UTI neonatal', s => /neonat/i.test(String(s || ''))),
+    { titulo: 'Notas', tipo: 'texto', corpo: 'Só números — os formulários da Anvisa não levam nome nem prontuário. ISC incisional = superficial + profunda (a Anvisa pede incisional e órgão/cavidade separadas; superficial só conta até 30 dias). % ISC = ISC ÷ cirurgias realizadas, como pedido pela CCIH; a Anvisa usa o mesmo denominador. Pacientes-dia e dispositivo-dia vêm do censo NISS do mês; a UTI neonatal só aparece com NISS próprio e a Anvisa a pede por faixa de peso ao nascer (não disponível no app). Resistência: antibiograma da cultura vinculada ao caso ou mecanismo registrado. Consumo de antimicrobianos (gramas) e de álcool/sabonete ainda não entram neste relatório.' }
+  ];
+  return { titulo: 'Relatório ANVISA — notificação mensal', secoes,
+    resumo: [['Mês de vigilância', mesVig.mes], ['Cesarianas (30 d vencidos)', cesarianas.length], ['Cirurgias com prótese (90 d vencidos)', c90.filter(c => anvisaDe(c).codigo && anvisaDe(c).codigo !== 'CSEC').length]] };
+}
+
 /* ---- 8. Resumo executivo ---- */
 function relatorioResumoExecutivo(bancos, setoresEscopo, inicio, fim) {
   const partes = [
@@ -1584,6 +1689,7 @@ const RELATORIOS_PADRAO = [
   ['sepse', 'Protocolo de sepse', relatorioSepse],
   ['pos_alta', 'ISC e vigilância pós-alta', relatorioPosAlta],
   ['isc_anvisa', 'ISC — procedimentos de notificação à Anvisa', relatorioISCAnvisa],
+  ['anvisa', 'Relatório ANVISA (notificação mensal)', relatorioAnvisa],
   ['executivo', 'Resumo executivo', relatorioResumoExecutivo]
 ];
 
@@ -1735,7 +1841,7 @@ function setoresEmUso(bancos) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { relatorioIRAS, casosParaRelatorio, pacientesDiaDoCenso, pacientesDiaDasPassagens, relatorioMicrobiologico, relatorioHigiene,
-    relatorioAntibioticos, relatorioIsolamentos, relatorioSepse, relatorioPosAlta, relatorioISCAnvisa,
+    relatorioAntibioticos, relatorioIsolamentos, relatorioSepse, relatorioPosAlta, relatorioISCAnvisa, relatorioAnvisa,
     relatorioResumoExecutivo, RELATORIOS_PADRAO, BANCOS_RELATORIOS, setoresEmUso, pacientesDia, pacientesDiaDoCenso,
     relMediana, relDiasEntre, mesAnteriorIntervalo,
     diasDeDispositivo, taxasPorDispositivo, grupoDoDispositivo, grupoDispositivoDaIRAS, indicadoresReuniao, utilizacaoDispositivos, avaliacoesUTIReuniao, compararComBenchmarks, posicaoNoBenchmark, BENCHMARKS_EXTERNOS,

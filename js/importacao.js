@@ -371,8 +371,19 @@ function normalizarLinhas(linhas, linhaCabecalho, mapeamento, tipo, aliases) {
   });
   const aliasDe = {};
   (aliases || []).forEach(a => { aliasDe[a.Campo + '|' + normalizarTexto(a.De)] = a.Para; });
+  /* Colunas GÊMEAS (mesmo título, ex.: duas "Telefone" no relatório do centro cirúrgico de
+     set/2026, a primeira vazia): quando a coluna mapeada vem vazia na linha, vale a primeira
+     gêmea preenchida — senão o número se perdia (05/11/2026). */
+  const gemeas = {};
+  const titulo = m => normalizarTexto(m.cabecalho);
+  mapeamento.forEach(m => {
+    if (!m.destino || !titulo(m)) return;
+    gemeas[m.coluna] = mapeamento.filter(o => o.coluna !== m.coluna && !o.destino && titulo(o) === titulo(m)).map(o => o.coluna);
+    if (!gemeas[m.coluna].length) delete gemeas[m.coluna];
+  });
 
   const colunasDados = new Set();
+  Object.values(gemeas).forEach(lista => lista.forEach(c => colunasDados.add(c)));
   Object.values(porCampo).forEach(c => colunasDados.add(c));
   colunasAntibiograma.concat(colunasAntibiogramaTexto).forEach(m => colunasDados.add(m.coluna));
   const definicaoComColunas = Object.assign({}, definicao, {
@@ -392,6 +403,9 @@ function normalizarLinhas(linhas, linhaCabecalho, mapeamento, tipo, aliases) {
     for (const campo of definicao.campos) {
       const coluna = porCampo[campo.id];
       let valor = coluna === undefined ? '' : linha[coluna];
+      if ((valor == null || String(valor).trim() === '') && gemeas[coluna]) {
+        for (const g of gemeas[coluna]) { const v = linha[g]; if (v != null && String(v).trim() !== '') { valor = v; break; } }
+      }
       if (campo.tipo === 'data') {
         const bruto = valor;
         valor = normalizarData(valor);

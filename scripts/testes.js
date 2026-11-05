@@ -6371,6 +6371,23 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     verificar('mensal: ago/2026 cesárea 3 cirurgias e 1 ISC', r.secoes[1].linhas.some(l => l[0] === '2026-08' && l[1] === 'Parto cesáreo' && l[2] === 3 && l[3] === 1));
   }
 
+  /* == 108e. Colunas gêmeas: duas "Telefone", a mapeada vazia (05/11/2026) == */
+  {
+    console.log('\n== 108e. Duas colunas "Telefone" no relatório do centro cirúrgico ==');
+    const linhas = [
+      ['Paciente', 'Atendimento', 'Telefone', 'Telefone', 'Procedimento', 'Data', 'Obito', 'Medico', 'Carater'],
+      ['FULANA', '123', '', '51999990000', 'Cesariana', '2026-09-03', 'N', 'Dr. X', 'ELETIVA'],
+      ['BELTRANA', '124', '51988880000', '', 'Cesariana', '2026-09-04', 'N', 'Dr. X', 'URGENCIA']
+    ];
+    const mapa = linhas[0].map((cab, i) => ({ coluna: i, cabecalho: cab, destino: '' }));
+    const destino = (cab, campo) => { mapa.find(m => m.cabecalho === cab && !m.destino).destino = campo; };
+    destino('Paciente', 'NomePaciente'); destino('Atendimento', 'Atendimento'); destino('Telefone', 'Telefone');
+    destino('Procedimento', 'Procedimento'); destino('Data', 'DataCirurgia'); destino('Carater', 'Carater');
+    const { registros } = imp.normalizarLinhas(linhas, 0, mapa, 'cirurgias', []);
+    verificar('a coluna gêmea preenchida supre a mapeada vazia; a mapeada preenchida continua valendo',
+      registros.length === 2 && registros[0].Telefone === '51999990000' && registros[1].Telefone === '51988880000', JSON.stringify(registros.map(r => r.Telefone)));
+  }
+
   /* == 109. Consumo de antibióticos: DDD por prescrição e série mensal DOT/DDD (21/10/2026) == */
   {
     console.log('\n== 109. Consumo de antibióticos (DOT e DDD por 1.000 pacientes-dia) ==');

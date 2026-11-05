@@ -982,12 +982,16 @@ function telaImasOcorrencias(arquivo, leitura) {
      fila de digitação (aba Infecções), como pedido. */
   const campoConciliar = el('input', { type: 'checkbox', checked: '' });
   const previa = el('p', { class: 'texto-suave' });
-  const candidatosDe = (casos, pacientes) => {
+  const candidatosDe = (casos, pacientes, internacoes) => {
     const identidadeDe = identidadePorNome(pacientes);
+    /* Sem prontuário no IMAS: resolve pelo atendimento no censo antes de cair no provisório
+       "AT-" — senão o caso não casa com o já existente (05/11/2026). */
+    const prontuarioDoAtendimento = new Map((internacoes || []).filter(i => String(i.Atendimento || '').trim() && String(i.Prontuario || '').trim())
+      .map(i => [normalizarProntuario(i.Atendimento), normalizarProntuario(i.Prontuario)]));
     const gerar = proximoID(casos, 'ID_IRAS', 'IRA');
     let novos = 0, vinculados = 0, digitados = 0;
     for (const o of leitura.linhas) {
-      const pront = normalizarProntuario(o.Prontuario) || (o.Atendimento ? 'AT-' + o.Atendimento : '');
+      const pront = normalizarProntuario(o.Prontuario) || prontuarioDoAtendimento.get(normalizarProntuario(o.Atendimento)) || (o.Atendimento ? 'AT-' + o.Atendimento : '');
       if (!pront) continue;
       const r = registrarCasoIras(casos, {
         Prontuario: pront, DataInfeccao: o.DataInfeccao, Topografia: o.Topografia, Setor: o.Setor,
@@ -1008,7 +1012,7 @@ function telaImasOcorrencias(arquivo, leitura) {
     try {
       const [bIras, bPac] = await Promise.all([lerBanco('iras'), lerBanco('pacientes')]);
       const copia = JSON.parse(JSON.stringify(bIras.casos || []));
-      const r = candidatosDe(copia, bPac.pacientes || []);
+      const r = candidatosDe(copia, bPac.pacientes || [], bPac.internacoes || []);
       previa.textContent = `Prévia: ${fmtInt(r.novos)} caso(s) novo(s) e ${fmtInt(r.vinculados)} que já existem aqui (não duplicam)`
         + (r.digitados ? `; ${fmtInt(r.digitados)} confirmado(s) marcado(s) como digitado(s)` : '')
         + (leitura.ignoradasDescartadas ? `; ${fmtInt(leitura.ignoradasDescartadas)} descartada(s) no IMAS, ignorada(s)` : '') + '.';
@@ -1037,7 +1041,7 @@ function telaImasOcorrencias(arquivo, leitura) {
             const bIras = await lerBanco('iras');
             const bPac = await lerBanco('pacientes');
             bIras.casos = bIras.casos || [];
-            const r = candidatosDe(bIras.casos, bPac.pacientes || []);
+            const r = candidatosDe(bIras.casos, bPac.pacientes || [], bPac.internacoes || []);
             /* Nome do paciente vive no cadastro, não no caso: upsert por prontuário. */
             const porPront = new Map((bPac.pacientes || []).map(p => [normalizarProntuario(p.Prontuario), p]));
             let mudouPac = false;
@@ -1166,6 +1170,7 @@ async function ingerirMiniapp(tipo, dadosPorAba, arquivo, silencioso) {
       const comSuspeita = linhas.filter(l => l.SuspeitaIRAS === 'S' && String(l.FocoSuspeito || '').trim());
       if (comSuspeita.length) {
         const bancoIras = await lerBanco('iras');
+        const idDeUti = identidadePorNome(((await lerBanco('pacientes')).pacientes) || []);
         let novasSuspeitas = 0;
         for (const l of comSuspeita) {
           const { novo } = registrarCasoIras(bancoIras.casos, {
@@ -1174,7 +1179,7 @@ async function ingerirMiniapp(tipo, dadosPorAba, arquivo, silencioso) {
             Setor: l.Setor || '', DispositivoAssociado: '', Microrganismo: '', Desfecho: '',
             StatusInvestigacao: 'em investigação', NotificadoANVISA: '',
             CriadoPor: app.usuario, CriadoEm: agora
-          }, () => proximoID(bancoIras.casos, 'ID_IRAS', 'IRA')());
+          }, () => proximoID(bancoIras.casos, 'ID_IRAS', 'IRA')(), idDeUti);
           if (novo) novasSuspeitas++;
         }
         if (novasSuspeitas) await gravarBanco('iras', bancoIras);
@@ -1275,10 +1280,11 @@ async function ingerirMiniapp(tipo, dadosPorAba, arquivo, silencioso) {
       let suspeitasNovas = 0;
       if (suspeitas.length || casosNovos.length) {
         const bancoIras = await lerBanco('iras');
+        const idDeRemota = identidadePorNome(((await lerBanco('pacientes')).pacientes) || []);
         /* registrarCasoIras: o mesmo episódio detectado por outro caminho (revisão local,
            visita da UTI, pós-alta) não vira caso duplicado — só completa o existente. */
         for (const caso of casosNovos) {
-          registrarCasoIras(bancoIras.casos, caso, () => proximoID(bancoIras.casos, 'ID_IRAS', 'IRA')());
+          registrarCasoIras(bancoIras.casos, caso, () => proximoID(bancoIras.casos, 'ID_IRAS', 'IRA')(), idDeRemota);
         }
         for (const s of suspeitas) {
           const { novo } = registrarCasoIras(bancoIras.casos, {
@@ -1288,7 +1294,7 @@ async function ingerirMiniapp(tipo, dadosPorAba, arquivo, silencioso) {
             Setor: '', DispositivoAssociado: '', Microrganismo: '', Desfecho: '',
             StatusInvestigacao: 'em investigação', NotificadoANVISA: '',
             CriadoPor: s.Avaliador || app.usuario, CriadoEm: agora
-          }, () => proximoID(bancoIras.casos, 'ID_IRAS', 'IRA')());
+          }, () => proximoID(bancoIras.casos, 'ID_IRAS', 'IRA')(), idDeRemota);
           if (novo) suspeitasNovas++;
         }
         if (suspeitasNovas || casosNovos.length) await gravarBanco('iras', bancoIras);

@@ -1194,7 +1194,7 @@ async function montarCirurgias(conteudo) {
               CriterioDiagnostico: 'Vigilância pós-alta', Setor: setorPadraoISC(c.Procedimento), DispositivoAssociado: 'Nenhum',
               Microrganismo: '', Desfecho: '', StatusInvestigacao: 'em investigação',
               NotificadoANVISA: '', CriadoPor: app.usuario, CriadoEm: agoraCurto()
-            }, () => proximoIDLista(bancoIras.casos, 'ID_IRAS', 'IRA'));
+            }, () => proximoIDLista(bancoIras.casos, 'ID_IRAS', 'IRA'), identidadePorNome(bancoPacientes.pacientes || []));
             await gravarBanco('iras', bancoIras);
           }
         });

@@ -451,7 +451,7 @@ async function montarVigilancia(conteudo) {
             Setor: setorPadraoISC(alvo.Procedimento), DispositivoAssociado: '', Microrganismo: '',
             Desfecho: '', StatusInvestigacao: 'em investigação', NotificadoANVISA: '',
             CriadoPor: app.usuario, CriadoEm: agoraCurto()
-          }, () => proximoIDLista(atualIras.casos, 'ID_IRAS', 'IRA'));
+          }, () => proximoIDLista(atualIras.casos, 'ID_IRAS', 'IRA'), identidadePorNome(bancoPacientes.pacientes || []));
           alvo.StatusVigilancia = 'em investigação';
           alvo.ISC = 'S';
           alvo.TipoISC = selTipo.value;

@@ -124,6 +124,16 @@ profilaxia 1714, óbitos 836, NISS 3066.
 - Achado no banco local (jun–out/2026): efetividade baixíssima — cesárea 19% com desfecho após
   a janela, quadril/joelho 0% (sob vigilância sem contato); 35 RM "dispensadas" na triagem.
 
+## Deduplicação de IRAS (05/11/2026)
+- Auditoria: a dedup por sítio (grupoTopografia + 14 d + identidade por nome) existe desde
+  21/10/2026 em `registrarCasoIras`; as 12 duplicatas achadas no banco da CCIH eram todas
+  anteriores (IMAS importado em 15/10 com o app antigo). Reforços: identidade do paciente
+  passada em TODOS os caminhos (ficha, pós-alta, visita UTI, avaliação remota, cirurgias);
+  IMAS resolve atendimento → prontuário pelo censo antes do provisório "AT-"; episódio
+  DESCARTADO que volta digitado/confirmado é reaberto com rastro; nova suspeita após descarte
+  só anota. `scripts/fundir-iras-duplicadas.js` = o "Fundir duplicatas" da aba Infecções em
+  lote (reaponta cirurgias e culturas). Janela mantida em 14 d (RIT da Anvisa).
+
 ## Contato de 90 dias e dispensas (05/11/2026)
 - Decisão dele: reabrir TODAS as cirurgias de notificação à Anvisa dispensadas na triagem
   (`reabrir-cirurgias-anvisa.js`, 50 reabertas na cópia de 05/11) e organizar o contato de 90

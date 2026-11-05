@@ -2891,6 +2891,19 @@ function registrarCasoIras(casos, candidato, gerarID, identidadeDe) {
       existente[campo] = candidato[campo];
     }
   }
+  /* Episódio DESCARTADO aqui que volta como caso oficial (digitado no Tasy) ou confirmado por
+     outro caminho não pode sumir no descarte: reabre com o status mais forte e deixa o rastro
+     (05/11/2026). Nova suspeita após descarte só anota — a decisão da CCIH fica de pé. */
+  const statusCand = normalizarTexto(candidato.StatusInvestigacao);
+  if (normalizarTexto(existente.StatusInvestigacao) === 'descartado' && (statusCand === 'digitado' || statusCand === 'confirmado')) {
+    existente.Observacoes = [String(existente.Observacoes || '').trim(),
+      `Reaberto como "${candidato.StatusInvestigacao}": o episódio descartado voltou por ${candidato.CriterioDiagnostico || 'outra detecção'} em ${String(candidato.CriadoEm || '').slice(0, 10)}.`].filter(Boolean).join('\n');
+    existente.StatusInvestigacao = candidato.StatusInvestigacao;
+    if (statusCand === 'digitado') { existente.DigitadoPor = candidato.DigitadoPor || candidato.CriadoPor || ''; existente.DigitadoEm = candidato.DigitadoEm || String(candidato.CriadoEm || '').slice(0, 10); }
+  } else if (normalizarTexto(existente.StatusInvestigacao) === 'descartado' && statusCand) {
+    existente.Observacoes = [String(existente.Observacoes || '').trim(),
+      `Nova suspeita (${candidato.CriterioDiagnostico || 'outra detecção'}, ${String(candidato.CriadoEm || '').slice(0, 10)}) após o descarte — mantido descartado; rever se for o caso.`].filter(Boolean).join('\n');
+  }
   /* A data que fica é a mais precoce: é quando a infecção começou a ser vista. */
   if (String(candidato.DataInfeccao || '').trim()
     && (!String(existente.DataInfeccao || '').trim() || String(candidato.DataInfeccao) < String(existente.DataInfeccao))) {

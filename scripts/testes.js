@@ -6432,6 +6432,23 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     verificar('nenhum nome ou prontuário no relatório', !JSON.stringify(r.secoes).includes('P1') && !JSON.stringify(r.secoes).includes('U1'));
   }
 
+  /* == 108g. Dedup de IRAS: episódio descartado que volta oficial reabre; suspeita só anota (05/11/2026) == */
+  {
+    console.log('\n== 108g. IRAS: descartado reaberto por digitado/confirmado; nova suspeita só anota ==');
+    const casos = [{ ID_IRAS: 'IRA-1', Prontuario: '100', DataInfeccao: '2026-10-01', Topografia: 'PAV', StatusInvestigacao: 'descartado', Observacoes: '' }];
+    const gerar = () => 'IRA-9';
+    const r1 = imp.registrarCasoIras(casos, { Prontuario: '100', DataInfeccao: '2026-10-03', Topografia: 'Pneumonia associada à ventilação mecânica (PAV)', StatusInvestigacao: 'em investigação', CriterioDiagnostico: 'Suspeita na visita técnica da UTI', CriadoEm: '2026-10-20 10:00' }, gerar);
+    verificar('nova suspeita de episódio descartado não vira caso novo e não reabre — só anota',
+      !r1.novo && casos.length === 1 && casos[0].StatusInvestigacao === 'descartado' && /Nova suspeita/.test(casos[0].Observacoes), JSON.stringify(casos[0]));
+    const r2 = imp.registrarCasoIras(casos, { Prontuario: '100', DataInfeccao: '2026-10-02', Topografia: 'PAV', StatusInvestigacao: 'digitado', CriterioDiagnostico: 'Notificação IMAS', CriadoPor: 'Rogerio', CriadoEm: '2026-10-25 10:00' }, gerar);
+    verificar('episódio descartado que chega DIGITADO no Tasy reabre como digitado, com rastro',
+      !r2.novo && casos[0].StatusInvestigacao === 'digitado' && casos[0].DigitadoPor === 'Rogerio' && /Reaberto como "digitado"/.test(casos[0].Observacoes), JSON.stringify(casos[0]));
+    /* identidade por nome: outro número do mesmo paciente casa */
+    const idDe = imp.identidadePorNome([{ Prontuario: '100', Nome: 'MARIA SILVA' }, { Prontuario: '80000100', Nome: 'MARIA SILVA' }]);
+    const r3 = imp.registrarCasoIras(casos, { Prontuario: '80000100', DataInfeccao: '2026-10-04', Topografia: 'Traqueobronquite', StatusInvestigacao: 'em investigação' }, gerar, idDe);
+    verificar('mesmo paciente com outro número (identidade por nome) não duplica', !r3.novo && casos.length === 1);
+  }
+
   /* == 108e. Colunas gêmeas: duas "Telefone", a mapeada vazia (05/11/2026) == */
   {
     console.log('\n== 108e. Duas colunas "Telefone" no relatório do centro cirúrgico ==');

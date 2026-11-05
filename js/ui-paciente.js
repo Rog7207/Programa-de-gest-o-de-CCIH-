@@ -294,8 +294,9 @@ async function montarPaciente(conteudo) {
             Microrganismo: campoMicroNova.value.trim(), Desfecho: '',
             StatusInvestigacao: 'em investigação', NotificadoANVISA: '',
             Observacoes: acrescentarObservacao('', '', campoObsNova.value, app.usuario, agoraCurto()),
+            /* identidade por nome: o mesmo paciente com outro número não duplica */
             CriadoPor: app.usuario, CriadoEm: agoraCurto()
-          }, () => proximoIDLista(atual.casos, 'ID_IRAS', 'IRA'));
+          }, () => proximoIDLista(atual.casos, 'ID_IRAS', 'IRA'), identidadePorNome(pacientes));
           repetida = !novo;
           await gravarBanco('iras', atual);
         });

@@ -45,6 +45,24 @@ if (configLocal.PASTA_DADOS) {
     setoresHospital = lista('setores');
     atbsHospital = lista('antibioticos');
     console.log(`vocabulários do hospital: ${setoresHospital.length} setores, ${atbsHospital.length} antibióticos`);
+    /* O vocabulário de setores carrega lixo do banco antigo digitado à mão ("108", "315"…).
+       O miniapp só oferece os setores que EXISTEM de verdade: os que aparecem como setor de
+       alguma internação ou passagem do último ano (pedido de 10/11/2026). */
+    try {
+      const limite = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
+      const vistos = new Set();
+      const wbPac = XLSX.read(fs.readFileSync(path.join(configLocal.PASTA_DADOS, 'pacientes.xlsx')), { type: 'buffer' });
+      for (const i of XLSX.utils.sheet_to_json(wbPac.Sheets.internacoes || {}, { defval: '' })) {
+        if (String(i.DataInternacao || '').slice(0, 10) >= limite && String(i.SetorAtual || '').trim()) vistos.add(String(i.SetorAtual).trim());
+      }
+      const wbDen = XLSX.read(fs.readFileSync(path.join(configLocal.PASTA_DADOS, 'denominadores.xlsx')), { type: 'buffer' });
+      for (const p of XLSX.utils.sheet_to_json(wbDen.Sheets.passagem_setor || {}, { defval: '' })) {
+        if (String(p.EntradaSetor || '').slice(0, 10) >= limite && String(p.Setor || '').trim()) vistos.add(String(p.Setor).trim());
+      }
+      const antes = setoresHospital.length;
+      setoresHospital = setoresHospital.filter(s => vistos.has(s) && !/^\d+$/.test(s));
+      console.log(`setores com atividade no último ano: ${setoresHospital.length} de ${antes}`);
+    } catch (e) { console.log('(não filtrei os setores pela atividade: ' + e.message + ')'); }
   } catch (e) { console.log('(não li o config.xlsx da pasta de dados: ' + e.message + ')'); }
 }
 const paraArray = itens => itens.map(i => JSON.stringify(i)).join(', ');

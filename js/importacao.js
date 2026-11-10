@@ -4042,7 +4042,11 @@ function prescricoesComFimEfetivo(prescricoes) {
   });
 }
 
-function cursosDeAntibiotico(prescricoes) {
+/* `hoje` (opcional, ISO): os DIAS do curso contam só até hoje — o fim previsto do 2362 fica
+   em `fimPrevisto`. Sem isso um esquema iniciado ontem com 7 dias previstos aparecia com
+   "8 dias de uso" (achado de 09/11/2026). */
+function cursosDeAntibiotico(prescricoes, hoje) {
+  const limite = /^\d{4}-\d{2}-\d{2}/.test(String(hoje || '')) ? String(hoje).slice(0, 10) : new Date().toISOString().slice(0, 10);
   const porChave = new Map();
   for (const p of prescricoesComFimEfetivo(prescricoes)) {
     if (!p.Antibiotico || !/^\d{4}-/.test(String(p.DataInicio))) continue;
@@ -4076,7 +4080,12 @@ function cursosDeAntibiotico(prescricoes) {
       }
     }
   }
-  for (const c of cursos) c.dias = (diasDesde(c.inicio, c.fim) || 0) + 1;
+  for (const c of cursos) {
+    c.fimPrevisto = c.fim;
+    const ate = c.fim > limite ? limite : c.fim;
+    c.dias = Math.max(0, diasDesde(c.inicio, ate) || 0) + 1;
+    c.diasPrevistos = (diasDesde(c.inicio, c.fim) || 0) + 1;
+  }
   return cursos;
 }
 
@@ -4094,7 +4103,7 @@ const SETOR_PEDIATRICO = /neonatal|pediatr|bercario/;
    prolongado e dose acima do teto. Devolve [{tipo, curso, detalhe}] ordenado por gravidade. */
 const DIAS_CURSO_PROLONGADO = 10;
 function alertasDeAntibioticos(bancos, hojeISO) {
-  const cursos = cursosDeAntibiotico((bancos.antibioticos || {}).prescricoes || [])
+  const cursos = cursosDeAntibiotico((bancos.antibioticos || {}).prescricoes || [], hojeISO)
     .filter(c => String(c.fim) >= hojeISO);
   const sensPorCultura = new Map();
   for (const s of ((bancos.culturas || {}).sensibilidade || [])) {

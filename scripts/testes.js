@@ -2598,6 +2598,11 @@ console.log('\n== 43. Antibióticos: cursos, doses e alertas ==');
     mero.inicio === '2026-08-20' && mero.fim === '2026-09-02' && mero.dias === 14, mero);
   verificar('buraco de dias separa cursos',
     cursos.filter(c => c.Antibiotico === 'Vancomicina').length === 2);
+  /* Dias contam só até HOJE (09/11/2026): previsto de 7 dias iniciado ontem = 2 dias de uso. */
+  const comHoje = imp.cursosDeAntibiotico([{ ID_Prescricao: 'H1', Prontuario: '500', Antibiotico: 'Vancomicina', IDOrigem: '7777', DataInicio: '2026-11-04', DataFim: '2026-11-11' }], '2026-11-05');
+  verificar('dias de uso param em hoje; o fim previsto fica em fimPrevisto/diasPrevistos',
+    comHoje[0].dias === 2 && comHoje[0].fimPrevisto === '2026-11-11' && comHoje[0].diasPrevistos === 8 && comHoje[0].fim === '2026-11-11', JSON.stringify(comHoje[0]));
+  verificar('curso já encerrado não muda com hoje', imp.cursosDeAntibiotico(prescricoes, '2026-12-01').find(c => c.Antibiotico === 'Meropenem').dias === 14);
 
   /* Fim PREVISTO (2362) × relatório DIÁRIO (23/10/2026): a cefepima prevista até o dia 14
      deixou de ser prescrita no dia 6 (o paciente aparece no diário sem ela) e volta no dia
@@ -2675,8 +2680,9 @@ console.log('\n== 43. Antibióticos: cursos, doses e alertas ==');
   const alertas = imp.alertasDeAntibioticos(bancos, '2026-09-01');
   verificar('germe resistente ao ATB em uso vira alerta',
     alertas.some(a => a.tipo === 'resistencia' && a.detalhe.includes('Klebsiella')), alertas.map(a => a.tipo));
-  verificar('curso de 14 dias vira alerta de duração',
-    alertas.some(a => a.tipo === 'duracao' && a.detalhe.includes('14 dias')));
+  /* 20/08 → hoje 01/09 = 13 dias de uso real; o dia 02/09 é só previsto e não conta (09/11/2026). */
+  verificar('curso prolongado vira alerta de duração, contando os dias até hoje (13), não até o fim previsto (14)',
+    alertas.some(a => a.tipo === 'duracao' && a.detalhe.includes('13 dias')), alertas.filter(a => a.tipo === 'duracao').map(a => a.detalhe));
   verificar('vanco 8 g/dia em adulto vira alerta de dose',
     alertas.some(a => a.tipo === 'dose' && a.detalhe.includes('8.0 g/dia')), alertas.map(a => a.detalhe));
   verificar('setor pediátrico fica fora do alerta de dose',

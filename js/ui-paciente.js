@@ -192,7 +192,7 @@ async function montarPaciente(conteudo) {
      prescrito várias vezes. O fim só entra quando o curso realmente acabou — curso em
      andamento fica só com o início e a marca "em curso". */
   const hojePaciente = new Date().toISOString().slice(0, 10);
-  const cursosATB = cursosDeAntibiotico(prescricoes);
+  const cursosATB = cursosDeAntibiotico(prescricoes, hojePaciente);
   cursosATB.forEach(curso => {
     const emCurso = String(curso.fim) >= hojePaciente;
     juntar(curso.inicio, 'antibiotico', 'Início de ' + curso.Antibiotico,

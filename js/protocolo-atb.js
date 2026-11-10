@@ -1219,7 +1219,7 @@ function contextoLocalDoPaciente(bancos, prontuario, hoje) {
     .sort((a, b) => b.data.localeCompare(a.data));
 
   const cursos = cursosDeAntibiotico(((bancos.antibioticos || {}).prescricoes || [])
-    .filter(p => normalizarProntuario(p.Prontuario) === chave));
+    .filter(p => normalizarProntuario(p.Prontuario) === chave), typeof hojeISO === 'function' ? hojeISO() : undefined);
   const atb90 = [...new Set(cursos.filter(c => c.fim >= corte90).map(c => c.Antibiotico))];
 
   const internacao90 = ((bancos.pacientes || {}).internacoes || []).some(i =>

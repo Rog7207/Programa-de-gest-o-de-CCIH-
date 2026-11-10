@@ -44,7 +44,11 @@ async function montarAntibioticosNovo(conteudo) {
     sensPorCultura.get(s.ID_Cultura).push(s);
   });
 
-  const cursos = cursosDeAntibiotico(prescricoes);
+  const cursos = cursosDeAntibiotico(prescricoes, hoje);
+  /* O relatório DIÁRIO de prescrições (com dose) é o que diz quando um esquema parou; sem ele,
+     o fim previsto do 2362 emenda esquemas antigos com novos. Avisa quando ele está parado. */
+  const ultimaDiaria = prescricoes.filter(p => String(p.Dose || '').trim()).map(p => String(p.DataInicio || '').slice(0, 10)).filter(d => /^\d{4}-/.test(d)).sort().slice(-1)[0] || '';
+  const diasSemDiaria = ultimaDiaria ? diasDesde(ultimaDiaria, hoje) : null;
   /* Prescrição vinda da "Análise de antibióticos (Tasy)" é importada por ATENDIMENTO e o
      prontuário é resolvido pelo censo de internações. Atendimento fora do censo (ambulatório,
      emergência, internação antiga não importada) fica sem prontuário — e sem nome/setor. Não dá
@@ -74,6 +78,11 @@ async function montarAntibioticosNovo(conteudo) {
   const pendentes = ativos.filter(c => config.ehAtbAvaliado(c.Antibiotico) && !avaliacaoRecente(c));
   const pacientesEmATB = new Set(ativos.map(c => normalizarProntuario(c.Prontuario))).size;
 
+  if (diasSemDiaria === null || diasSemDiaria > 3) {
+    conteudo.append(el('div', { class: 'aviso-alerta' },
+      el('div', { class: 'alerta-titulo' }, ultimaDiaria ? `Relatório diário de prescrições parado desde ${ultimaDiaria.split('-').reverse().join('/')} (${fmtInt(diasSemDiaria)} dias)` : 'Relatório diário de prescrições nunca importado'),
+      el('div', { class: 'texto-suave' }, 'Os dias de uso abaixo são contados até hoje, mas sem o relatório diário o app não sabe quando um esquema PAROU antes do fim previsto — um antibiótico suspenso e reiniciado dias depois aparece como um curso só. Importe o relatório diário de prescrições do Tasy (tipo "Antibióticos prescritos", com dose e "Nr dia util") na aba Importar.')));
+  }
   conteudo.append(el('div', { class: 'grade-cartoes' }, ...[
     ['cursos ativos hoje', ativos.length],
     ['pacientes em antibiótico', pacientesEmATB],

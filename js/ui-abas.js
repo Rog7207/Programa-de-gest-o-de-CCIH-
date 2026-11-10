@@ -244,6 +244,11 @@ async function montarCulturas(conteudo) {
         '🩸 Colhida em torno da abertura de um protocolo de sepse — aparece no relatório mesmo se a triagem a classificar.'));
     }
     const avaliadaSemConflito = g ? (g.StatusRevisao === 'avaliada' && !g.Divergente) : c.StatusRevisao === 'avaliada';
+    const obsGravadas = (g ? amostras : [c]).map(a => String(a.ObservacaoAvaliacao || '').trim()).filter(Boolean);
+    if (obsGravadas.length) {
+      cartao.append(el('p', { class: 'texto-suave', style: 'white-space:pre-line;border-left:3px solid #ccc;padding-left:8px' },
+        el('strong', {}, 'Observação de quem classificou: '), [...new Set(obsGravadas)].join('\n')));
+    }
     if (avaliadaSemConflito) {
       cartao.append(el('p', {}, el('strong', {}, 'Avaliação da CCIH: '), (g ? g.Classificacao : c.AvaliacaoCCIH) || '—'));
     } else {
@@ -263,27 +268,37 @@ async function montarCulturas(conteudo) {
       const selDisp = el('select', {}, ['Nenhum', 'CVC', 'VM', 'SVD'].map(d => el('option', { value: d }, d)));
       const linhaIras = el('span', { style: 'display:none' },
         el('label', {}, ' Topografia: ', selTopo), el('label', {}, ' Dispositivo: ', selDisp));
-      selAval.addEventListener('change', () => { linhaIras.style.display = selAval.value === 'IRAS' ? '' : 'none'; });
+      /* Recado para quem vai confirmar a IRAS na aba Infecções (pedido de 09/11/2026): fica na
+         cultura e, quando abre caso, entra no diário do caso com data e autor. */
+      const campoObs = el('textarea', { rows: 2, style: 'width:100%',
+        placeholder: 'observação para quem vai validar (opcional) — ex.: "febre desde D3, CVC em jugular, discutido com a UTI"' });
+      selAval.addEventListener('change', () => {
+        linhaIras.style.display = selAval.value === 'IRAS' ? '' : 'none';
+        campoObs.placeholder = selAval.value === 'IRAS'
+          ? 'observação para quem vai confirmar a IRAS (opcional) — ex.: "febre desde D3, CVC em jugular, discutido com a UTI"'
+          : 'observação sobre a classificação (opcional) — fica registrada na cultura';
+      });
       const msg = el('p', { class: 'aviso-erro-texto' });
       cartao.append(el('div', { class: 'linha-campos' },
         el('label', {}, 'Classificação: ', selAval), linhaIras,
         el('button', { class: 'botao-primario', onclick: async () => {
           try {
-            await salvarAvaliacao(amostras, selAval.value, selTopo.value, selDisp.value);
+            await salvarAvaliacao(amostras, selAval.value, selTopo.value, selDisp.value, campoObs.value);
             /* Preserva onde a pessoa estava: sem isto, cada avaliação salva jogava o
                revisor de volta ao filtro padrão, perdendo setor e busca. */
             app.filtroCulturas = { status: selStatus.value, setor: selSetor.value, busca: campoBusca.value,
               de: campoDe.value, ate: campoAte.value };
             navegar('culturas');
           } catch (e) { msg.textContent = e.message; }
-        } }, 'Salvar avaliação')), msg);
+        } }, 'Salvar avaliação')), campoObs, msg);
     }
     detalharNaLinha(tr, cartao);
   }
 
   /* culturas: uma ou várias (grupo de amostras repetidas) — todas recebem a mesma
      classificação; o caso de IRAS nasce UMA vez, na coleta mais antiga. */
-  async function salvarAvaliacao(culturas, avaliacao, topografia, dispositivo) {
+  async function salvarAvaliacao(culturas, avaliacao, topografia, dispositivo, observacao) {
+    const nota = String(observacao || '').trim();
     const lista = (Array.isArray(culturas) ? culturas : [culturas])
       .slice().sort((a, b) => String(a.DataColeta).localeCompare(String(b.DataColeta)));
     const c = lista[0];
@@ -297,6 +312,7 @@ async function montarCulturas(conteudo) {
       for (const alvo of alvos) {
         alvo.StatusRevisao = descarte ? 'descartada' : 'avaliada';
         alvo.AvaliacaoCCIH = descarte ? 'Não é cultura' : (avaliacao === 'IRAS' ? `IRAS — ${topografia}` : avaliacao);
+        if (nota) alvo.ObservacaoAvaliacao = acrescentarObservacao(alvo.ObservacaoAvaliacao, '', nota, app.usuario, agoraCurto());
       }
       if (avaliacao === 'IRAS') {
         const bancoIras = await lerBanco('iras');
@@ -311,6 +327,9 @@ async function montarCulturas(conteudo) {
           Microrganismo: c.Microrganismo, ID_CulturaAgente: c.ID_Cultura, Desfecho: '', StatusInvestigacao: 'em investigação',
           NotificadoANVISA: '', CriadoPor: app.usuario, CriadoEm: agoraCurto()
         }, () => proximoIDLista(bancoIras.casos, 'ID_IRAS', 'IRA'), identidadePorNome(bancoPacientes.pacientes));
+        /* O recado vai para o diário do caso — é lá que quem confirma vai ler, inclusive
+           quando o caso já existia (outra cultura, pós-alta, visita da UTI). */
+        if (nota) caso.Observacoes = acrescentarObservacao(caso.Observacoes, `Cultura ${c.ID_Cultura}`, nota, app.usuario, agoraCurto());
         await gravarBanco('iras', bancoIras);
         for (const alvo of alvos) if (!alvo.ID_IRAS) alvo.ID_IRAS = caso.ID_IRAS;
       }

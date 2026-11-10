@@ -5315,15 +5315,15 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     const antes = {};
     ['el', 'fmtInt', 'app', 'config', 'lerBanco', 'gravarBanco', 'navegar', 'abrirPaciente', 'normalizarProntuario', 'normalizarTexto',
       'identidadePorNome', 'agruparCulturasRepetidas', 'indiceSepse', 'culturaDeProtocoloSepse', 'internacaoNaColeta', 'CLASSIFICACOES_CULTURA',
-      'registrarCasoIras', 'verificarTrava', 'criarTrava', 'confirmarTrava', 'liberarTrava', 'ESQUEMAS'].forEach(k => { antes[k] = global[k]; });
-    let gravado = null;
+      'registrarCasoIras', 'verificarTrava', 'criarTrava', 'confirmarTrava', 'liberarTrava', 'ESQUEMAS', 'acrescentarObservacao'].forEach(k => { antes[k] = global[k]; });
+    let gravado = null, gravadoIras = null;
     Object.assign(global, {
       el: elFalso, fmtInt: n => String(n), app: { usuario: 'Enf. Teste' },
       config: { vocabulario: { topografias: ['Infecção de corrente sanguínea'] }, rotina: { mdrMonitorados: [] } },
       lerBanco: async n => JSON.parse(JSON.stringify(fixture[n] || {})),
-      gravarBanco: async (n, banco) => { if (n === 'culturas') gravado = banco; },
+      gravarBanco: async (n, banco) => { if (n === 'culturas') gravado = banco; if (n === 'iras') gravadoIras = banco; },
       navegar() {}, abrirPaciente() {},
-      normalizarProntuario: imp.normalizarProntuario, normalizarTexto: leitura.normalizarTexto,
+      normalizarProntuario: imp.normalizarProntuario, normalizarTexto: leitura.normalizarTexto, acrescentarObservacao: imp.acrescentarObservacao,
       identidadePorNome: imp.identidadePorNome, agruparCulturasRepetidas: imp.agruparCulturasRepetidas,
       indiceSepse: imp.indiceSepse, culturaDeProtocoloSepse: imp.culturaDeProtocoloSepse, internacaoNaColeta: imp.internacaoNaColeta,
       CLASSIFICACOES_CULTURA: esquemas.CLASSIFICACOES_CULTURA, registrarCasoIras: imp.registrarCasoIras,
@@ -5351,6 +5351,24 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
         gravadas.length === 2 && gravadas.every(c => c.StatusRevisao === 'avaliada' && c.AvaliacaoCCIH === 'Presente na admissão')
           && gravado.culturas.find(c => c.ID_Cultura === 'CUL-3').StatusRevisao === 'pendente',
         gravado && gravado.culturas.map(c => c.ID_Cultura + ':' + c.StatusRevisao + ':' + c.AvaliacaoCCIH));
+      /* Observação para quem vai validar (09/11/2026): classifica a urocultura como IRAS com um
+         recado — ele fica na cultura e entra no diário do caso novo, datado e assinado. */
+      const linhaUro = achar(raiz, n => n.tag === 'tr' && /Urocultura/.test(texto(n)))[0];
+      linhaUro.ouvintes.click[0]({ currentTarget: linhaUro });
+      const cartaoUro = achar(raiz, n => n.tag === 'div' && String(n.attrs.class || '').includes('cartao-detalhe') && /CUL-3/.test(texto(n)))[0];
+      const selAval = achar(cartaoUro, n => n.tag === 'select' && n.children.some(o => o.attrs.value === 'IRAS'))[0];
+      selAval.value = 'IRAS';
+      const campoObs = achar(cartaoUro, n => n.tag === 'textarea')[0];
+      verificar('o formulário de classificação tem um campo de observação para quem vai validar', !!campoObs, texto(cartaoUro).slice(0, 200));
+      campoObs.value = 'febre desde D3, SVD há 6 dias';
+      const botaoUro = achar(cartaoUro, n => n.tag === 'button' && /Salvar avaliação/.test(texto(n)))[0];
+      await botaoUro.ouvintes.click[0]({});
+      const uro = gravado.culturas.find(c => c.ID_Cultura === 'CUL-3');
+      verificar('a observação fica gravada na cultura, datada e assinada',
+        /— Enf\. Teste\] febre desde D3, SVD há 6 dias$/.test(String(uro.ObservacaoAvaliacao || '')), uro.ObservacaoAvaliacao);
+      const casoUro = gravadoIras && gravadoIras.casos.find(k => k.ID_IRAS === uro.ID_IRAS);
+      verificar('e entra no diário do caso de IRAS que a cultura abriu, com o ID da cultura',
+        !!casoUro && /Cultura CUL-3: febre desde D3, SVD há 6 dias/.test(String(casoUro.Observacoes || '')), casoUro && casoUro.Observacoes);
     } catch (e) {
       verificar('tela de Culturas monta e classifica grupo sem exceção', false, e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e.message);
     } finally {

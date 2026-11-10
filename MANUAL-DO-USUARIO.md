@@ -235,7 +235,10 @@ Contaminação / Repetição / Não é cultura.
   a CCIH escolher uma. O mesmo agrupamento vale para as pendências de isolamento.
 
 - Classificar como **IRAS abre uma suspeita de notificação** — que só vira notificação
-  oficial depois que *outro profissional* confirmar (ver seção 7).
+  oficial depois que *outro profissional* confirmar (ver seção 7). Abaixo da classificação
+  há um campo **"observação para quem vai validar"**: escreva ali o que viu (febre desde
+  quando, dispositivo, conversa com a equipe). O recado fica gravado na cultura, datado e
+  assinado, e entra no diário do caso de IRAS — é o que quem confirma lê na aba Infecções.
 - **A evolução do Tasy é lida**: termos que sugerem infecção (febre, secreção purulenta,
   PAV, ITU, sepse, ferida infectada…; "afebril" e outras negações são descontadas) viram
   um aviso na linha da cultura, na ficha do paciente e no cartão **"Evoluções que sugerem

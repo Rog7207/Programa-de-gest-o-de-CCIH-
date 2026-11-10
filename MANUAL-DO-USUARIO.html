@@ -75,7 +75,7 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 <tr><td>Dispositivos invasivos</td><td>CVC/VM/SVD, instalação e retirada</td><td>Tasy</td></tr>
 <tr><td>Pacientes em isolamento</td><td>foto de quem está isolado agora</td><td>Tasy</td></tr>
 <tr><td>Óbitos</td><td>desfecho das internações</td><td>Tasy</td></tr>
-<tr><td>Antibióticos prescritos</td><td>prescrições em janelas renovadas</td><td>Tasy</td></tr>
+<tr><td>Antibióticos prescritos (Tasy 2365)</td><td>prescrições <strong>do dia</strong> (validade 24 h), com dose e "Nr dia util" — é o que diz o que realmente correu e separa esquema antigo de novo</td><td>Tasy — <strong>diário</strong>, como o 2362</td></tr>
 <tr><td>Evoluções clínicas (Tasy)</td><td>foto do dia (ficha, UTI, sinais de infecção) <strong>e</strong> histórico acumulado para o dossiê de IA</td><td>recorte diário do Tasy</td></tr>
 <tr><td>Sinais vitais (Tasy 2411)</td><td>medidas por atendimento (para a visita à UTI)</td><td>Tasy</td></tr>
 <tr><td>IRAS do IMAS (Tasy 2485)</td><td>lista oficial de IRAS por classificação</td><td>Tasy</td></tr>
@@ -106,7 +106,8 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 <li><strong>Sinais vitais (Tasy 2411)</strong> — uma linha por aferição (PA, FC, FR, temperatura, SatO2); alimenta a visita à UTI e os "vitais alterados" do dossiê.</li>
 <li><strong>Isolamentos (Tasy 1042)</strong>.</li>
 <li><strong>Bundles — CVC/SVD (1116) e PAV (2166)</strong>.</li>
-<li><strong>Análise de antibióticos (Tasy 2362)</strong> — vem por atendimento, por isso <strong>depois</strong> do censo.</li>
+<li><strong>Análise de antibióticos (Tasy 2362)</strong> — vem por atendimento, por isso <strong>depois</strong> do censo. Traz só as prescrições iniciadas nos últimos 2 dias, com o fim <strong>previsto</strong>.</li>
+<li><strong>Prescrições diárias de antimicrobianos (Tasy 2365)</strong> — tipo "Antibióticos prescritos" (perfil "Antibióticos (1)"), mapeando também "Nr dia util" → "Dia de terapia (Tasy)". Uma linha por prescrição do dia, com dose: é o que diz quando um esquema <strong>parou</strong> e corta o fim previsto do 2362. Sem ele, um antibiótico suspenso e reiniciado dias depois aparece como um curso só, e a aba Antibióticos avisa que o diário está parado.</li>
 <li><strong>IRAS para conciliação (Tasy 2485)</strong> — por último: casa com os pacientes e casos já carregados.</li>
 </ol>
 <p><strong>No primeiro dia do mês, acrescente:</strong></p>

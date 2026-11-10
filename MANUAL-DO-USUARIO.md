@@ -132,7 +132,7 @@ remapear a cada vez) e a **auditoria de vocabulário** (junta termos quase iguai
 | Dispositivos invasivos | CVC/VM/SVD, instalação e retirada | Tasy |
 | Pacientes em isolamento | foto de quem está isolado agora | Tasy |
 | Óbitos | desfecho das internações | Tasy |
-| Antibióticos prescritos | prescrições em janelas renovadas | Tasy |
+| Antibióticos prescritos (Tasy 2365) | prescrições **do dia** (validade 24 h), com dose e "Nr dia util" — é o que diz o que realmente correu e separa esquema antigo de novo | Tasy — **diário**, como o 2362 |
 | Evoluções clínicas (Tasy) | foto do dia (ficha, UTI, sinais de infecção) **e** histórico acumulado para o dossiê de IA | recorte diário do Tasy |
 | Sinais vitais (Tasy 2411) | medidas por atendimento (para a visita à UTI) | Tasy |
 | IRAS do IMAS (Tasy 2485) | lista oficial de IRAS por classificação | Tasy |
@@ -175,8 +175,9 @@ prontuário fica em branco e o registro aparece **sem paciente** (é o que acont
 6. **Sinais vitais (Tasy 2411)** — uma linha por aferição (PA, FC, FR, temperatura, SatO2); alimenta a visita à UTI e os "vitais alterados" do dossiê.
 7. **Isolamentos (Tasy 1042)**.
 8. **Bundles — CVC/SVD (1116) e PAV (2166)**.
-9. **Análise de antibióticos (Tasy 2362)** — vem por atendimento, por isso **depois** do censo.
-10. **IRAS para conciliação (Tasy 2485)** — por último: casa com os pacientes e casos já carregados.
+9. **Análise de antibióticos (Tasy 2362)** — vem por atendimento, por isso **depois** do censo. Traz só as prescrições iniciadas nos últimos 2 dias, com o fim **previsto**.
+10. **Prescrições diárias de antimicrobianos (Tasy 2365)** — tipo "Antibióticos prescritos" (perfil "Antibióticos (1)"), mapeando também "Nr dia util" → "Dia de terapia (Tasy)". Uma linha por prescrição do dia, com dose: é o que diz quando um esquema **parou** e corta o fim previsto do 2362. Sem ele, um antibiótico suspenso e reiniciado dias depois aparece como um curso só, e a aba Antibióticos avisa que o diário está parado.
+11. **IRAS para conciliação (Tasy 2485)** — por último: casa com os pacientes e casos já carregados.
 
 **No primeiro dia do mês, acrescente:**
 

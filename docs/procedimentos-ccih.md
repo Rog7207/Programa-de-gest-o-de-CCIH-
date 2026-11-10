@@ -89,3 +89,27 @@ já sustenta, onde cada rotina acontece dentro dele e o que ele mede.
    neonatal por peso ainda são apurados fora do app.
 6. **Dupla assinatura**: o app avisa mas não impede a mesma pessoa de abrir e confirmar uma
    IRAS; a revisão pode decidir se vira bloqueio.
+
+---
+
+## 6. Ordem de prioridade proposta para a revisão (10/11/2026)
+
+Critérios, nesta ordem: o que sustenta todo o resto (dados), obrigação legal, segurança do
+paciente, o que já funciona e só precisa de dono e cadência, e por fim o que exige construir
+tela nova.
+
+| # | Bloco | Por que agora | Decisão da CCIH | O que o app ganha |
+|---|---|---|---|---|
+| 1 | **Entrada de dados** (os 11 relatórios diários + os 4 mensais) | Tudo abaixo depende disso; o 2365 parado em 10/10 já distorceu os cursos de ATB | Dono e horário fixos; confirmar que é diária | Relógio do Painel passa de semanal para o combinado; aviso quando um relatório essencial atrasa |
+| 2 | **IRAS de ponta a ponta**: revisão de culturas → validação → digitação no Tasy → conciliação | É o indicador-mãe (taxa, Reunião, Anvisa); hoje a digitação não tem dono | Quem revisa, quem valida, quem digita e em quantos dias; bloquear ou só avisar a mesma pessoa nas duas assinaturas | Função "Digitação no Tasy" com fila e medidor; bloqueio da dupla assinatura se decidido |
+| 3 | **Anvisa mensal + pós-alta de ISC** | Obrigação até o dia 15; a efetividade da pós-alta está baixa (quadril/joelho sem contato, 50 Anvisa dispensadas) e é ela que alimenta a notificação | Dono da notificação; quem faz o contato de 30 d e o de 90 d, em que dia da semana; o que fazer com o atraso de jun–ago | Função "Notificação Anvisa" com lembrete até o dia 15; medidor do contato de 90 d; script para encerrar o atraso sem contato, se decidido |
+| 4 | **Isolamentos e colonização** | Segurança do paciente e transmissão cruzada; a colonização ganhou aba mas não tem dono | Dono dos swabs (o mesmo da identificação?); como o duvidoso chega ao infectologista | Função "Vigilância de colonização" com medidor (UTI sem swab, aquisição sem precaução); encaminhamento do duvidoso e fila da validação |
+| 5 | **Antibióticos** (avaliação semanal, página remota, decisão de ATB) | Já funciona; só falta cadência oficial e o uso da página remota pelos prescritores | Dia da semana da avaliação; se a página remota vai mesmo aos médicos; dono da planilha de decisão de ATB | Nada a construir; ajustar "a cada N dias" |
+| 6 | **Visita à UTI e dispositivos invasivos** | Rotina existe e é medida; o perfil "procedimentos invasivos" está vazio | Quem visita e quantas vezes por semana; o que o infectologista + enfermeiro revisam nos dispositivos | Tela de dispositivos a revisar com medidor (construção maior) |
+| 7 | **Surtos e higiene das mãos** | Funcionam e são medidos; só confirmar cadência e dono | Prazo para avaliar uma suspeita; meta de observações/mês por setor | Nada a construir |
+| 8 | **Notificáveis (SINAN)** | Complementar; o app só aponta | Dono; frequência de importação do NINDINET | Função "Notificação compulsória" com fila |
+| 9 | **Sepse, Reunião, relatórios, dossiê para IA, backup** | Baixo risco; são rotinas do gestor | Donos e datas (reunião mensal, backup) | Nada a construir |
+
+Regra prática: fechar os blocos 1 a 3 antes de mexer nos demais — são os que mudam número de
+indicador e obrigação externa. Os blocos 4 a 9 podem ser revisados em paralelo pela equipe,
+porque não dependem um do outro.

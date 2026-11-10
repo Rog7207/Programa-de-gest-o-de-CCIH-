@@ -37,7 +37,7 @@ function pendenciasPorPaciente(bancos, opcoes) {
     if (!chave) return null;
     if (!porChave.has(chave)) {
       porChave.set(chave, { chave, prontuarios: [], nome: '', setor: '', leito: '', internadoDesde: '', diaInternacao: null,
-        emUTI: false, temMDR: false, pendencias: { culturas: [], antibioticos: [], iras: [], isolamentos: [] },
+        internado: false, emUTI: false, temMDR: false, pendencias: { culturas: [], antibioticos: [], iras: [], isolamentos: [] },
         total: 0, maisAntigaDias: 0, prioridade: 0 });
     }
     const p = porChave.get(chave);
@@ -127,6 +127,7 @@ function pendenciasPorPaciente(bancos, opcoes) {
   }
   for (const [chave, i] of abertasPorChave) {
     const p = porChave.get(chave);
+    p.internado = true;
     p.setor = String(i.SetorAtual || '').trim();
     p.leito = String(i.Leito || '').trim();
     p.internadoDesde = String(i.DataInternacao || '').slice(0, 10);
@@ -148,7 +149,9 @@ function pendenciasPorPaciente(bancos, opcoes) {
     p.prioridade = (p.emUTI ? 40 : 0) + (p.temMDR ? 30 : 0) + (p.pendencias.iras.length ? 10 : 0)
       + p.total * 5 + Math.min(30, p.maisAntigaDias) * 2;
   }
-  return lista.sort((a, b) => b.prioridade - a.prioridade || b.maisAntigaDias - a.maisAntigaDias || a.nome.localeCompare(b.nome));
+  /* Quem ainda está internado vem antes de quem já teve alta (pedido de 10/11/2026): a decisão
+     muda a conduta de quem está no hospital; o resto é registro. */
+  return lista.sort((a, b) => (b.internado - a.internado) || b.prioridade - a.prioridade || b.maisAntigaDias - a.maisAntigaDias || a.nome.localeCompare(b.nome));
 }
 
 /* Resumo dos tipos de pendência de um paciente, para a lista (ex.: "2 culturas · 1 ATB"). */

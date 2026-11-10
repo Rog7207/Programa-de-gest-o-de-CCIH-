@@ -700,13 +700,15 @@ atropelam: cada gravação trava o arquivo, relê e só então grava.
   agrupado por paciente (pela identidade, não pelo prontuário): culturas a revisar, cursos de
   antibiótico a avaliar, suspeitas de IRAS a confirmar e isolamentos a decidir. Lista à
   esquerda do mais prioritário (UTI, multirresistente, quantidade e idade das pendências) para
-  o menos; à direita a ficha com o contexto comum (antibióticos em curso, culturas de 30 dias
-  com antibiograma, última evolução médica) e um bloco por pendência. **Fase atual: modo de
-  leitura** — cada bloco tem o botão que leva à pendência na aba de origem, onde a decisão é
-  gravada. Os formulários de cultura e de antibiótico já são compartilhados entre as abas
-  (mesmo código, mesmo registro); quando a equipe estiver treinada, passam a ficar nesta tela.
-  Regra "uma pendência, um registro": a mesma pessoa avaliando o mesmo curso de antibiótico
-  no mesmo dia por dois caminhos atualiza a avaliação em vez de duplicá-la.
+  o menos, e **internados antes de quem já teve alta**; à direita a ficha com o contexto comum
+  (antibióticos em curso, culturas de 30 dias com antibiograma, última evolução médica) e um
+  bloco por pendência. **Fase atual (em teste): cultura e antibiótico são decididos aqui** —
+  cada bloco traz o mesmo formulário da aba de origem, com "— sem decisão —" como primeira
+  opção; **"Salvar e próximo paciente"** grava só os blocos marcados (mesmo registro das abas
+  Culturas e Antibióticos, que continuam funcionando) e abre o paciente seguinte. Suspeita de
+  IRAS e isolamento ainda são decididos nas abas de origem (botão no bloco). Regra "uma
+  pendência, um registro": a mesma pessoa avaliando o mesmo curso de antibiótico no mesmo dia
+  por dois caminhos atualiza a avaliação em vez de duplicá-la.
 - **Reunião da CCIH** — indicadores em formato de apresentação (um slide por tema, setas para
   avançar), na ordem decidida pela CCIH em 21/10/2026: (1) **IRAS do mês** — taxa por 1.000
   pacientes-dia, número de casos e barras por sítio; (2) **IRAS por mês** nos últimos 12 meses

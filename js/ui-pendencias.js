@@ -1,10 +1,11 @@
-/* Aba "Pendências por paciente" (10/11/2026) — FASE 2 da migração: modo de leitura.
+/* Aba "Pendências por paciente" (10/11/2026) — FASE 3 da migração: gravação habilitada.
 
    Mostra tudo que está aberto para a equipe decidir agrupado por paciente, com o contexto
    que hoje se repete em cada aba (internação, antibióticos em curso, culturas recentes,
-   última evolução médica). As decisões ainda são tomadas nas abas de origem — cada bloco tem
-   o botão que leva direto à pendência lá. A fase 3 troca esses botões pelos formulários
-   compartilhados de ui-formularios.js, sem mudar o que é gravado. */
+   última evolução médica). Cultura e antibiótico são decididos AQUI pelos formulários
+   compartilhados de ui-formularios.js (mesmo código e mesmo registro das abas de origem, que
+   continuam existindo); suspeita de IRAS e isolamento ainda levam à aba de origem. "Salvar e
+   próximo" grava só os blocos com decisão marcada e abre o paciente seguinte da lista. */
 
 async function montarPendencias(conteudo) {
   conteudo.append(el('h1', {}, 'Pendências por paciente'));
@@ -27,8 +28,8 @@ async function montarPendencias(conteudo) {
     t.iras += p.pendencias.iras.length; t.isolamentos += p.pendencias.isolamentos.length; return t; }, { culturas: 0, antibioticos: 0, iras: 0, isolamentos: 0 });
 
   conteudo.append(el('div', { class: 'aviso-alerta' },
-    el('div', { class: 'alerta-titulo' }, 'Modo de leitura (fase 2 da migração)'),
-    el('div', { class: 'texto-suave' }, 'Esta tela junta as pendências de cada paciente para a revisão ser feita de uma vez. As decisões continuam sendo registradas nas abas de origem — cada bloco tem o botão que leva direto à pendência. Quando a equipe estiver treinada, os formulários passam a ficar aqui, gravando os mesmos registros.')));
+    el('div', { class: 'alerta-titulo' }, 'Em teste (fase 3 da migração)'),
+    el('div', { class: 'texto-suave' }, 'Culturas e antibióticos podem ser decididos aqui: marque a decisão nos blocos que quiser e clique "Salvar e próximo paciente" — grava exatamente o mesmo registro das abas Culturas e Antibióticos, que continuam funcionando. Suspeita de IRAS e isolamento ainda são decididos nas abas de origem (botão no bloco). Pacientes internados vêm antes dos que já tiveram alta.')));
   conteudo.append(el('div', { class: 'grade-cartoes' }, ...[
     ['pacientes com pendência', lista.length], ['culturas a revisar', totais.culturas], ['cursos de ATB a avaliar', totais.antibioticos],
     ['suspeitas de IRAS a confirmar', totais.iras], ['isolamentos a decidir', totais.isolamentos]
@@ -51,7 +52,8 @@ async function montarPendencias(conteudo) {
     el('div', { class: 'linha-campos' }, el('label', {}, 'Setor: ', selSetor), el('label', {}, 'Mostrar: ', selTipo), el('label', {}, 'Buscar: ', campoBusca)),
     el('div', { class: 'pend-grade' }, areaLista, areaDetalhe)));
 
-  let escolhido = null;
+  /* Paciente aberto sobrevive à regravação da tela (app.pendenciaAberta = chave de identidade). */
+  let escolhido = (app.pendenciaAberta && lista.find(p => p.chave === app.pendenciaAberta)) || null;
   function filtrados() {
     const b = normalizarTexto(campoBusca.value);
     return lista.filter(p => (!selSetor.value || (selSetor.value === '__uti' ? p.emUTI : p.setor === selSetor.value))
@@ -64,7 +66,7 @@ async function montarPendencias(conteudo) {
       el('p', { class: 'texto-suave' }, `${fmtInt(itens.length)} paciente(s), do mais prioritário para o menos`),
       ...itens.slice(0, 200).map(p => el('div', { class: 'pend-item linha-clicavel' + (escolhido === p ? ' pend-item-atual' : ''), onclick: () => { escolhido = p; desenharLista(); desenharDetalhe(p); } },
         el('div', { class: 'pend-item-nome' }, (p.nome || '(sem nome)') + (p.emUTI ? ' 🛏' : '') + (p.temMDR ? ' 🦠' : '')),
-        el('div', { class: 'texto-suave' }, `${p.prontuarios.join(' / ')} · ${p.setor || 'sem setor'}${p.leito ? ' · leito ' + p.leito : ''}${p.diaInternacao ? ' · D' + p.diaInternacao : ''}`),
+        el('div', { class: 'texto-suave' }, `${p.prontuarios.join(' / ')} · ${p.setor || 'sem setor'}${p.leito ? ' · leito ' + p.leito : ''}${p.diaInternacao ? ' · D' + p.diaInternacao : ''}${p.internado ? '' : ' · já teve alta'}`),
         el('div', { class: 'pend-chips' }, resumoPendencias(p), p.maisAntigaDias ? el('span', { class: 'texto-suave' }, ` · mais antiga há ${fmtInt(p.maisAntigaDias)} d`) : null))));
     if (escolhido && !itens.includes(escolhido) && itens.length) { escolhido = itens[0]; desenharDetalhe(escolhido); }
     else if (!escolhido && itens.length) { escolhido = itens[0]; desenharLista(); desenharDetalhe(escolhido); }
@@ -91,8 +93,30 @@ async function montarPendencias(conteudo) {
 
     const bloco = (titulo, corpo, botao) => el('div', { class: 'pend-bloco' },
       el('div', { class: 'pend-bloco-cab' }, el('strong', {}, titulo), botao || null), corpo);
-    const irCulturas = pront => el('button', { class: 'botao-secundario', onclick: () => { app.filtroCulturas = { status: 'pendente', setor: '', busca: pront, de: '', ate: '' }; navegar('culturas'); } }, 'Classificar na aba Culturas →');
-    const irAtb = chave => el('button', { class: 'botao-secundario', onclick: () => { app.cursoAberto = chave; navegar('antibioticos'); } }, 'Avaliar na aba Antibióticos →');
+    const irCulturas = pront => el('button', { class: 'botao-link', onclick: () => { app.filtroCulturas = { status: 'pendente', setor: '', busca: pront, de: '', ate: '' }; navegar('culturas'); } }, 'abrir na aba Culturas →');
+    const irAtb = chave => el('button', { class: 'botao-link', onclick: () => { app.cursoAberto = chave; navegar('antibioticos'); } }, 'abrir na aba Antibióticos →');
+    /* Formulários compartilhados, com "— sem decisão —" como primeira opção: só o que for
+       marcado é gravado. */
+    const forms = [];
+    const formCultura = c => { const f = formularioClassificacaoCultura(c.amostras, { permitirVazio: true }); forms.push({ tipo: 'cultura', f, rotulo: c.rotulo }); return f.no; };
+    const formAtb = a => { const f = formularioAvaliacaoAntibiotico(a.curso, { permitirVazio: true, hoje }); forms.push({ tipo: 'atb', f, rotulo: a.rotulo }); return f.no; };
+    const msg = el('p', { class: 'aviso-erro-texto' });
+    async function salvarDecisoes(irParaProximo) {
+      const marcados = forms.filter(x => x.f.temDecisao());
+      if (!marcados.length) { msg.textContent = 'Nenhuma decisão marcada — escolha a classificação ou a avaliação nos blocos.'; return; }
+      msg.textContent = '';
+      try {
+        for (const x of marcados) {
+          if (x.tipo === 'cultura') await x.f.salvar({ pacientes: bancos.pacientes.pacientes });
+          else await x.f.salvar();
+        }
+      } catch (e) { msg.textContent = 'Erro ao gravar: ' + e.message; return; }
+      const itens = filtrados();
+      const pos = itens.indexOf(p);
+      const proximo = irParaProximo ? (itens[pos + 1] || itens[pos - 1] || null) : p;
+      app.pendenciaAberta = proximo ? proximo.chave : null;
+      navegar('pendencias', { historico: 'substituir' });
+    }
 
     areaDetalhe.replaceChildren(
       el('h2', {}, (p.nome || '(sem nome)') + ' ', el('span', { class: 'texto-suave', style: 'font-size:0.7em' }, p.prontuarios.join(' / '))),
@@ -127,18 +151,25 @@ async function montarPendencias(conteudo) {
       ...p.pendencias.culturas.map(c => bloco('🧫 Cultura a revisar: ' + c.rotulo,
         el('div', {}, el('p', { class: 'texto-suave' }, `coleta ${c.cultura.DataColeta} · ${c.cultura.Setor || ''}` + (c.grupo ? ` · ${c.grupo.Quantidade} amostras (${c.grupo.Inicio} a ${c.grupo.Fim})` : '')
           + (c.cultura.TriagemRegra ? ` · ${c.cultura.TriagemRegra}` : '')),
-          (sensPorCultura.get(c.cultura.ID_Cultura) || []).length ? gradeSIR(sensPorCultura.get(c.cultura.ID_Cultura)) : null),
+          (sensPorCultura.get(c.cultura.ID_Cultura) || []).length ? gradeSIR(sensPorCultura.get(c.cultura.ID_Cultura)) : null,
+          formCultura(c)),
         irCulturas(c.cultura.Prontuario))),
       ...p.pendencias.antibioticos.map(a => bloco('💊 Antibiótico a avaliar: ' + a.rotulo,
-        el('p', { class: 'texto-suave' }, `desde ${a.curso.inicio} · dose ${a.curso.ultima.Dose || '—'} · ${a.curso.Setor || ''}`
+        el('div', {}, el('p', { class: 'texto-suave' }, `desde ${a.curso.inicio} · dose ${a.curso.ultima.Dose || '—'} · ${a.curso.Setor || ''}`
           + (culturas30.some(c => (sensPorCultura.get(c.ID_Cultura) || []).some(s => normalizarTexto(s.Antibiotico) === normalizarTexto(a.curso.Antibiotico) && s.Resultado === 'R')) ? ' · 🦠 germe recente resistente a este antibiótico' : '')),
+          formAtb(a)),
         irAtb(a.chave))),
       ...p.pendencias.iras.map(k => bloco('⚠ Suspeita de IRAS a confirmar: ' + k.rotulo,
         el('p', { class: 'texto-suave', style: 'white-space:pre-line' }, [k.caso.Setor, k.caso.DispositivoAssociado && k.caso.DispositivoAssociado !== 'Nenhum' ? k.caso.DispositivoAssociado : '', k.caso.Microrganismo, k.caso.Observacoes].filter(Boolean).join(' · ')),
         el('button', { class: 'botao-secundario', onclick: () => { app.abaInfeccoes = 'confirmar'; navegar('iras'); } }, 'Confirmar na aba Infecções →'))),
       ...p.pendencias.isolamentos.map(m => bloco('🚪 Isolamento a decidir: ' + m.rotulo,
         el('p', { class: 'texto-suave' }, `coleta ${m.item.DataColeta} · sugestão: ${m.item.Sugestao || 'Contato'}`),
-        el('button', { class: 'botao-secundario', onclick: () => navegar('isolamentos') }, 'Decidir na aba Isolamentos →'))));
+        el('button', { class: 'botao-secundario', onclick: () => navegar('isolamentos') }, 'Decidir na aba Isolamentos →'))),
+      forms.length ? el('div', { class: 'linha-botoes', style: 'margin-top:10px' },
+        el('button', { class: 'botao-primario', onclick: () => salvarDecisoes(true) }, 'Salvar e próximo paciente'),
+        el('button', { class: 'botao-secundario', onclick: () => salvarDecisoes(false) }, 'Salvar e ficar neste paciente'),
+        el('span', { class: 'texto-suave' }, 'só os blocos com decisão marcada são gravados')) : null,
+      msg);
   }
 
   desenharLista();

@@ -6582,15 +6582,20 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     try {
       const hoje = '2026-11-10';
       const bancos = {
-        pacientes: { pacientes: [{ Prontuario: '100', Nome: 'Fulano de Tal' }, { Prontuario: '80000100', Nome: 'Fulano de Tal' }, { Prontuario: '200', Nome: 'Beltrana Silva' }, { Prontuario: '300', Nome: 'Ciclano Souza' }],
+        pacientes: { pacientes: [{ Prontuario: '100', Nome: 'Fulano de Tal' }, { Prontuario: '80000100', Nome: 'Fulano de Tal' }, { Prontuario: '200', Nome: 'Beltrana Silva' }, { Prontuario: '300', Nome: 'Ciclano Souza' }, { Prontuario: '400', Nome: 'Antigo de Alta' }],
           internacoes: [{ Prontuario: '100', Atendimento: 'A1', DataInternacao: '2026-11-01', DataAlta: '', SetorAtual: 'CTI', Leito: '12' },
-            { Prontuario: '200', Atendimento: 'A2', DataInternacao: '2026-11-05', DataAlta: '', SetorAtual: 'Clínica Médica', Leito: '301-2' }] },
+            { Prontuario: '200', Atendimento: 'A2', DataInternacao: '2026-11-05', DataAlta: '', SetorAtual: 'Clínica Médica', Leito: '301-2' },
+            { Prontuario: '400', Atendimento: 'A4', DataInternacao: '2026-09-28', DataAlta: '2026-10-12', SetorAtual: 'CTI', Leito: '3' }] },
         culturas: { culturas: [
           { ID_Cultura: 'C1', Prontuario: '100', DataColeta: '2026-11-04', Material: 'Hemocultura', Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: 'KPC', StatusRevisao: 'pendente', Setor: 'CTI' },
           { ID_Cultura: 'C2', Prontuario: '80000100', DataColeta: '2026-11-06', Material: 'Hemocultura', Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: 'KPC', StatusRevisao: 'pendente', Setor: 'CTI' },
           { ID_Cultura: 'C3', Prontuario: '200', DataColeta: '2026-11-08', Material: 'Urocultura', Microrganismo: 'Escherichia coli', StatusRevisao: 'pendente', Setor: 'Clínica Médica' },
           { ID_Cultura: 'C4', Prontuario: '200', DataColeta: '2026-11-02', Material: 'Urocultura', Microrganismo: 'Proteus mirabilis', StatusRevisao: 'avaliada', AvaliacaoCCIH: 'Presente na admissão' },
-          { ID_Cultura: 'C5', Prontuario: '300', DataColeta: '2026-11-09', Material: 'Swab', Microrganismo: '', StatusRevisao: 'pendente' }
+          { ID_Cultura: 'C5', Prontuario: '300', DataColeta: '2026-11-09', Material: 'Swab', Microrganismo: '', StatusRevisao: 'pendente' },
+          /* Paciente de ALTA com três culturas antigas pendentes: muita pendência, mas fica depois dos internados. */
+          { ID_Cultura: 'C6', Prontuario: '400', DataColeta: '2026-10-01', Material: 'Urocultura', Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: 'KPC', StatusRevisao: 'pendente', Setor: 'CTI' },
+          { ID_Cultura: 'C7', Prontuario: '400', DataColeta: '2026-10-05', Material: 'Hemocultura', Microrganismo: 'Staphylococcus aureus', StatusRevisao: 'pendente', Setor: 'CTI' },
+          { ID_Cultura: 'C8', Prontuario: '400', DataColeta: '2026-10-09', Material: 'Secreção traqueal', Microrganismo: 'Pseudomonas aeruginosa', StatusRevisao: 'pendente', Setor: 'CTI' }
         ], sensibilidade: [{ ID_Cultura: 'C1', Antibiotico: 'Meropenem', Resultado: 'R' }, { ID_Cultura: 'C2', Antibiotico: 'Meropenem', Resultado: 'R' }] },
         antibioticos: { prescricoes: [
           { ID_Prescricao: 'P1', Prontuario: '100', Antibiotico: 'Meropenem', DataInicio: '2026-11-03', DataFim: '2026-11-13', Setor: 'CTI' },
@@ -6603,7 +6608,10 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
         isolamentos: { precaucoes: [], decisoes: [] }
       };
       const lista = pend.pendenciasPorPaciente(bancos, { hoje });
-      verificar('dois prontuários do mesmo nome viram UM paciente; o sem pendência não entra', lista.length === 2 && lista.some(p => p.prontuarios.join(',') === '100,80000100'), lista.map(p => p.prontuarios.join('/')).join(' | '));
+      verificar('dois prontuários do mesmo nome viram UM paciente; o sem pendência não entra', lista.length === 3 && lista.some(p => p.prontuarios.join(',') === '100,80000100'), lista.map(p => p.prontuarios.join('/')).join(' | '));
+      const antigo = lista.find(p => p.nome === 'Antigo de Alta');
+      verificar('paciente de alta (mesmo com mais pendências, MDR e UTI) fica DEPOIS dos internados', antigo && antigo.internado === false && lista.indexOf(antigo) === 2 && antigo.pendencias.culturas.length === 3
+        && antigo.prioridade > lista[1].prioridade, lista.map(p => `${p.nome}:${p.internado ? 'int' : 'alta'}:${p.prioridade}`).join(' | '));
       const fulano = lista.find(p => p.nome === 'Fulano de Tal'), beltrana = lista.find(p => p.nome === 'Beltrana Silva');
       verificar('as duas hemoculturas repetidas (prontuários diferentes) são UMA pendência de cultura', fulano.pendencias.culturas.length === 1 && fulano.pendencias.culturas[0].tipo === 'grupo', JSON.stringify(fulano.pendencias.culturas.map(c => c.rotulo)));
       verificar('curso ativo sem avaliação recente entra; o avaliado há 2 dias não; o encerrado não',

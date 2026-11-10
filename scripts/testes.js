@@ -6533,6 +6533,39 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     verificar('indicadoresReuniao traz consumoAtb com 12 meses', rel.indicadoresReuniao({ ...bancos, iras: { casos: [] }, culturas: { culturas: [], sensibilidade: [] }, isolamentos: { precaucoes: [] }, higiene_maos: { observacoes: [] }, sepse: { casos: [] }, cirurgias: { cirurgias: [] } }, '2026-10-21').consumoAtb.length === 12);
   }
 
+  /* == 110. Catálogo das cargas: id pelo tipo/campos e situação diária/semanal/mensal (10/11/2026) == */
+  {
+    console.log('\n== 110. Cargas de relatório: catálogo, 2550 × 1714 e situação da conferência ==');
+    const al = require(path.join(__dirname, '..', 'js', 'alertas.js'));
+    verificar('tipo internacoes → censo 50023', al.relatorioDaCarga('internacoes', ['Atendimento']) === 'censo_50023');
+    verificar('cirurgias sem profilaxia mapeada → 2550', al.relatorioDaCarga('cirurgias', ['Procedimento', 'Telefone']) === 'cirurgias_2550');
+    verificar('cirurgias com ProfilaxiaAntibiotico mapeada → 1714', al.relatorioDaCarga('cirurgias', ['Atendimento', 'ProfilaxiaAntibiotico']) === 'profilaxia_1714');
+    verificar('tipo desconhecido → null', al.relatorioDaCarga('xyz', []) === null);
+    const ordemDiaria = al.CATALOGO_CARGAS.filter(c => c.frequencia === 'diaria').sort((a, b) => a.ordem - b.ordem).map(c => c.tasy || c.id);
+    verificar('a ordem diária começa no censo 50023 e termina no 2365 (o 2485 é semanal)',
+      ordemDiaria[0] === '50023' && ordemDiaria[ordemDiaria.length - 1] === '2365' && !ordemDiaria.includes('2485'), ordemDiaria.join(' → '));
+    /* terça 10/11/2026 */
+    const cargas = [
+      { Data: '2026-11-10', Relatorio: 'censo_50023' }, { Data: '2026-11-09', Relatorio: 'censo_50023' },
+      { Data: '2026-11-09', Relatorio: 'internados_2396' },
+      { Data: '2026-11-05', Relatorio: 'culturas_lab' },
+      { Data: '2026-11-04', Relatorio: 'cirurgias_2550' }, { Data: '2026-10-20', Relatorio: 'obitos_836' },
+      { Data: '2026-11-03', Relatorio: 'niss_3066' }, { Data: '2026-10-05', Relatorio: 'profilaxia_1714' },
+      { Data: 'lixo', Relatorio: 'vitais_2411' }
+    ];
+    const sit = Object.fromEntries(al.situacaoDasCargas(cargas, '2026-11-10').map(s => [s.id, s]));
+    verificar('carga de hoje → feita', sit.censo_50023.status === 'feita' && sit.censo_50023.ultima === '2026-11-10');
+    verificar('carga de ontem (dia útil) → falta hoje', sit.internados_2396.status === 'falta' && sit.internados_2396.atrasoDias === 1);
+    verificar('carga de quinta passada → atrasada 3 dias úteis', sit.culturas_lab.status === 'atrasada' && sit.culturas_lab.atrasoDias === 3, JSON.stringify(sit.culturas_lab));
+    verificar('nunca carregada (ou data inválida) → nunca', sit.evolucoes_2394.status === 'nunca' && sit.vitais_2411.status === 'nunca');
+    verificar('semanal há 6 dias → feita; há 21 → atrasada', sit.cirurgias_2550.status === 'feita' && sit.obitos_836.status === 'atrasada');
+    verificar('mensal no mês corrente → feita; do mês passado → falta', sit.niss_3066.status === 'feita' && sit.profilaxia_1714.status === 'atrasada');
+    const sab = Object.fromEntries(al.situacaoDasCargas([{ Data: '2026-11-13', Relatorio: 'censo_50023' }], '2026-11-14').map(s => [s.id, s]));
+    verificar('no sábado, a carga de sexta conta como feita (fim de semana não envelhece)', sab.censo_50023.status === 'feita');
+    const ordem = al.situacaoDasCargas([], '2026-11-10').map(s => s.frequencia + ':' + s.ordem);
+    verificar('a lista sai agrupada por frequência e na ordem do procedimento', ordem[0] === 'diaria:1' && ordem.indexOf('mensal:1') > ordem.indexOf('diaria:10'), ordem.join(','));
+  }
+
   console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
   process.exit(falharam ? 1 : 0);
 })();

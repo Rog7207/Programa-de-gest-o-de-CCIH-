@@ -173,6 +173,13 @@ const ESQUEMAS = {
      guarda a notificação já feita para CRUZAR com os internados (notificado ✓ × pendente ⚠).
      Minimização LGPD: resolvemos o Prontuario pela identidade e NÃO gravamos nome, mãe, endereço
      ou CNS; quando não resolve a um paciente conhecido, fica só o agravo/datas (Identificado=nao). */
+  /* Registro de cada carga de relatório (10/11/2026): é o que a lista de conferência da aba
+     Importar usa para dizer o que já entrou hoje/nesta semana/neste mês. Relatorio = id do
+     CATALOGO_CARGAS (alertas.js); Tipo = tipo de importação. */
+  cargas: {
+    arquivo: 'cargas.xlsx',
+    abas: { cargas: ['Data', 'Hora', 'Relatorio', 'Tipo', 'Arquivo', 'Linhas', 'Por'] }
+  },
   sinan: {
     arquivo: 'sinan.xlsx',
     abas: {

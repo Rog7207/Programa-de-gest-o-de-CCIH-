@@ -509,9 +509,9 @@ function isolamentosParaNotificar(precaucoes, dia) {
    periodicidade vira o prazo: a fila está "atrasada" quando o item mais antigo já passou dele.
 
    Duas escolhas da CCIH do HNSC moldam a conta (decididas em 21/09/2026):
-   - o relógio é a DATA DA ÚLTIMA CARGA semanal, não o calendário: os dados entram uma vez
-     por semana (segunda) e o trabalho de processo é feito nesse dia; entre cargas o painel
-     "congela" e mostra a semana vigente. Só vira atraso o que sobrou de semanas anteriores.
+   - o relógio é a DATA DA ÚLTIMA CARGA, não o calendário: as filas envelhecem até o dia dos
+     dados mais recentes; entre cargas o painel "congela" nesse dia. (Era carga semanal em
+     21/09/2026; desde 10/11/2026 a carga é diária, dias úteis — ver CATALOGO_CARGAS.)
    - conta-se em DIAS ÚTEIS: fim de semana é sobreaviso, não envelhece fila.
 
    Duas naturezas de medidor:
@@ -673,8 +673,80 @@ function rotinaDaEquipe(profissionais, bancos, referencia, opcoes) {
   return linhas.sort((a, b) => (ordem[a.status] - ordem[b.status]) || a.funcao.localeCompare(b.funcao));
 }
 
+/* ---- Catálogo das cargas de relatório (POP de carregamento, 10/11/2026) ----
+   A ordem é a do procedimento: o censo (50023) cria a identidade atendimento ↔ prontuário e
+   tudo que vem por atendimento depende dele. `tipos` = tipos de importação que alimentam o
+   item; `campo` desempata tipos compartilhados (2550 × 1714 são ambos "cirurgias"). */
+const CATALOGO_CARGAS = [
+  { id: 'censo_50023', ordem: 1, frequencia: 'diaria', tasy: '50023', rotulo: 'Internações — censo', tipos: ['internacoes'] },
+  { id: 'movimentacao_2536', ordem: 2, frequencia: 'diaria', tasy: '2536', rotulo: 'Movimentação de pacientes (passagens)', tipos: ['passagem_setor'] },
+  { id: 'internados_2396', ordem: 3, frequencia: 'diaria', tasy: '2396', rotulo: 'Internados hoje, com leito (foto)', tipos: [] },
+  { id: 'culturas_lab', ordem: 4, frequencia: 'diaria', tasy: '', rotulo: 'Culturas do laboratório', tipos: ['culturas'] },
+  { id: 'evolucoes_2394', ordem: 5, frequencia: 'diaria', tasy: '2394', rotulo: 'Evoluções', tipos: [] },
+  { id: 'vitais_2411', ordem: 6, frequencia: 'diaria', tasy: '2411', rotulo: 'Sinais vitais', tipos: [] },
+  { id: 'isolamentos_1042', ordem: 7, frequencia: 'diaria', tasy: '1042', rotulo: 'Pacientes em isolamento', tipos: ['isolamentos'] },
+  { id: 'bundles_1116_2166', ordem: 8, frequencia: 'diaria', tasy: '1116 / 2166', rotulo: 'Bundles CVC/SVD e PAV (dispositivos)', tipos: ['dispositivos'] },
+  { id: 'analise_atb_2362', ordem: 9, frequencia: 'diaria', tasy: '2362', rotulo: 'Análise de antibióticos', tipos: ['analise_atb'] },
+  { id: 'prescricoes_2365', ordem: 10, frequencia: 'diaria', tasy: '2365', rotulo: 'Prescrições diárias de antimicrobianos', tipos: ['antibioticos'] },
+  { id: 'cirurgias_2550', ordem: 1, frequencia: 'semanal', tasy: '2550', rotulo: 'Cirurgias realizadas + telefones', tipos: ['cirurgias'] },
+  { id: 'profilaxia_1714', ordem: 2, frequencia: 'semanal', tasy: '1714', rotulo: 'Profilaxia cirúrgica', tipos: ['cirurgias'], campo: 'ProfilaxiaAntibiotico' },
+  { id: 'obitos_836', ordem: 3, frequencia: 'semanal', tasy: '836', rotulo: 'Óbitos', tipos: ['obitos'] },
+  { id: 'iras_2485', ordem: 4, frequencia: 'semanal', tasy: '2485', rotulo: 'IRAS do IMAS (conciliação)', tipos: ['iras_tasy'] },
+  { id: 'niss_3066', ordem: 1, frequencia: 'mensal', tasy: '3066', rotulo: 'Invasividade NISS (CTI e UTI neonatal)', tipos: ['censo_setor'] },
+  /* Sem cadência fixa — registrados para o histórico, fora da lista de conferência. */
+  { id: 'altas', frequencia: null, rotulo: 'Altas', tipos: ['altas'] },
+  { id: 'higiene_maos', frequencia: null, rotulo: 'Higiene das mãos', tipos: ['higiene_maos'] },
+  { id: 'antimicrobianos', frequencia: null, rotulo: 'Catálogo da farmácia', tipos: ['antimicrobianos'] },
+  { id: 'sepse', frequencia: null, rotulo: 'Protocolo de sepse', tipos: ['sepse'] },
+  { id: 'iras_outro', frequencia: null, rotulo: 'IRAS de outro sistema', tipos: ['iras'] },
+  { id: 'sinan_nindinet', frequencia: null, rotulo: 'SINAN (NINDINET)', tipos: [] },
+  { id: 'prancheta_dispositivos', frequencia: null, rotulo: 'Prancheta de dispositivos (UTI)', tipos: [] },
+  { id: 'miniapp', frequencia: null, rotulo: 'Arquivo de miniapp', tipos: [] }
+];
+
+/* Id do catálogo para uma importação pelo tipo e pelos campos mapeados (2550 × 1714). */
+function relatorioDaCarga(tipo, camposMapeados) {
+  const campos = new Set((camposMapeados || []).filter(Boolean));
+  const candidatos = CATALOGO_CARGAS.filter(c => c.tipos.includes(tipo));
+  if (!candidatos.length) return null;
+  const comCampo = candidatos.find(c => c.campo && campos.has(c.campo));
+  if (comCampo) return comCampo.id;
+  return (candidatos.find(c => !c.campo) || candidatos[0]).id;
+}
+
+/* Situação de cada item do catálogo com cadência, dada a lista de cargas registradas:
+   diária → feita (há carga no último dia útil até hoje), falta (a do dia ainda não entrou),
+   atrasada (2+ dias úteis sem carga) ou nunca; semanal → feita até 7 dias corridos;
+   mensal → feita quando há carga no mês de hoje. */
+function situacaoDasCargas(cargas, hoje) {
+  const ultimaPor = new Map();
+  for (const c of cargas || []) {
+    const d = String(c.Data || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+    if (!ultimaPor.has(c.Relatorio) || d > ultimaPor.get(c.Relatorio)) ultimaPor.set(c.Relatorio, d);
+  }
+  const ref = String(hoje).slice(0, 10);
+  return CATALOGO_CARGAS.filter(c => c.frequencia).map(c => {
+    const ultima = ultimaPor.get(c.id) || null;
+    let status = 'nunca', atrasoDias = null;
+    if (ultima) {
+      if (c.frequencia === 'diaria') {
+        atrasoDias = diasUteis(ultima, ref);
+        status = atrasoDias === 0 ? 'feita' : atrasoDias === 1 ? 'falta' : 'atrasada';
+      } else if (c.frequencia === 'semanal') {
+        atrasoDias = diasCorridos(ultima, ref);
+        status = atrasoDias <= 7 ? 'feita' : 'atrasada';
+      } else {
+        atrasoDias = diasCorridos(ultima, ref);
+        status = ultima.slice(0, 7) === ref.slice(0, 7) ? 'feita' : 'falta';
+      }
+    }
+    return { id: c.id, ordem: c.ordem, frequencia: c.frequencia, tasy: c.tasy, rotulo: c.rotulo, ultima, status, atrasoDias };
+  }).sort((a, b) => a.frequencia.localeCompare(b.frequencia) || a.ordem - b.ordem);
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { detectarSurtos, ehSurtoAntigo, situacaoDaSuspeita, fenotipoResistencia, GERMES_SO_COM_RESISTENCIA_PADRAO, SURTO_ANTIGO_DIAS, SURTO_HISTORICO_DIAS, detectarMultirresistentes, inferirMecanismo, pendenciasIsolamento, agruparPendenciasIsolamento,
+  module.exports = { detectarSurtos, ehSurtoAntigo, CATALOGO_CARGAS, relatorioDaCarga, situacaoDasCargas, situacaoDaSuspeita, fenotipoResistencia, GERMES_SO_COM_RESISTENCIA_PADRAO, SURTO_ANTIGO_DIAS, SURTO_HISTORICO_DIAS, detectarMultirresistentes, inferirMecanismo, pendenciasIsolamento, agruparPendenciasIsolamento,
     mesmaSuspeita, correlacionarSurto, resumoParaVisitaUTI, prepararVisitaUTI, leitoDaUTI, ehSetorDeUTI, iniciaisDe, isolamentosParaNotificar,
     ehSetorPortaDeEntrada, perfilAntibiograma, antibiogramasSemelhantes,
     rotinaDaEquipe, diasCorridos, diasUteis, dataDaUltimaCarga,

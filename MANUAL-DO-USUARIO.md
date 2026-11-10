@@ -81,11 +81,12 @@ a fila, quem responde por ela e se está **em dia** ou **atrasada** para o prazo
 
 Duas regras importantes, decididas para a rotina do HNSC:
 
-- **O relógio é a carga semanal, não o calendário.** Os dados entram uma vez por semana
-  (segunda) e o trabalho de processo é feito nesse dia. Entre uma carga e a próxima o painel
-  **congela** e mostra a semana vigente — só vira atraso o que **sobrou de semanas
-  anteriores**. A data de referência ("Dados de: DD/MM") aparece no topo do cartão e é
-  detectada sozinha, pela última importação.
+- **O relógio é a última carga, não o calendário.** As filas envelhecem até o dia dos dados
+  mais recentes; entre uma carga e a próxima o painel **congela** nesse dia. A carga é
+  **diária** (POP-01 do manual de procedimentos; era semanal até 10/11/2026) e a aba Importar
+  mostra a **conferência das cargas** — o que já entrou hoje, nesta semana e neste mês. A
+  data de referência ("Dados de: DD/MM") aparece no topo do cartão e é detectada sozinha,
+  pela última importação.
 - **Conta-se em dias úteis.** Sábado e domingo são sobreaviso e **não envelhecem** a fila:
   uma pendência de sexta para segunda conta como ~1 dia útil, não 3.
 
@@ -164,6 +165,12 @@ atendimento com o censo de internações**. Se o censo não foi importado antes,
 prontuário fica em branco e o registro aparece **sem paciente** (é o que acontece com a
 *análise de antibióticos*, que vem por atendimento). Por isso: **o censo de internações
 (50023) entra sempre primeiro**, e a análise de antibióticos **depois** dele.
+
+A aba Importar abre com a **Conferência das cargas**: cada relatório da rotina, na ordem
+abaixo, com a data da última carga e a situação (✓ feita · ○ falta hoje · ⚠ atrasada). Toda
+importação fica registrada em `cargas.xlsx` (data, hora, relatório, arquivo, linhas, quem). O
+passo a passo de quem carrega está no **Manual de procedimentos** (POP-01 diário e POP-02
+semanal).
 
 **Todo dia, nesta ordem:**
 

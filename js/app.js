@@ -591,8 +591,8 @@ async function montarPainel(conteudo) {
     conteudo.append(el('div', { class: 'cartao' },
       el('h2', {}, 'Rotina da equipe' + (atrasadas ? ` — ${fmtInt(atrasadas)} atrasada(s)` : '')),
       el('p', { class: 'texto-suave' },
-        `Referência: dados de ${dataRefBR} (última carga). Entre cargas semanais o painel mostra a semana `
-        + 'vigente; o prazo é contado em dias úteis (fim de semana é sobreaviso). Cada função tem uma fila '
+        `Referência: dados de ${dataRefBR} (última carga). As filas envelhecem até o dia da última carga `
+        + '(a carga é diária — conferência na aba Importar); o prazo é contado em dias úteis (fim de semana é sobreaviso). Cada função tem uma fila '
         + 'a zerar dentro da periodicidade do cadastro (Configurações → Equipe e funções). '
         + 'Vermelho = passou do prazo.'),
       el('table', { class: 'tabela' },

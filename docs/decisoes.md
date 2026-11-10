@@ -158,3 +158,14 @@ profilaxia 1714, óbitos 836, NISS 3066.
 - Contagens antigas (panorama gerencial, cruzamento IRAS × culturas) incluem
   descartados e em investigação como IRAS — não alterado para não mudar números já apresentados.
 - Arquivo cifrado da pasta de dados para transporte: decisão de formato pendente.
+
+## Carga de relatórios: diária, com conferência (10/11/2026)
+
+A carga dos relatórios do Tasy é **diária** (dias úteis, início do expediente), feita pela
+técnica responsável pela função "Entrada dos relatórios do Tasy"; cirurgias (2550), profilaxia
+(1714), óbitos (836) e IMAS (2485) são **semanais** (segunda); NISS (3066) é **mensal**
+(primeira segunda). Procedimentos escritos em `MANUAL-DE-PROCEDIMENTOS.md` (POP-01 e POP-02).
+Toda carga fica registrada em `cargas.xlsx` e a aba Importar abre com a conferência
+(`CATALOGO_CARGAS`/`situacaoDasCargas` em alertas.js). O relógio do Painel deixou de supor
+carga semanal. Revisão geral de procedimentos em andamento — mapa e prioridades em
+`docs/procedimentos-ccih.md`.

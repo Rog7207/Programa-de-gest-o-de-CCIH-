@@ -475,7 +475,7 @@ async function liberarTrava(nomeEsquema) {
 
 /* ---- Arquivamento do relatório bruto importado ---- */
 
-async function arquivarOriginal(arquivo) {
+async function arquivarOriginal(arquivo, relatorio, tipo, linhas) {
   const mes = new Date().toISOString().slice(0, 7);
   const destino = await pasta.subpasta('importados/' + mes);
   const carimbo = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
@@ -483,6 +483,24 @@ async function arquivarOriginal(arquivo) {
   const escrita = await fh.createWritable();
   await escrita.write(await arquivo.arrayBuffer());
   await escrita.close();
+  if (relatorio) await registrarCarga(relatorio, tipo, arquivo.name, linhas);
+}
+
+/* Registra uma carga em cargas.xlsx (lista de conferência da aba Importar, 10/11/2026).
+   Nunca derruba a importação: falha aqui só vai ao console. */
+async function registrarCarga(relatorio, tipo, nomeArquivo, linhas) {
+  try {
+    const agora = new Date();
+    const linha = { Data: agora.toISOString().slice(0, 10), Hora: agora.toTimeString().slice(0, 5), Relatorio: relatorio,
+      Tipo: tipo || '', Arquivo: nomeArquivo || '', Linhas: linhas == null ? '' : linhas,
+      Por: (typeof app !== 'undefined' && app.usuario) || '' };
+    const gravar = async () => {
+      const banco = await lerBanco('cargas').catch(() => ({ cargas: [] }));
+      banco.cargas = (banco.cargas || []).concat([linha]);
+      await gravarBanco('cargas', banco);
+    };
+    if (typeof comTrava === 'function') await comTrava(['cargas'], gravar); else await gravar();
+  } catch (e) { console.warn('registro da carga não gravado:', e); }
 }
 
 /* Exportado só para os testes em Node (o navegador usa tudo como global). */

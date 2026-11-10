@@ -23,6 +23,39 @@ function irParaPasso(n) {
 
 /* ---- Passo 1: arquivo, cabeçalho e reconhecimento ---- */
 
+/* Lista de conferência das cargas (POP de carregamento, 10/11/2026): o que já entrou hoje,
+   nesta semana e neste mês, na ordem do procedimento. Lê cargas.xlsx; sem registro nenhum
+   (banco anterior ao registro), mostra "nunca" até a primeira carga registrada. */
+function cartaoConferenciaCargas() {
+  const caixa = el('div', { class: 'cartao' }, el('h2', {}, 'Conferência das cargas'), el('p', { class: 'texto-suave' }, 'carregando…'));
+  const cor = { feita: '#15803d', falta: '#a16207', atrasada: '#b91c1c', nunca: '#6b7280' };
+  const texto = s => s.status === 'feita' ? '✓ feita' : s.status === 'falta' ? '○ falta hoje'
+    : s.status === 'atrasada' ? `⚠ atrasada (${fmtInt(s.atrasoDias)} ${s.frequencia === 'diaria' ? 'dia(s) útil(eis)' : 'dias'})` : '— nunca registrada';
+  const tabela = (titulo, itens) => el('div', {},
+    el('h3', {}, titulo),
+    el('table', { class: 'tabela' },
+      el('thead', {}, el('tr', {}, ['#', 'Relatório', 'Tasy', 'Última carga', 'Situação'].map(c => el('th', {}, c)))),
+      el('tbody', {}, itens.map(s => el('tr', {},
+        el('td', {}, String(s.ordem)), el('td', {}, s.rotulo), el('td', {}, s.tasy || '—'),
+        el('td', {}, s.ultima ? s.ultima.split('-').reverse().join('/') : '—'),
+        el('td', { style: `font-weight:600;color:${cor[s.status]}` }, texto(s)))))));
+  (async () => {
+    try {
+      const banco = await lerBanco('cargas').catch(() => ({ cargas: [] }));
+      const sit = situacaoDasCargas(banco.cargas || [], hojeISO());
+      const pend = sit.filter(s => s.status !== 'feita').length;
+      caixa.replaceChildren(
+        el('h2', {}, 'Conferência das cargas' + (pend ? ` — ${fmtInt(pend)} pendente(s)` : ' — tudo em dia')),
+        el('p', { class: 'texto-suave' }, 'Na ordem do procedimento de carregamento (manual de procedimentos, POP-01 e POP-02). '
+          + 'Dia útil sem carga vira "falta hoje"; dois ou mais, "atrasada". Fim de semana não conta.'),
+        tabela('Carga diária', sit.filter(s => s.frequencia === 'diaria')),
+        tabela('Carga semanal (segunda-feira)', sit.filter(s => s.frequencia === 'semanal')),
+        tabela('Carga mensal (primeira segunda-feira do mês)', sit.filter(s => s.frequencia === 'mensal')));
+    } catch (e) { caixa.replaceChildren(el('p', { class: 'aviso-erro-texto' }, 'Conferência indisponível: ' + e.message)); }
+  })();
+  return caixa;
+}
+
 function renderPasso1() {
   const entrada = el('input', { type: 'file', accept: '.xlsx,.xls,.csv,.txt,.dbf,.pdf', style: 'display:none' });
   entrada.addEventListener('change', () => { if (entrada.files[0]) processarArquivo(entrada.files[0], 'auto'); });
@@ -43,6 +76,7 @@ function renderPasso1() {
   imp.detalhes = el('div', {});
   imp.area.append(imp.detalhes);
   if (imp.arquivo) renderDetalhesArquivo();
+  else imp.area.append(cartaoConferenciaCargas());
 }
 
 /* ---- Importação em lote: varre uma pasta e importa tudo que tem perfil salvo ---- */
@@ -158,7 +192,7 @@ async function importarArquivoAutomatico(arquivo) {
       const resultado = aplicarAltas(banco.internacoes || [], validos);
       if (resultado.atualizadas) await gravarBanco('pacientes', banco);
       await config.salvar();
-      await arquivarOriginal(arquivo);
+      await arquivarOriginal(arquivo, relatorioDaCarga(tipo, mapeamento.map(m => m.destino)), tipo, resultado.atualizadas);
       return { nome: arquivo.name, situacao: `${definicao.rotulo}: ${fmtInt(resultado.atualizadas)} atualizadas, ${fmtInt(resultado.semCorrespondencia)} sem correspondência, ${fmtInt(resultado.semMudanca)} já em dia` };
     }
     let reparadasAntigas = 0;
@@ -242,7 +276,7 @@ async function importarArquivoAutomatico(arquivo) {
     if (mudouPacientes) await gravarBanco('pacientes', bancoPacientes);
     const casaveis = mudouPacientes ? novasUnificacoesPossiveis(bancoPacientes) : 0;
     await config.salvar();
-    await arquivarOriginal(arquivo);
+    await arquivarOriginal(arquivo, relatorioDaCarga(tipo, mapeamento.map(m => m.destino)), tipo, novos.length);
     return {
       nome: arquivo.name,
       casaveis,
@@ -522,6 +556,7 @@ async function gravarDispositivosDia(abas, arquivo, setor) {
   const leitura = lerDispositivosDia(abas, { setor, ano });
   try {
     const resumo = await gravarContagensDiarias(leitura.linhas);
+    await registrarCarga('prancheta_dispositivos', 'prancheta', arquivo.name, resumo.novos + resumo.atualizados);
     imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
       el('h2', {}, 'Importado'),
       el('p', {}, `${fmtInt(resumo.novos)} contagens novas e ${fmtInt(resumo.atualizados)} atualizadas `
@@ -571,7 +606,7 @@ async function telaSinaisVitais(arquivo, leitura) {
             await gravarBanco('evolucoes', banco);
             return banco.sinais_vitais.length;
           });
-          await arquivarOriginal(arquivo);
+          await arquivarOriginal(arquivo, 'vitais_2411', 'sinais_vitais', total);
           imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
             el('h2', {}, 'Importado'),
             el('p', {}, `${fmtInt(total)} medidas dos últimos ${SINAIS_VITAIS_RETENCAO_DIAS} dias no banco. A aba UTI (leito a leito) e o miniapp da visita passam a usar o dado medido.`)));
@@ -651,6 +686,7 @@ async function telaEvolucoes(arquivo, leitura) {
               return r;
             });
           } catch (e) { historico = { erro: e.message }; }
+          await registrarCarga('evolucoes_2394', 'evolucoes', arquivo.name, (leitura.todas || leitura.evolucoes).length);
           imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
             el('h2', {}, 'Importado'),
             el('p', {}, `Foto do dia gravada: ${fmtInt(resumo.total)} evoluções de pacientes com pendência`
@@ -723,7 +759,7 @@ async function telaFotoInternados(arquivo, leitura) {
             await gravarBanco('denominadores', bDen);
             return resultado;
           });
-          await arquivarOriginal(arquivo);
+          await arquivarOriginal(arquivo, 'internados_2396', 'foto_internados', leitura.linhas.length);
           /* A foto é a lista de internados de hoje: com a planilha do Google ligada, publica
              sozinha a lista para a busca do paciente no miniapp de decisão de ATB. */
           let avisoInternados = null;
@@ -780,6 +816,7 @@ function telaCensoNISS(arquivo, leitura) {
         imp.detalhes.replaceChildren(el('div', { class: 'cartao' }, el('p', {}, 'Gravando…')));
         try {
           const resumo = await gravarContagensDiarias(leitura.linhas);
+          await registrarCarga('niss_3066', 'censo_niss', arquivo.name, resumo.novos + resumo.atualizados);
           imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
             el('h2', {}, 'Importado'),
             el('p', {}, `${fmtInt(resumo.novos)} contagens novas e ${fmtInt(resumo.atualizados)} atualizadas.`),
@@ -883,7 +920,7 @@ async function telaMovimentacaoPacientes(arquivo, leitura) {
             if (nomes) await gravarBanco('pacientes', bPac);
             return { novos, nomes, rec, saidasAtualizadas };
           });
-          await arquivarOriginal(arquivo);
+          await arquivarOriginal(arquivo, 'movimentacao_2536', 'movimentacao', r.novos);
           imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
             el('h2', {}, 'Importado'),
             el('p', {}, `${fmtInt(r.novos)} passagem(ns) de internação nova(s); ${fmtInt(r.saidasAtualizadas)} saída(s) preenchida(s) em passagens que estavam abertas; ${fmtInt(r.nomes)} nome(s) completados.`),
@@ -956,7 +993,7 @@ async function telaNotificacoesSinan(arquivo, leitura) {
             if (novas) await gravarBanco('sinan', bSin);
             return { novas, identificadas };
           });
-          await arquivarOriginal(arquivo);
+          await arquivarOriginal(arquivo, 'sinan_nindinet', 'sinan', r.novas);
           imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
             el('h2', {}, 'Importado'),
             el('p', {}, `${fmtInt(r.novas)} notificação(ões) nova(s); ${fmtInt(r.identificadas)} ligada(s) a um paciente do cadastro.`),
@@ -1060,7 +1097,7 @@ function telaImasOcorrencias(arquivo, leitura) {
             r.duplicados = agruparCasosIrasDuplicados(bIras.casos, undefined, identidadePorNome(bPac.pacientes || [])).length;
             return r;
           });
-          await arquivarOriginal(arquivo);
+          await arquivarOriginal(arquivo, 'iras_2485', 'imas', resumo.novos);
           imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
             el('h2', {}, 'Importado'),
             el('p', {}, `${fmtInt(resumo.novos)} caso(s) novo(s); ${fmtInt(resumo.vinculados)} já existiam (completados sem duplicar)`
@@ -1355,7 +1392,7 @@ async function ingerirMiniapp(tipo, dadosPorAba, arquivo, silencioso) {
     imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, `Miniapp desconhecido: "${tipo}".`));
     return;
   }
-  await arquivarOriginal(arquivo);
+  await arquivarOriginal(arquivo, 'miniapp', 'miniapp:' + tipo, resumo.novos);
   const texto = `${resumo.rotulo}: ${fmtInt(resumo.novos)} registros novos`
     + (resumo.semIdentificacao ? `, ⚠ ${fmtInt(resumo.semIdentificacao)} visita(s) sem prontuário (identificadas por leito+nome)` : '')
     + (resumo.atualizados ? `, ${fmtInt(resumo.atualizados)} atualizados (reenvio)` : '')
@@ -1991,7 +2028,7 @@ async function renderPasso5() {
     await config.salvar();
     anotar('Perfil, vocabulários e sinônimos salvos.');
 
-    await arquivarOriginal(imp.arquivo);
+    await arquivarOriginal(imp.arquivo, relatorioDaCarga(imp.tipo, (imp.mapeamento || []).map(m => m.destino)), imp.tipo, novos.length);
     anotar('Relatório original arquivado em dados/importados/.');
 
     lista.parentElement.querySelector('h2').textContent = 'Importação concluída';

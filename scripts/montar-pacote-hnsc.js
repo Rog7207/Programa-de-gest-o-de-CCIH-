@@ -21,7 +21,7 @@ const PASTA_DADOS = process.env.PASTA_CCIH || path.join(os.homedir(), 'Documento
 
 /* O que compõe o aplicativo que roda no hospital. scripts/ (Node) e miniapps/ (montados
    por instalação, com segredos locais) ficam de fora de propósito. */
-const ITENS = ['index.html', 'js', 'css', 'lib', 'MANUAL-DO-USUARIO.html', 'MANUAL-DO-USUARIO.md', 'LICENSE'];
+const ITENS = ['index.html', 'js', 'css', 'lib', 'MANUAL-DO-USUARIO.html', 'MANUAL-DO-USUARIO.md', 'MANUAL-DE-PROCEDIMENTOS.md', 'LICENSE'];
 
 const copiar = (de, para) => {
   const st = fs.statSync(de);

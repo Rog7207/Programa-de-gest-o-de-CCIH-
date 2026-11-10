@@ -6,8 +6,7 @@
    cada renovação. A avaliação vale para o curso: só volta à fila se ele seguir correndo
    uma semana depois dela. */
 
-const AVALIACOES_ATB = ['Correto', 'Parcialmente correto', 'Incorreto'];
-const RECOMENDACOES_ATB = ['Manter', 'Ajustar dose', 'Descalonar', 'Modificar', 'Suspender'];
+/* AVALIACOES_ATB e RECOMENDACOES_ATB vivem em ui-formularios.js (formulário compartilhado). */
 const DIAS_REVALIDAR_AVALIACAO = 7;
 
 async function montarAntibioticosNovo(conteudo) {
@@ -184,9 +183,8 @@ async function montarAntibioticosNovo(conteudo) {
         .map(s => el('span', { style: `padding:1px 7px;border-radius:4px;border:1px solid ${corSIR(s.Resultado)};color:${corSIR(s.Resultado)};font-size:0.85em` },
           `${s.Antibiotico}: ${s.Resultado}`)));
 
-    const selAval = el('select', {}, AVALIACOES_ATB.map(o => el('option', { value: o }, o)));
-    const selRec = el('select', {}, RECOMENDACOES_ATB.map(o => el('option', { value: o }, o)));
-    const campoParecer = el('textarea', { rows: 2, style: 'width:100%', placeholder: 'parecer (opcional)' });
+    /* Formulário compartilhado (ui-formularios.js): o mesmo da tela de pendências por paciente. */
+    const form = formularioAvaliacaoAntibiotico(curso, { hoje });
     const msg = el('p', { class: 'aviso-erro-texto' });
 
     const cartao = el('div', { class: 'cartao cartao-detalhe' },
@@ -221,24 +219,11 @@ async function montarAntibioticosNovo(conteudo) {
       el('div', { class: 'linha-botoes' },
         el('button', { class: 'botao-secundario', onclick: e => { e.stopPropagation(); abrirPaciente(curso.Prontuario); } },
           'Ver ficha do paciente')),
-      el('div', { class: 'linha-campos' },
-        el('label', {}, 'Avaliação: ', selAval),
-        el('label', {}, 'Recomendação: ', selRec)),
-      campoParecer,
+      form.no,
       el('div', { class: 'linha-botoes' },
         el('button', { class: 'botao-primario', onclick: async () => {
           try {
-            await comTrava(['antibioticos'], async () => {
-              const atual = await lerBanco('antibioticos');
-              atual.avaliacoes = atual.avaliacoes || [];
-              atual.avaliacoes.push({
-                ID_Prescricao: curso.ultima.ID_Prescricao, Prontuario: curso.Prontuario,
-                Antibiotico: curso.Antibiotico, Indicacao: curso.ultima.Indicacao || '',
-                Avaliacao: selAval.value, Recomendacao: selRec.value, ParecerTexto: campoParecer.value,
-                Avaliador: app.usuario, DataDados: hoje, CriadoEm: agoraCurto()
-              });
-              await gravarBanco('antibioticos', atual);
-            });
+            await form.salvar();
             app.cursoAberto = null;
             navegar('antibioticos', { historico: 'substituir' });
           } catch (e) { msg.textContent = e.message; }

@@ -5331,6 +5331,7 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       ESQUEMAS: esquemas.ESQUEMAS
     });
     try {
+      eval(fs.readFileSync(path.join(__dirname, '..', 'js', 'ui-formularios.js'), 'utf-8'));
       eval(fs.readFileSync(path.join(__dirname, '..', 'js', 'ui-abas.js'), 'utf-8') + '\nglobal.__montarCulturas = montarCulturas;');
       const raiz = mkNode('div');
       await global.__montarCulturas(raiz);
@@ -5498,6 +5499,7 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
         + 'normalizarProntuario=global.normalizarProntuario,normalizarTexto=global.normalizarTexto,config=global.config,'
         + 'app=global.app,DIAS_CURSO_PROLONGADO=global.DIAS_CURSO_PROLONGADO,cursosDeAntibiotico=global.cursosDeAntibiotico,'
         + 'alertasDeAntibioticos=global.alertasDeAntibioticos,guardarContexto=global.guardarContexto;\n';
+      eval(prefixo + fs.readFileSync(path.join(__dirname, '..', 'js', 'ui-formularios.js'), 'utf-8'));
       eval(prefixo + fs.readFileSync(path.join(__dirname, '..', 'js', 'ui-antibioticos.js'), 'utf-8') + '\nglobal.__montarATB = montarAntibioticosNovo;');
       const raiz = mkNode('div');
       await global.__montarATB(raiz);
@@ -6564,6 +6566,86 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     verificar('no sábado, a carga de sexta conta como feita (fim de semana não envelhece)', sab.censo_50023.status === 'feita');
     const ordem = al.situacaoDasCargas([], '2026-11-10').map(s => s.frequencia + ':' + s.ordem);
     verificar('a lista sai agrupada por frequência e na ordem do procedimento', ordem[0] === 'diaria:1' && ordem.indexOf('mensal:1') > ordem.indexOf('diaria:10'), ordem.join(','));
+  }
+
+  /* == 111. Pendências por paciente: motor puro (10/11/2026) == */
+  {
+    console.log('\n== 111. Pendências por paciente: agrupamento por identidade, filas e prioridade ==');
+    const pend = require(path.join(__dirname, '..', 'js', 'pendencias.js'));
+    const al = require(path.join(__dirname, '..', 'js', 'alertas.js'));
+    const antesG = {};
+    ['identidadePorNome', 'normalizarProntuario', 'normalizarTexto', 'diasDesde', 'agruparCulturasRepetidas', 'cursosDeAntibiotico', 'pendenciasIsolamento', 'agruparPendenciasIsolamento', 'ehSetorDeUTI']
+      .forEach(k => { antesG[k] = global[k]; });
+    Object.assign(global, { identidadePorNome: imp.identidadePorNome, normalizarProntuario: imp.normalizarProntuario, normalizarTexto: leitura.normalizarTexto,
+      diasDesde: imp.diasDesde, agruparCulturasRepetidas: imp.agruparCulturasRepetidas, cursosDeAntibiotico: imp.cursosDeAntibiotico,
+      pendenciasIsolamento: al.pendenciasIsolamento, agruparPendenciasIsolamento: al.agruparPendenciasIsolamento, ehSetorDeUTI: al.ehSetorDeUTI });
+    try {
+      const hoje = '2026-11-10';
+      const bancos = {
+        pacientes: { pacientes: [{ Prontuario: '100', Nome: 'Fulano de Tal' }, { Prontuario: '80000100', Nome: 'Fulano de Tal' }, { Prontuario: '200', Nome: 'Beltrana Silva' }, { Prontuario: '300', Nome: 'Ciclano Souza' }],
+          internacoes: [{ Prontuario: '100', Atendimento: 'A1', DataInternacao: '2026-11-01', DataAlta: '', SetorAtual: 'CTI', Leito: '12' },
+            { Prontuario: '200', Atendimento: 'A2', DataInternacao: '2026-11-05', DataAlta: '', SetorAtual: 'Clínica Médica', Leito: '301-2' }] },
+        culturas: { culturas: [
+          { ID_Cultura: 'C1', Prontuario: '100', DataColeta: '2026-11-04', Material: 'Hemocultura', Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: 'KPC', StatusRevisao: 'pendente', Setor: 'CTI' },
+          { ID_Cultura: 'C2', Prontuario: '80000100', DataColeta: '2026-11-06', Material: 'Hemocultura', Microrganismo: 'Klebsiella pneumoniae', MecanismoResistencia: 'KPC', StatusRevisao: 'pendente', Setor: 'CTI' },
+          { ID_Cultura: 'C3', Prontuario: '200', DataColeta: '2026-11-08', Material: 'Urocultura', Microrganismo: 'Escherichia coli', StatusRevisao: 'pendente', Setor: 'Clínica Médica' },
+          { ID_Cultura: 'C4', Prontuario: '200', DataColeta: '2026-11-02', Material: 'Urocultura', Microrganismo: 'Proteus mirabilis', StatusRevisao: 'avaliada', AvaliacaoCCIH: 'Presente na admissão' },
+          { ID_Cultura: 'C5', Prontuario: '300', DataColeta: '2026-11-09', Material: 'Swab', Microrganismo: '', StatusRevisao: 'pendente' }
+        ], sensibilidade: [{ ID_Cultura: 'C1', Antibiotico: 'Meropenem', Resultado: 'R' }, { ID_Cultura: 'C2', Antibiotico: 'Meropenem', Resultado: 'R' }] },
+        antibioticos: { prescricoes: [
+          { ID_Prescricao: 'P1', Prontuario: '100', Antibiotico: 'Meropenem', DataInicio: '2026-11-03', DataFim: '2026-11-13', Setor: 'CTI' },
+          { ID_Prescricao: 'P2', Prontuario: '200', Antibiotico: 'Ceftriaxona', DataInicio: '2026-11-06', DataFim: '2026-11-12', Setor: 'Clínica Médica' },
+          { ID_Prescricao: 'P3', Prontuario: '300', Antibiotico: 'Vancomicina', DataInicio: '2026-10-01', DataFim: '2026-10-08', Setor: 'CTI' }
+        ], avaliacoes: [{ Prontuario: '200', Antibiotico: 'Ceftriaxona', DataDados: '2026-11-08', Avaliador: 'X' }] },
+        uti: { avaliacoes_atb: [] },
+        iras: { casos: [{ ID_IRAS: 'IRA-1', Prontuario: '80000100', Topografia: 'IPCS laboratorial', DataInfeccao: '2026-11-06', StatusInvestigacao: 'em investigação', CriterioDiagnostico: 'Revisão de culturas' },
+          { ID_IRAS: 'IRA-2', Prontuario: '200', Topografia: 'ITU', DataInfeccao: '2026-10-01', StatusInvestigacao: 'confirmado' }] },
+        isolamentos: { precaucoes: [], decisoes: [] }
+      };
+      const lista = pend.pendenciasPorPaciente(bancos, { hoje });
+      verificar('dois prontuários do mesmo nome viram UM paciente; o sem pendência não entra', lista.length === 2 && lista.some(p => p.prontuarios.join(',') === '100,80000100'), lista.map(p => p.prontuarios.join('/')).join(' | '));
+      const fulano = lista.find(p => p.nome === 'Fulano de Tal'), beltrana = lista.find(p => p.nome === 'Beltrana Silva');
+      verificar('as duas hemoculturas repetidas (prontuários diferentes) são UMA pendência de cultura', fulano.pendencias.culturas.length === 1 && fulano.pendencias.culturas[0].tipo === 'grupo', JSON.stringify(fulano.pendencias.culturas.map(c => c.rotulo)));
+      verificar('curso ativo sem avaliação recente entra; o avaliado há 2 dias não; o encerrado não',
+        fulano.pendencias.antibioticos.length === 1 && beltrana.pendencias.antibioticos.length === 0, JSON.stringify([fulano.pendencias.antibioticos.map(a => a.rotulo), beltrana.pendencias.antibioticos.map(a => a.rotulo)]));
+      verificar('suspeita de IRAS em investigação entra pelo outro prontuário do mesmo paciente; a confirmada não', fulano.pendencias.iras.length === 1 && beltrana.pendencias.iras.length === 0);
+      verificar('KPC sem precaução vira pendência de isolamento e marca MDR', fulano.pendencias.isolamentos.length === 1 && fulano.temMDR === true, JSON.stringify(fulano.pendencias.isolamentos.map(i => i.rotulo)));
+      verificar('situação atual vem da internação aberta: CTI, leito 12, D10, UTI', fulano.setor === 'CTI' && fulano.leito === '12' && fulano.diaInternacao === 10 && fulano.emUTI === true, JSON.stringify({ s: fulano.setor, l: fulano.leito, d: fulano.diaInternacao }));
+      verificar('o paciente da UTI com MDR e mais pendências vem primeiro', lista[0] === fulano && fulano.prioridade > beltrana.prioridade);
+      verificar('cultura sem germe (swab negativo) não gera pendência', !lista.some(p => p.prontuarios.includes('300')));
+      verificar('resumo: "1 cultura · 1 ATB · 1 suspeita de IRAS · 1 isolamento"', pend.resumoPendencias(fulano) === '1 cultura · 1 ATB · 1 suspeita de IRAS · 1 isolamento', pend.resumoPendencias(fulano));
+    } catch (e) {
+      verificar('pendências por paciente sem exceção', false, e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e.message);
+    } finally { Object.assign(global, antesG); }
+  }
+
+  /* == 112. Formulários compartilhados: uma pendência, um registro (10/11/2026) == */
+  {
+    console.log('\n== 112. Formulários compartilhados: avaliação de ATB repetida no mesmo dia atualiza em vez de duplicar ==');
+    const antesG = {};
+    ['comTrava', 'lerBanco', 'gravarBanco', 'app', 'normalizarProntuario', 'normalizarTexto', 'agoraCurto', 'hojeISO', 'el', 'config', 'CLASSIFICACOES_CULTURA']
+      .forEach(k => { antesG[k] = global[k]; });
+    const banco = { prescricoes: [], avaliacoes: [] };
+    let gravacoes = 0;
+    Object.assign(global, { comTrava: async (_l, fn) => fn(), lerBanco: async () => banco, gravarBanco: async () => { gravacoes++; },
+      app: { usuario: 'Dr. Teste' }, normalizarProntuario: imp.normalizarProntuario, normalizarTexto: leitura.normalizarTexto,
+      agoraCurto: () => '2026-11-10 10:00', hojeISO: () => '2026-11-10', el: () => ({ addEventListener() {}, style: {} }),
+      config: { vocabulario: { topografias: [] } }, CLASSIFICACOES_CULTURA: esquemas.CLASSIFICACOES_CULTURA });
+    try {
+      const forms = require(path.join(__dirname, '..', 'js', 'ui-formularios.js'));
+      const curso = { Prontuario: '100', Antibiotico: 'Meropenem', Setor: 'CTI', inicio: '2026-11-03', fim: '2026-11-13', dias: 8, ids: ['P1'], ultima: { ID_Prescricao: 'P1', Indicacao: 'PAV' } };
+      const r1 = await forms.salvarAvaliacaoAntibiotico(curso, 'Correto', 'Manter', 'ok', '2026-11-10');
+      const r2 = await forms.salvarAvaliacaoAntibiotico(curso, 'Parcialmente correto', 'Descalonar', 'antibiograma S a cefepima', '2026-11-10');
+      verificar('a segunda avaliação do mesmo curso, mesmo dia e mesma pessoa ATUALIZA a primeira (um registro)',
+        banco.avaliacoes.length === 1 && r1.atualizada === false && r2.atualizada === true && banco.avaliacoes[0].Recomendacao === 'Descalonar', JSON.stringify(banco.avaliacoes));
+      global.app.usuario = 'Dra. Outra';
+      await forms.salvarAvaliacaoAntibiotico(curso, 'Correto', 'Manter', '', '2026-11-10');
+      verificar('outra pessoa avaliando o mesmo curso no mesmo dia é um registro novo (segunda opinião)', banco.avaliacoes.length === 2);
+      await forms.salvarAvaliacaoAntibiotico(curso, 'Correto', 'Manter', '', '2026-11-17');
+      verificar('a reavaliação de 7 dias depois é um registro novo', banco.avaliacoes.length === 3 && gravacoes === 4);
+    } catch (e) {
+      verificar('formulários compartilhados sem exceção', false, e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e.message);
+    } finally { Object.assign(global, antesG); }
   }
 
   console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);

@@ -696,6 +696,17 @@ atropelam: cada gravação trava o arquivo, relê e só então grava.
 - **Painel** — alertas do dia (surtos, MDR 10 dias, antimicrobianos, suspeitas de IRAS,
   pendências), o cartão **Rotina da equipe** (ver seção 2) e gráficos rápidos.
 - **Pacientes** — cadastro, busca e unificação de registros provisórios do laboratório.
+- **Pendências** (por paciente, 10/11/2026) — tudo que está aberto para a equipe decidir,
+  agrupado por paciente (pela identidade, não pelo prontuário): culturas a revisar, cursos de
+  antibiótico a avaliar, suspeitas de IRAS a confirmar e isolamentos a decidir. Lista à
+  esquerda do mais prioritário (UTI, multirresistente, quantidade e idade das pendências) para
+  o menos; à direita a ficha com o contexto comum (antibióticos em curso, culturas de 30 dias
+  com antibiograma, última evolução médica) e um bloco por pendência. **Fase atual: modo de
+  leitura** — cada bloco tem o botão que leva à pendência na aba de origem, onde a decisão é
+  gravada. Os formulários de cultura e de antibiótico já são compartilhados entre as abas
+  (mesmo código, mesmo registro); quando a equipe estiver treinada, passam a ficar nesta tela.
+  Regra "uma pendência, um registro": a mesma pessoa avaliando o mesmo curso de antibiótico
+  no mesmo dia por dois caminhos atualiza a avaliação em vez de duplicá-la.
 - **Reunião da CCIH** — indicadores em formato de apresentação (um slide por tema, setas para
   avançar), na ordem decidida pela CCIH em 21/10/2026: (1) **IRAS do mês** — taxa por 1.000
   pacientes-dia, número de casos e barras por sítio; (2) **IRAS por mês** nos últimos 12 meses

@@ -169,3 +169,15 @@ Toda carga fica registrada em `cargas.xlsx` e a aba Importar abre com a conferê
 (`CATALOGO_CARGAS`/`situacaoDasCargas` em alertas.js). O relógio do Painel deixou de supor
 carga semanal. Revisão geral de procedimentos em andamento — mapa e prioridades em
 `docs/procedimentos-ccih.md`.
+
+## Tela "Pendências por paciente" — migração em fases (10/11/2026)
+
+Decisão dele: a tela por paciente (entrada unificada: culturas, antibióticos, IRAS, isolamentos
+agrupados pela identidade do paciente) entra **sem retirar as abas atuais**, em fases: (1)
+formulários de cultura e de antibiótico compartilhados (`js/ui-formularios.js`), abas antigas
+usando-os — feito; (2) aba Pendências em **modo de leitura**, com botões para a aba de origem —
+feito (`js/pendencias.js` puro + `js/ui-pendencias.js`); (3) gravação liberada para um ou dois
+usuários; (4) migração voluntária; (5) nenhuma retirada obrigatória. Regra "uma pendência, um
+registro": classificação é campo da cultura; avaliação de ATB da mesma pessoa no mesmo dia
+atualiza em vez de duplicar (teste 112). Ordem de prioridade: UTI 40 + MDR 30 + IRAS 10 +
+5/pendência + 2/dia da mais antiga (máx. 30).

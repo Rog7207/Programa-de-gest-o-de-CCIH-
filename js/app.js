@@ -3,6 +3,7 @@
 const ABAS = [
   { id: 'painel', rotulo: 'Painel', ativa: true },
   { id: 'pacientes', rotulo: 'Pacientes', ativa: true },
+  { id: 'pendencias', rotulo: 'Pendências', ativa: true },
   { id: 'culturas', rotulo: 'Culturas', ativa: true },
   { id: 'antibioticos', rotulo: 'Antibióticos', ativa: true },
   { id: 'decisao', rotulo: 'Decisão ATB', ativa: true },
@@ -350,6 +351,7 @@ function renderizarAba(abaId) {
   else if (abaId === 'uti') aoTerminar(montarUti(conteudo));
   else if (abaId === 'isolamentos') aoTerminar(montarIsolamentos(conteudo));
   else if (abaId === 'colonizacao') aoTerminar(montarColonizacao(conteudo));
+  else if (abaId === 'pendencias') aoTerminar(montarPendencias(conteudo));
   else if (abaId === 'higiene') aoTerminar(montarHigiene(conteudo));
   else if (abaId === 'iras') aoTerminar(montarInfeccoes(conteudo));
   else if (abaId === 'notificaveis') aoTerminar(montarNotificaveis(conteudo));

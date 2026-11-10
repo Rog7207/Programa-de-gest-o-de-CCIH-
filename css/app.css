@@ -224,3 +224,17 @@ tr.linha-mdr td:first-child { border-left: 4px solid #b03a2e; }
 
 /* Botão com cara de link (tela de conexão: "não sou X — trocar nome", 28/10/2026). */
 .botao-link { background: none; border: none; color: #0d3f7a; text-decoration: underline; cursor: pointer; font: inherit; font-size: 13px; padding: 2px 4px; }
+
+/* Pendências por paciente (10/11/2026): lista à esquerda, ficha à direita. */
+.pend-grade { display: grid; grid-template-columns: 340px 1fr; gap: 14px; align-items: start; }
+.pend-lista { max-height: 75vh; overflow-y: auto; padding-right: 4px; }
+.pend-item { border: 1px solid #dde3ea; border-radius: 6px; padding: 8px 10px; margin-bottom: 6px; background: #fff; }
+.pend-item:hover { border-color: #0d3f7a; }
+.pend-item-atual { border-color: #0d3f7a; border-width: 2px; background: #f3f7fc; }
+.pend-item-nome { font-weight: 600; }
+.pend-chips { font-size: 0.9em; margin-top: 2px; }
+.pend-detalhe { min-width: 0; }
+.pend-bloco { border: 1px solid #dde3ea; border-left: 4px solid #0d3f7a; border-radius: 6px; padding: 8px 12px; margin: 8px 0; background: #fff; }
+.pend-bloco-cab { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.form-decisao { margin: 6px 0; }
+@media (max-width: 900px) { .pend-grade { grid-template-columns: 1fr; } .pend-lista { max-height: none; } }

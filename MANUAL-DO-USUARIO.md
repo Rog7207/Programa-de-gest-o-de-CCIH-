@@ -826,7 +826,14 @@ decide nada sozinho.
 ## 13. Segurança e boas práticas
 
 - **Backup** = copiar a pasta de dados inteira. Os scripts de manutenção também deixam
-  cópias em `backups/` antes de qualquer mudança em massa.
+  cópias em `backups/` antes de qualquer mudança em massa — essa pasta cresce (cada cópia tem
+  o tamanho do banco); mova as cópias com mais de um mês para fora quando o espaço apertar.
+- **"Sem espaço para gravar…"** ao salvar: o Chrome grava cada arquivo primeiro numa cópia de
+  trabalho (`nome.xlsx.crswap`) e só depois substitui o original. Se o disco ou a cota da pasta
+  (unidade de rede) não cabe essa cópia, a gravação falha e nada é alterado. Gravações
+  interrompidas deixam esses `.crswap` para trás, do tamanho do banco; o aplicativo apaga os
+  com mais de uma hora ao conectar e avisa. Se o erro persistir, libere espaço na unidade da
+  pasta de dados (backups antigos, `importados/` de meses passados).
 - **Multiusuário**: cada arquivo tem trava; se outra pessoa estiver gravando, o app pede
   para aguardar. Evite editar as planilhas no Excel com o app aberto.
 - **LGPD**: arquivos que saem do app (miniapps, resumos por WhatsApp) carregam o mínimo —

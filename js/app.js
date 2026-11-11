@@ -215,9 +215,13 @@ function mostrarTelaConexao(handlePendente, recentes) {
 async function aposConectar() {
   mostrarCarregando('Conferindo a estrutura dos bancos…');
   await garantirEstrutura();
+  /* Lixo de gravações interrompidas (<nome>.crswap, do tamanho do banco): enche a pasta e
+     derruba as gravações seguintes com "storage quota" (11/11/2026). */
+  const swaps = await pasta.limparSwapsAntigos(60).catch(() => []);
   mostrarCarregando('Lendo os bancos (a primeira leitura é a mais demorada)…');
   app.resumoPasta = await pasta.resumo();
   const avisos = [];
+  if (swaps.length) avisos.push(`Removidos ${swaps.length} arquivo(s) temporário(s) de gravação interrompida (${swaps.join(', ')}) que ocupavam espaço na pasta de dados.`);
   for (const nome of Object.keys(ESQUEMAS)) avisos.push(...await validarEsquema(nome));
   await config.carregar();
   montarCasca(avisos);

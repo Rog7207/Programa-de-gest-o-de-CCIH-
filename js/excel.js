@@ -122,12 +122,48 @@ const pasta = {
     catch (e) { return false; }
   },
 
-  /* createWritable grava em arquivo de trabalho e só substitui o original no close() — gravação atômica. */
+  /* createWritable grava em arquivo de trabalho (<nome>.crswap) e só substitui o original no
+     close() — gravação atômica. Quando o disco ou a cota da pasta (unidade de rede) não cabe
+     a cópia de trabalho, o Chrome lança QuotaExceededError com uma mensagem em inglês que não
+     diz o que fazer; traduzimos para a ação certa (11/11/2026). */
   async gravarArquivo(nome, dados) {
     const fh = await this.handle.getFileHandle(nome, { create: true });
-    const escrita = await fh.createWritable();
-    await escrita.write(dados);
-    await escrita.close();
+    let escrita;
+    try {
+      escrita = await fh.createWritable();
+      await escrita.write(dados);
+      await escrita.close();
+    } catch (e) {
+      if (escrita) { try { await escrita.abort(); } catch (e2) { /* já fechado */ } }
+      if (e && (e.name === 'QuotaExceededError' || /storage quota/i.test(String(e.message || '')))) {
+        const mb = Math.round((dados.byteLength || dados.length || 0) / 1048576);
+        throw new Error(`Sem espaço para gravar ${nome} (${mb} MB): o disco ou a cota da pasta de dados está cheio. `
+          + 'Libere espaço na unidade onde fica a pasta de dados — apague os arquivos "*.crswap" antigos da pasta, '
+          + 'mova as cópias velhas de backups/ para outro lugar e confira o espaço livre da unidade — e salve de novo. '
+          + 'Nada foi gravado; o arquivo original continua íntegro.');
+      }
+      throw e;
+    }
+  },
+
+  /* Arquivos de trabalho "<nome>.crswap" deixados por gravações interrompidas (queda do
+     navegador, disco cheio): cada um tem o tamanho do banco inteiro e vai acumulando até
+     encher a pasta. Uma gravação leva segundos; swap com mais de uma hora é lixo, mesmo
+     com outra sessão aberta. Devolve os nomes removidos. */
+  async limparSwapsAntigos(minutos) {
+    const limite = Date.now() - (minutos || 60) * 60000;
+    const removidos = [];
+    if (!this.handle || typeof this.handle.values !== 'function') return removidos;
+    try {
+      for await (const entrada of this.handle.values()) {
+        if (entrada.kind !== 'file' || !/\.crswap$/i.test(entrada.name)) continue;
+        try {
+          const arquivo = await entrada.getFile();
+          if (arquivo.lastModified < limite) { await this.handle.removeEntry(entrada.name); removidos.push(entrada.name); }
+        } catch (e) { /* em uso por outra sessão ou já removido */ }
+      }
+    } catch (e) { /* listagem indisponível */ }
+    return removidos;
   },
 
   async apagarArquivo(nome) {

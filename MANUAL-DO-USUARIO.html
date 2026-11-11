@@ -279,7 +279,8 @@ hr { border: none; border-top: 1px solid #dde3ea; margin: 26px 0; }
 <hr>
 <h2>13. Segurança e boas práticas</h2>
 <ul>
-<li><strong>Backup</strong> = copiar a pasta de dados inteira. Os scripts de manutenção também deixam cópias em <code>backups/</code> antes de qualquer mudança em massa.</li>
+<li><strong>Backup</strong> = copiar a pasta de dados inteira. Os scripts de manutenção também deixam cópias em <code>backups/</code> antes de qualquer mudança em massa — essa pasta cresce (cada cópia tem o tamanho do banco); mova as cópias com mais de um mês para fora quando o espaço apertar.</li>
+<li><strong>"Sem espaço para gravar…"</strong> ao salvar: o Chrome grava cada arquivo primeiro numa cópia de trabalho (<code>nome.xlsx.crswap</code>) e só depois substitui o original. Se o disco ou a cota da pasta (unidade de rede) não cabe essa cópia, a gravação falha e nada é alterado. Gravações interrompidas deixam esses <code>.crswap</code> para trás, do tamanho do banco; o aplicativo apaga os com mais de uma hora ao conectar e avisa. Se o erro persistir, libere espaço na unidade da pasta de dados (backups antigos, <code>importados/</code> de meses passados).</li>
 <li><strong>Multiusuário</strong>: cada arquivo tem trava; se outra pessoa estiver gravando, o app pede para aguardar. Evite editar as planilhas no Excel com o app aberto.</li>
 <li><strong>LGPD</strong>: arquivos que saem do app (miniapps, resumos por WhatsApp) carregam o mínimo — registro ou iniciais, nunca a ficha completa. A pasta de dados nunca deve ser publicada ou sincronizada em nuvem pública.</li>
 </ul></body></html>

@@ -240,8 +240,11 @@ function servirMiniapp(nome) {
   var arquivos = DriveApp.getFolderById(pastaId).getFilesByName(nome + '.html');
   if (!arquivos.hasNext()) return HtmlService.createHtmlOutput('<p>Miniapp "' + nome + '" ainda não publicado pela CCIH.</p>');
   var html = arquivos.next().getBlob().getDataAsString('UTF-8');
+  /* ALLOWALL: a página pode ser incorporada por URL num iframe (Google Sites da CCIH,
+     11/11/2026) — é assim que o miniapp roda no iPhone sem passar por download. */
   return HtmlService.createHtmlOutput(html).setTitle('CCIH — ' + nome)
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
 function propriedade(nome, padrao) {

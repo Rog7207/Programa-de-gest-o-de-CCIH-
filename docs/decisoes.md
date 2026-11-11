@@ -181,3 +181,12 @@ usuários; (4) migração voluntária; (5) nenhuma retirada obrigatória. Regra 
 registro": classificação é campo da cultura; avaliação de ATB da mesma pessoa no mesmo dia
 atualiza em vez de duplicar (teste 112). Ordem de prioridade: UTI 40 + MDR 30 + IRAS 10 +
 5/pendência + 2/dia da mais antiga (máx. 30).
+
+## Material "Secreção" genérico não é aspirado traqueal (11/11/2026)
+
+Na base histórica (BASE UNIFICADA de 24/08/2026) o material cru "Secreção" com sítio "Pele e
+Partes Moles" entrou como "Secreção traqueal" (de-para da época). Corrigido no banco local com
+`scripts/corrigir-secrecao-traqueal.js` (121 → "Secreção de partes moles", 2 → "Secreção (sítio
+não informado)", rastro em HistoricoEdicao); o alias "Aspirado" → "Secreção traqueal" passou a
+"Secreção (sítio não informado)". Na CCIH: rodar o script (com `--base=` apontando para o arquivo
+em importados/2026-08) e ajustar o alias em Configurações.

@@ -483,7 +483,9 @@ no Tasy** (confirmadas aguardando a ficha/digitação), **Confirmadas e digitada
 IRAS oficial, com busca; clique na linha para ver/trocar o agente ou a cirurgia),
 **Indicadores** (período, setor, série, gráficos e tabelas) e **Evoluções com sinais** (termos
 de infecção achados nas evoluções do Tasy — apartados porque trazem muita infecção
-comunitária; abra a suspeita só quando fizer sentido).
+comunitária; abra a suspeita só quando fizer sentido). Logo abaixo das abas há o filtro comum
+às três listas de casos: **paciente** (nome ou prontuário) e **mês** da infecção — os
+contadores das abas acompanham o filtro.
 
 Toda suspeita de infecção hospitalar — venha da revisão de culturas, da avaliação remota,
 do miniapp da UTI ou da vigilância pós-alta — entra como **"em investigação"**. A

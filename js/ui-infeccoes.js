@@ -103,10 +103,31 @@ async function montarInfeccoes(conteudo) {
      só mostra um painel por vez. As evoluções com sinais ficam numa aba à parte porque
      trazem muita infecção comunitária. ---- */
   const paineis = { confirmar: el('div', {}), digitar: el('div', {}), confirmadas: el('div', {}), indicadores: el('div', {}), evolucoes: el('div', {}) };
+  /* ---- Filtro comum às listas (pedido de 11/11/2026): paciente (nome ou prontuário) e mês
+     da infecção. Vale para "A confirmar", "A digitar" e "Confirmadas"; os contadores das abas
+     acompanham. Guardado em app.* para sobreviver à regravação da tela. ---- */
+  const campoBuscaPac = el('input', { type: 'text', placeholder: 'paciente: nome ou prontuário', value: app.buscaPacienteInfeccoes || '', style: 'min-width:240px' });
+  const campoMes = el('input', { type: 'month', value: app.mesInfeccoes || '' });
+  const casaFiltro = k => {
+    const b = normalizarTexto(campoBuscaPac.value);
+    if (b && !casaBuscaLivre(campoBuscaPac.value, [nomes.get(normalizarProntuario(k.Prontuario)), k.Prontuario, k.ID_IRAS])) return false;
+    if (campoMes.value && String(k.DataInfeccao || '').slice(0, 7) !== campoMes.value) return false;
+    return true;
+  };
+  const barraFiltro = el('div', { class: 'linha-campos', style: 'margin:8px 0' },
+    el('label', {}, '🔎 ', campoBuscaPac), el('label', {}, 'Mês: ', campoMes),
+    el('button', { class: 'botao-link', onclick: () => { campoBuscaPac.value = ''; campoMes.value = ''; aoMudarFiltro(); } }, 'limpar'));
+  function aoMudarFiltro() {
+    app.buscaPacienteInfeccoes = campoBuscaPac.value; app.mesInfeccoes = campoMes.value;
+    desenharSuspeitas(); desenharDigitacao(); desenharConfirmadas(); desenharAbasInf();
+  }
+  campoBuscaPac.addEventListener('input', aoPararDeDigitar(aoMudarFiltro));
+  campoMes.addEventListener('change', aoMudarFiltro);
+
   const ABAS_INF = [
-    ['confirmar', 'A confirmar', () => casos.filter(k => k.StatusInvestigacao === 'em investigação').length],
-    ['digitar', 'A digitar no Tasy', () => casos.filter(k => k.StatusInvestigacao === 'confirmado' && String(k.DataInfeccao || '').slice(0, 10) >= (config.conciliacaoDesde || '') && !String(k.ForaDigitacaoEm || '').trim()).length],
-    ['confirmadas', 'Confirmadas e digitadas', () => casos.filter(k => k.StatusInvestigacao === 'digitado' || k.StatusInvestigacao === 'confirmado').length],
+    ['confirmar', 'A confirmar', () => casos.filter(k => k.StatusInvestigacao === 'em investigação' && casaFiltro(k)).length],
+    ['digitar', 'A digitar no Tasy', () => casos.filter(k => casaFiltro(k) && k.StatusInvestigacao === 'confirmado' && String(k.DataInfeccao || '').slice(0, 10) >= (config.conciliacaoDesde || '') && !String(k.ForaDigitacaoEm || '').trim()).length],
+    ['confirmadas', 'Confirmadas e digitadas', () => casos.filter(k => (k.StatusInvestigacao === 'digitado' || k.StatusInvestigacao === 'confirmado') && casaFiltro(k)).length],
     ['indicadores', 'Indicadores', () => null],
     ['evolucoes', 'Evoluções com sinais', () => (paineis.evolucoes.querySelector('tbody') || { children: [] }).children.length]
   ];
@@ -120,7 +141,7 @@ async function montarInfeccoes(conteudo) {
     }));
     for (const [id] of ABAS_INF) paineis[id].style.display = id === app.abaInfeccoes ? '' : 'none';
   }
-  conteudo.append(barraAbasInf, paineis.confirmar, paineis.digitar, paineis.confirmadas, paineis.indicadores, paineis.evolucoes);
+  conteudo.append(barraAbasInf, barraFiltro, paineis.confirmar, paineis.digitar, paineis.confirmadas, paineis.indicadores, paineis.evolucoes);
 
   [campoDe, campoAte, selSetor, selSerie].forEach(c => c.addEventListener('change', desenhar));
   paineis.indicadores.append(el('div', { class: 'cartao' },
@@ -256,9 +277,9 @@ async function montarInfeccoes(conteudo) {
   function desenharDigitacao() {
     const desde = config.conciliacaoDesde || '';
     const noPrazo = k => k.StatusInvestigacao === 'confirmado' && String(k.DataInfeccao || '').slice(0, 10) >= desde;
-    const aguardando = casos.filter(k => noPrazo(k) && !String(k.ForaDigitacaoEm || '').trim())
+    const aguardando = casos.filter(k => noPrazo(k) && !String(k.ForaDigitacaoEm || '').trim() && casaFiltro(k))
       .sort((a, b) => String(a.DataInfeccao).localeCompare(String(b.DataInfeccao)));
-    const excluidos = casos.filter(k => noPrazo(k) && String(k.ForaDigitacaoEm || '').trim());
+    const excluidos = casos.filter(k => noPrazo(k) && String(k.ForaDigitacaoEm || '').trim() && casaFiltro(k));
     const digitadas = casos.filter(k => k.StatusInvestigacao === 'digitado').length;
     if (!aguardando.length && !digitadas && !excluidos.length) { areaDigitacao.replaceChildren(); return; }
     const caixas = aguardando.map(() => el('input', { type: 'checkbox', checked: '' }));
@@ -468,9 +489,9 @@ async function montarInfeccoes(conteudo) {
   desenharIndeterminados();
 
   function desenharSuspeitas() {
-    const suspeitas = casos.filter(k => k.StatusInvestigacao === 'em investigação')
+    const suspeitas = casos.filter(k => k.StatusInvestigacao === 'em investigação' && casaFiltro(k))
       .sort((a, b) => String(b.DataInfeccao).localeCompare(String(a.DataInfeccao)));
-    if (!suspeitas.length) { areaSuspeitas.replaceChildren(el('div', { class: 'cartao' }, el('p', { class: 'texto-suave' }, 'Nenhuma suspeita aguardando confirmação.'))); return; }
+    if (!suspeitas.length) { areaSuspeitas.replaceChildren(el('div', { class: 'cartao' }, el('p', { class: 'texto-suave' }, 'Nenhuma suspeita aguardando confirmação' + (campoBuscaPac.value || campoMes.value ? ' com este filtro' : '') + '.'))); return; }
     const tabela = el('table', { class: 'tabela' },
       el('thead', {}, el('tr', {}, ['Data', 'Paciente', 'Topografia', 'Setor', 'Origem', 'Notificou'].map(c => el('th', {}, c)))),
       el('tbody', {}, suspeitas.map(k => el('tr', { class: 'linha-clicavel', onclick: e => detalharSuspeita(k, e.currentTarget) },
@@ -820,7 +841,7 @@ async function montarInfeccoes(conteudo) {
   const areaConfirmadas = el('div', {});
   paineis.confirmadas.append(areaConfirmadas);
   function desenharConfirmadas() {
-    const lista = casos.filter(k => k.StatusInvestigacao === 'digitado' || k.StatusInvestigacao === 'confirmado')
+    const lista = casos.filter(k => (k.StatusInvestigacao === 'digitado' || k.StatusInvestigacao === 'confirmado') && casaFiltro(k))
       .sort((a, b) => String(b.DataInfeccao).localeCompare(String(a.DataInfeccao)));
     const busca = el('input', { type: 'text', style: 'flex:1;min-width:260px', placeholder: 'Buscar: nome, prontuário, topografia, setor, agente ou data', value: app.buscaInfeccoes || '' });
     const corpo = el('div', {});

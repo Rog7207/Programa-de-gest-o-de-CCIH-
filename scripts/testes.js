@@ -6651,6 +6651,34 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       verificar('outra pessoa avaliando o mesmo curso no mesmo dia é um registro novo (segunda opinião)', banco.avaliacoes.length === 2);
       await forms.salvarAvaliacaoAntibiotico(curso, 'Correto', 'Manter', '', '2026-11-17');
       verificar('a reavaliação de 7 dias depois é um registro novo', banco.avaliacoes.length === 3 && gravacoes === 4);
+
+      /* ISC pela classificação da cultura (11/11/2026): o caso nasce ligado à cirurgia escolhida. */
+      const bancos = {
+        culturas: { culturas: [{ ID_Cultura: 'C9', Prontuario: '500', DataColeta: '2026-11-08', Material: 'Secreção de ferida', Microrganismo: 'Staphylococcus aureus', StatusRevisao: 'pendente', Setor: 'Unidade 05' }], sensibilidade: [] },
+        iras: { casos: [] }, pacientes: { pacientes: [{ Prontuario: '500', Nome: 'Paciente Cirurgico' }], internacoes: [] },
+        cirurgias: { cirurgias: [
+          { ID_Cirurgia: 'CIR-1', Prontuario: '500', DataCirurgia: '2026-10-28', Procedimento: 'Colecistectomia', ProcedimentoNHSN: 'Colecistectomia' },
+          { ID_Cirurgia: 'CIR-2', Prontuario: '500', DataCirurgia: '2026-03-01', Procedimento: 'Herniorrafia', ProcedimentoNHSN: 'Herniorrafia' }] }
+      };
+      const antesB = {};
+      ['registrarCasoIras', 'proximoIDLista', 'identidadePorNome', 'acrescentarObservacao', 'vincularCirurgiaIsc', 'cirurgiasDoEpisodio', 'culturasDoEpisodio', 'grupoTopografia',
+        'ISC_CANDIDATAS_DIAS', 'ISC_JANELA_DIAS', 'ISC_JANELA_IMPLANTE_DIAS', 'CLASSIFICACOES_CULTURA'].forEach(k => { antesB[k] = global[k]; });
+      Object.assign(global, { lerBanco: async n => bancos[n], gravarBanco: async (n, b) => { bancos[n] = b; },
+        registrarCasoIras: imp.registrarCasoIras, proximoIDLista: (lista, campo, pref) => pref + '-' + (lista.length + 1), identidadePorNome: imp.identidadePorNome,
+        acrescentarObservacao: imp.acrescentarObservacao, vincularCirurgiaIsc: imp.vincularCirurgiaIsc, cirurgiasDoEpisodio: imp.cirurgiasDoEpisodio,
+        culturasDoEpisodio: imp.culturasDoEpisodio, grupoTopografia: imp.grupoTopografia, ISC_CANDIDATAS_DIAS: imp.ISC_CANDIDATAS_DIAS,
+        ISC_JANELA_DIAS: imp.ISC_JANELA_DIAS, ISC_JANELA_IMPLANTE_DIAS: imp.ISC_JANELA_IMPLANTE_DIAS, CLASSIFICACOES_CULTURA: esquemas.CLASSIFICACOES_CULTURA });
+      try {
+        const opc = forms.opcoesCirurgiasIsc(bancos.cirurgias.cirurgias, { Prontuario: '500', DataInfeccao: '2026-11-08' }, p => p);
+        verificar('lista de cirurgias candidatas: a de 11 dias antes entra e vem pré-selecionada; a de 8 meses fica fora',
+          opc.length === 2 && opc[1].value === 'CIR-1' && opc[1].selected === true && /11 dia/.test(opc[1].rotulo), JSON.stringify(opc));
+        const r = await forms.salvarAvaliacaoCultura([bancos.culturas.culturas[0]], 'IRAS', 'ISC superficial', 'Nenhum', 'drenagem purulenta na ferida', { pacientes: bancos.pacientes.pacientes, cirurgia: 'CIR-1' });
+        const caso = bancos.iras.casos[0], cir = bancos.cirurgias.cirurgias[0];
+        verificar('classificar a cultura como ISC com cirurgia escolhida liga o caso à cirurgia (ID_CirurgiaAssociada, ISC=S, data = data da cirurgia)',
+          !!caso && caso.ID_CirurgiaAssociada === 'CIR-1' && cir.ID_IRAS === caso.ID_IRAS && cir.ISC === 'S' && cir.TipoISC === 'superficial'
+          && caso.DataInfeccao === '2026-10-28' && caso.DataDeteccao === '2026-11-08' && r.casoIras === caso.ID_IRAS,
+          JSON.stringify({ caso, cir }));
+      } finally { Object.assign(global, antesB); }
     } catch (e) {
       verificar('formulários compartilhados sem exceção', false, e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e.message);
     } finally { Object.assign(global, antesG); }

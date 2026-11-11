@@ -246,6 +246,10 @@ Contaminação / Repetição / Não é cultura.
   há um campo **"observação para quem vai validar"**: escreva ali o que viu (febre desde
   quando, dispositivo, conversa com a equipe). O recado fica gravado na cultura, datado e
   assinado, e entra no diário do caso de IRAS — é o que quem confirma lê na aba Infecções.
+  Quando a topografia é **ISC**, aparece também a lista das **cirurgias do paciente** até 180
+  dias antes da coleta (as da janela de 30/90 dias primeiro, pré-selecionada quando é uma só):
+  a escolhida fica ligada ao caso e marcada como ISC, e a data da infecção passa a ser a da
+  cirurgia — o mesmo que a aba Infecções faz.
 - **A evolução do Tasy é lida**: termos que sugerem infecção (febre, secreção purulenta,
   PAV, ITU, sepse, ferida infectada…; "afebril" e outras negações são descontadas) viram
   um aviso na linha da cultura, na ficha do paciente e no cartão **"Evoluções que sugerem
@@ -754,7 +758,10 @@ atropelam: cada gravação trava o arquivo, relê e só então grava.
   antibióticos por curso, cirurgias, dispositivos, sepse, isolamentos, óbito); abre
   clicando no nome em qualquer tela. **Corrigir um registro errado**: cada evento da linha
   do tempo tem o botão **"✎ editar"** (cultura — classificação, sítio, material, germe,
-  mecanismo; caso de IRAS — topografia, data, setor, dispositivo, situação; avaliação de
+  mecanismo; caso de IRAS — topografia, data, setor, dispositivo, situação, **cultura do
+  agente** entre as culturas positivas do episódio e **cirurgia associada** entre as cirurgias
+  do paciente, com os mesmos efeitos da aba Infecções: o agente define o microrganismo e
+  revincula as culturas, a cirurgia ganha a marca de ISC; avaliação de
   antibiótico; cirurgia — categoria, ISC, situação da vigilância; isolamento; internação;
   protocolo de sepse). Nada é apagado: o que estava errado vira "descartado" pelo campo de
   situação, e toda correção fica registrada no próprio registro (quem, quando e cada campo

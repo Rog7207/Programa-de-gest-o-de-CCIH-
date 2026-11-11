@@ -12,6 +12,33 @@
 const AVALIACOES_ATB = ['Correto', 'Parcialmente correto', 'Incorreto'];
 const RECOMENDACOES_ATB = ['Manter', 'Ajustar dose', 'Descalonar', 'Modificar', 'Suspender'];
 
+/* ---- Listas compartilhadas: cirurgias candidatas de uma ISC e culturas candidatas a agente ----
+   Mesma regra da aba Infecções (cirurgiasDoEpisodio / culturasDoEpisodio, importacao.js), para
+   a classificação de cultura, a tela por paciente e a correção na ficha (11/11/2026). */
+
+function opcoesCirurgiasIsc(cirurgias, caso, identidadeDe) {
+  const candidatas = cirurgiasDoEpisodio(cirurgias || [], caso, { identidadeDe });
+  const atual = String(caso.ID_CirurgiaAssociada || '').trim()
+    || (((cirurgias || []).find(c => caso.ID_IRAS && c.ID_IRAS === caso.ID_IRAS) || {}).ID_Cirurgia || '');
+  const naJanela = candidatas.filter(x => x.naJanela);
+  const preSel = atual || (naJanela.length === 1 ? naJanela[0].cirurgia.ID_Cirurgia : '');
+  return [{ value: '', rotulo: candidatas.length ? '— escolher a cirurgia —' : `— nenhuma cirurgia até ${ISC_CANDIDATAS_DIAS} dias antes —`, selected: !preSel }]
+    .concat(candidatas.map(x => ({ value: x.cirurgia.ID_Cirurgia, selected: x.cirurgia.ID_Cirurgia === preSel,
+      rotulo: `${x.cirurgia.DataCirurgia} · ${String(x.cirurgia.Procedimento || '').slice(0, 50)} · ${x.dias} dia(s) antes`
+        + (x.implante ? ' · prótese/implante' : '') + (x.naJanela ? '' : ` · fora da janela (${x.implante ? ISC_JANELA_IMPLANTE_DIAS : ISC_JANELA_DIAS} dias)`) })));
+}
+
+function opcoesCulturasAgente(culturas, caso, identidadeDe) {
+  const candidatas = culturasDoEpisodio(culturas || [], caso, { identidadeDe });
+  return [{ value: '', rotulo: '— escolher a cultura —', selected: !caso.ID_CulturaAgente }]
+    .concat(candidatas.map(c => ({ value: c.ID_Cultura, selected: c.ID_Cultura === caso.ID_CulturaAgente,
+      rotulo: `${c.DataColeta} · ${c.Material} · ${c.Microrganismo}${c.MecanismoResistencia ? ' (' + c.MecanismoResistencia + ')' : ''}` })));
+}
+
+function selectDeOpcoes(opcoes) {
+  return el('select', {}, (opcoes || []).map(o => el('option', { value: o.value, selected: o.selected ? '' : null }, o.rotulo)));
+}
+
 /* ---- Cultura ---- */
 
 /* amostras: uma cultura ou o grupo de amostras repetidas (todas recebem a mesma classificação).
@@ -28,28 +55,53 @@ function formularioClassificacaoCultura(amostras, opcoes) {
   const selDisp = el('select', {}, ['Nenhum', 'CVC', 'VM', 'SVD'].map(d => el('option', { value: d }, d)));
   const linhaIras = el('span', { style: 'display:none' },
     el('label', {}, ' Topografia: ', selTopo), el('label', {}, ' Dispositivo: ', selDisp));
+  /* ISC: lista as cirurgias do paciente até 180 dias antes da coleta, como na aba Infecções
+     (pedido de 11/11/2026). O banco de cirurgias é lido só quando a topografia é ISC. */
+  const primeira = (Array.isArray(amostras) ? amostras : [amostras]).slice().sort((a, b) => String(a.DataColeta).localeCompare(String(b.DataColeta)))[0] || {};
+  let selCirurgia = el('select', {}, el('option', { value: '' }, 'carregando cirurgias…'));
+  const linhaCirurgia = el('span', { style: 'display:none' }, el('label', {}, ' Cirurgia (ISC): ', selCirurgia));
+  let cirurgiasCarregadas = null;
+  async function carregarCirurgias() {
+    if (cirurgiasCarregadas) return cirurgiasCarregadas;
+    const [bCir, bPac] = await Promise.all([lerBanco('cirurgias').catch(() => ({ cirurgias: [] })), lerBanco('pacientes').catch(() => ({ pacientes: [] }))]);
+    cirurgiasCarregadas = { cirurgias: bCir.cirurgias || [], identidadeDe: identidadePorNome(bPac.pacientes || []) };
+    return cirurgiasCarregadas;
+  }
+  const ehIsc = () => selAval.value === 'IRAS' && typeof grupoTopografia === 'function' && grupoTopografia(selTopo.value) === 'isc';
+  async function ajustarCirurgia() {
+    if (!ehIsc()) { linhaCirurgia.style.display = 'none'; return; }
+    linhaCirurgia.style.display = '';
+    try {
+      const { cirurgias, identidadeDe } = await carregarCirurgias();
+      const novo = selectDeOpcoes(opcoesCirurgiasIsc(cirurgias, { Prontuario: primeira.Prontuario, DataInfeccao: primeira.DataColeta }, identidadeDe));
+      selCirurgia.replaceWith(novo); selCirurgia = novo;
+    } catch (e) { /* sem banco de cirurgias: fica sem lista */ }
+  }
+  selTopo.addEventListener('change', ajustarCirurgia);
   /* Recado para quem vai confirmar a IRAS na aba Infecções (pedido de 09/11/2026): fica na
      cultura e, quando abre caso, entra no diário do caso com data e autor. */
   const campoObs = el('textarea', { rows: 2, style: 'width:100%',
     placeholder: 'observação para quem vai validar (opcional) — ex.: "febre desde D3, CVC em jugular, discutido com a UTI"' });
   const ajustar = () => {
     linhaIras.style.display = selAval.value === 'IRAS' ? '' : 'none';
+    ajustarCirurgia();
     campoObs.placeholder = selAval.value === 'IRAS'
       ? 'observação para quem vai confirmar a IRAS (opcional) — ex.: "febre desde D3, CVC em jugular, discutido com a UTI"'
       : 'observação sobre a classificação (opcional) — fica registrada na cultura';
   };
   selAval.addEventListener('change', ajustar);
   const no = el('div', { class: 'form-decisao form-decisao-cultura' },
-    el('div', { class: 'linha-campos' }, el('label', {}, 'Classificação: ', selAval), linhaIras),
+    el('div', { class: 'linha-campos' }, el('label', {}, 'Classificação: ', selAval), linhaIras, linhaCirurgia),
     campoObs);
-  const valores = () => ({ avaliacao: selAval.value, topografia: selTopo.value, dispositivo: selDisp.value, observacao: campoObs.value });
+  const valores = () => ({ avaliacao: selAval.value, topografia: selTopo.value, dispositivo: selDisp.value, observacao: campoObs.value,
+    cirurgia: ehIsc() ? selCirurgia.value : '' });
   return {
     no, selAval, selTopo, selDisp, campoObs, valores,
     temDecisao: () => !!selAval.value,
     salvar: async extra => {
       const v = valores();
       if (!v.avaliacao) return null;
-      return salvarAvaliacaoCultura(amostras, v.avaliacao, v.topografia, v.dispositivo, v.observacao, extra || {});
+      return salvarAvaliacaoCultura(amostras, v.avaliacao, v.topografia, v.dispositivo, v.observacao, { ...(extra || {}), cirurgia: v.cirurgia });
     }
   };
 }
@@ -65,7 +117,8 @@ async function salvarAvaliacaoCultura(culturas, avaliacao, topografia, dispositi
   const lista = (Array.isArray(culturas) ? culturas : [culturas])
     .slice().sort((a, b) => String(a.DataColeta).localeCompare(String(b.DataColeta)));
   const c = lista[0];
-  const arquivos = avaliacao === 'IRAS' ? ['culturas', 'iras'] : ['culturas'];
+  const idCirurgia = String(opcoes.cirurgia || '').trim();
+  const arquivos = avaliacao === 'IRAS' ? ['culturas', 'iras'].concat(idCirurgia ? ['cirurgias'] : []) : ['culturas'];
   let casoAberto = null;
   await comTrava(arquivos, async () => {
     const bancoAtual = await lerBanco('culturas');
@@ -95,6 +148,15 @@ async function salvarAvaliacaoCultura(culturas, avaliacao, topografia, dispositi
       /* O recado vai para o diário do caso — é lá que quem confirma vai ler, inclusive
          quando o caso já existia (outra cultura, pós-alta, visita da UTI). */
       if (nota) caso.Observacoes = acrescentarObservacao(caso.Observacoes, `Cultura ${c.ID_Cultura}`, nota, app.usuario, agoraCurto());
+      /* ISC ligada à cirurgia escolhida: a cirurgia ganha ISC/ID_IRAS e a data da infecção
+         passa a ser a da cirurgia (padrão da CCIH), como na aba Infecções. */
+      if (idCirurgia) {
+        const bancoCir = await lerBanco('cirurgias');
+        const r = vincularCirurgiaIsc(bancoCir.cirurgias || [], caso, idCirurgia, { usuario: app.usuario, agora: agoraCurto() });
+        if (r.vinculada || r.desvinculadas) await gravarBanco('cirurgias', bancoCir);
+        if (r.vinculada) caso.Observacoes = acrescentarObservacao(caso.Observacoes, 'Cirurgia',
+          `ISC associada à cirurgia ${r.vinculada.DataCirurgia} · ${r.vinculada.Procedimento} (${idCirurgia})`, app.usuario, agoraCurto());
+      }
       await gravarBanco('iras', bancoIras);
       for (const alvo of alvos) if (!alvo.ID_IRAS) alvo.ID_IRAS = caso.ID_IRAS;
       casoAberto = caso.ID_IRAS;
@@ -157,5 +219,5 @@ async function salvarAvaliacaoAntibiotico(curso, avaliacao, recomendacao, parece
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { AVALIACOES_ATB, RECOMENDACOES_ATB, formularioClassificacaoCultura, salvarAvaliacaoCultura,
-    formularioAvaliacaoAntibiotico, salvarAvaliacaoAntibiotico };
+    formularioAvaliacaoAntibiotico, salvarAvaliacaoAntibiotico, opcoesCirurgiasIsc, opcoesCulturasAgente, selectDeOpcoes };
 }

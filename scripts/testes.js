@@ -6714,6 +6714,21 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       JSON.stringify({ m1: m1.linhas.map(x => x.ID_Checklist + ':' + x.Prontuario), m2: m2.linhas.map(x => x.ID_Checklist + ':' + x.Prontuario) }));
   }
 
+  /* == 114. Datas no formato brasileiro na exibição (16/11/2026) == */
+  {
+    console.log('\n== 114. datasParaBR: ISO → DD/MM/AAAA só na exibição ==');
+    const br = leitura.datasParaBR;
+    verificar('data simples', br('2026-11-16') === '16/11/2026', br('2026-11-16'));
+    verificar('data com hora (agoraCurto)', br('2026-11-16 10:05') === '16/11/2026 10:05', br('2026-11-16 10:05'));
+    verificar('ISO completo com T e Z', br('2026-11-11T12:00:00Z') === '11/11/2026 12:00', br('2026-11-11T12:00:00Z'));
+    verificar('datas dentro de frase e intervalo', br('coleta 2026-07-06 · internado em 2026-07-01') === 'coleta 06/07/2026 · internado em 01/07/2026'
+      && br('2026-07-06 → 2026-07-09') === '06/07/2026 → 09/07/2026', br('coleta 2026-07-06 · internado em 2026-07-01'));
+    verificar('rótulo de mês sozinho vira MM/AAAA; dentro de frase fica', br('2026-07') === '07/2026' && br('mês 2026-07 inteiro') === 'mês 2026-07 inteiro');
+    verificar('não mexe em IDs, códigos e números que não são data',
+      br('CUL-034813') === 'CUL-034813' && br('reportCATE-2166-20261110') === 'reportCATE-2166-20261110' && br('2026-13-40') === '2026-13-40'
+      && br('1.234') === '1.234' && br('') === '' && br(null) === '' && br(2026) === '2026', [br('reportCATE-2166-20261110'), br('2026-13-40')].join(' | '));
+  }
+
   console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
   process.exit(falharam ? 1 : 0);
 })();

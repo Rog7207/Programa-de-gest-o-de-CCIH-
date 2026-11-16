@@ -840,7 +840,7 @@ async function montarIsolamentos(conteudo) {
       msgLista.textContent = 'O navegador bloqueou a janela de impressão — libere pop-ups para este aplicativo.';
       return;
     }
-    janela.document.write(html);
+    janela.document.write(datasParaBR(html));
     janela.document.close();
     janela.focus();
     janela.print();

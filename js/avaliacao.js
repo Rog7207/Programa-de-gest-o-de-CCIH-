@@ -192,6 +192,9 @@ var suspeitas = JSON.parse(localStorage.getItem(CHAVE_LOCAL + '.susp') || '{}');
 var respostasCultura = JSON.parse(localStorage.getItem(CHAVE_LOCAL + '.cult') || '{}');
 
 function $(id) { return document.getElementById(id); }
+function dataBR(t) {
+  return String(t).replace(/\\b(\\d{4})-(\\d{2})-(\\d{2})\\b/g, function (m, a, me, d) { return d + '/' + me + '/' + a; });
+}
 function el(tag, attrs, filhos) {
   var e = document.createElement(tag);
   attrs = attrs || {};
@@ -202,7 +205,7 @@ function el(tag, attrs, filhos) {
   }
   (filhos || []).forEach(function (f) {
     if (f == null) return;
-    e.appendChild(f.nodeType ? f : document.createTextNode(f));
+    e.appendChild(f.nodeType ? f : document.createTextNode(tag === 'textarea' ? f : dataBR(f)));
   });
   return e;
 }

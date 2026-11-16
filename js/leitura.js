@@ -168,6 +168,19 @@ async function extrairLinhasPDF(buffer) {
   return linhas;
 }
 
+/* Datas no formato brasileiro NA EXIBIÇÃO (pedido de 16/11/2026). O banco continua em ISO
+   (AAAA-MM-DD), que é o que ordena e compara certo; só o texto que vai para a tela ou para a
+   impressão é convertido: AAAA-MM-DD → DD/MM/AAAA (com hora, se houver: "… 13:07" ou
+   "…T13:07:00Z") e um texto que é só AAAA-MM (rótulo de mês) → MM/AAAA. Valores que não são
+   data válida ficam como estão. */
+function datasParaBR(texto) {
+  const s = String(texto == null ? '' : texto);
+  if (!/\d{4}-\d{2}/.test(s)) return s;
+  const r = s.replace(/\b(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?Z?)?\b/g, (m, a, me, d, h, mi) =>
+    (+me >= 1 && +me <= 12 && +d >= 1 && +d <= 31) ? `${d}/${me}/${a}` + (h ? ` ${h}:${mi}` : '') : m);
+  return r.replace(/^(\d{4})-(\d{2})$/, (m, a, me) => (+me >= 1 && +me <= 12) ? `${me}/${a}` : m);
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { lerBruto, detectarCabecalho, normalizarTexto, calcularFingerprint, extensaoDe, FORMATOS_TABULARES, linhaDeItens };
+  module.exports = { lerBruto, detectarCabecalho, normalizarTexto, calcularFingerprint, extensaoDe, FORMATOS_TABULARES, linhaDeItens, datasParaBR };
 }

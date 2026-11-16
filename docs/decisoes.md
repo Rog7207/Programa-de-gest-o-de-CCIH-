@@ -190,3 +190,12 @@ Partes Moles" entrou como "Secreção traqueal" (de-para da época). Corrigido n
 não informado)", rastro em HistoricoEdicao); o alias "Aspirado" → "Secreção traqueal" passou a
 "Secreção (sítio não informado)". Na CCIH: rodar o script (com `--base=` apontando para o arquivo
 em importados/2026-08) e ajustar o alias em Configurações.
+
+## Datas no formato brasileiro (16/11/2026)
+
+A tela, as impressões (relatórios, fichas de IRAS, lista do SINAN, lista de isolamentos) e a
+página remota de avaliação dos médicos mostram datas em DD/MM/AAAA (com hora quando houver;
+rótulo de mês sozinho em MM/AAAA). O banco continua em ISO (AAAA-MM-DD): é o que ordena e
+compara certo e o que todos os cálculos usam. A conversão é só na exibição — `datasParaBR`
+(leitura.js) aplicada pelo `el()` de app.js e nas páginas de impressão; textarea, campos de
+data e valores de opção não são tocados. As exportações para Excel continuam em ISO.

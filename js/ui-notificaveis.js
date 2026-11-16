@@ -172,11 +172,11 @@ td.obs{white-space:pre-wrap;font-size:11px}@media print{@page{size:landscape;mar
       const nomeArquivo = `${agoraCurto().replace(/[: ]/g, '-')}_notificaveis-sinan.html`;
       const dir = await pasta.subpasta('fichas');
       const fh = await dir.getFileHandle(nomeArquivo, { create: true });
-      const w = await fh.createWritable(); await w.write(html); await w.close();
+      const w = await fh.createWritable(); await w.write(datasParaBR(html)); await w.close();
     } catch (e) { /* sem pasta (ex.: teste) segue só com a impressão */ }
     const janela = window.open('', '_blank');
     if (!janela) { alert('O navegador bloqueou a janela de impressão — libere pop-ups.'); return; }
-    janela.document.write(html); janela.document.close(); janela.focus(); janela.print();
+    janela.document.write(datasParaBR(html)); janela.document.close(); janela.focus(); janela.print();
   };
   /* Mutação de um caso JÁ existente (listas de digitação/encerrados), por ID. */
   const mudarCasoPorId = async (idCaso, mutador) => {

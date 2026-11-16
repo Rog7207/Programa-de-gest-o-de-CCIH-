@@ -839,6 +839,10 @@ decide nada sozinho.
 
 ## 13. Segurança e boas práticas
 
+- **Datas**: tudo que aparece na tela e nas impressões sai em DD/MM/AAAA. Por dentro, nos
+  arquivos Excel do banco e nas exportações, as datas ficam em AAAA-MM-DD — é o formato que
+  ordena certo; não altere à mão para o formato brasileiro.
+
 - **Backup** = copiar a pasta de dados inteira. Os scripts de manutenção também deixam
   cópias em `backups/` antes de qualquer mudança em massa — essa pasta cresce (cada cópia tem
   o tamanho do banco); mova as cópias com mais de um mês para fora quando o espaço apertar.

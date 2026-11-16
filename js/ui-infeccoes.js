@@ -300,7 +300,7 @@ async function montarInfeccoes(conteudo) {
         const nomeArquivo = `${agoraCurto().replace(/[: ]/g, '-')}_fichas-iras.html`;
         const dir = await pasta.subpasta('fichas');
         const fh = await dir.getFileHandle(nomeArquivo, { create: true });
-        const w = await fh.createWritable(); await w.write(html); await w.close();
+        const w = await fh.createWritable(); await w.write(datasParaBR(html)); await w.close();
         await comTrava(['iras'], async () => {
           const atual = await lerBanco('iras');
           atual.fichas = atual.fichas || [];
@@ -311,7 +311,7 @@ async function montarInfeccoes(conteudo) {
         });
         const janela = window.open('', '_blank');
         if (!janela) { msg.className = 'aviso-erro-texto'; msg.textContent = `Fichas gravadas em fichas/${nomeArquivo}, mas o navegador bloqueou a janela de impressão — libere pop-ups.`; return; }
-        janela.document.write(html); janela.document.close(); janela.focus(); janela.print();
+        janela.document.write(datasParaBR(html)); janela.document.close(); janela.focus(); janela.print();
         msg.textContent = `${fmtInt(escolhidos.length)} ficha(s) impressa(s) e guardada(s) em fichas/${nomeArquivo}.`;
       } catch (e) { msg.className = 'aviso-erro-texto'; msg.textContent = e.message; }
     };

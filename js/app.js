@@ -28,6 +28,11 @@ const ABAS = [
 
 const app = { usuario: localStorage.getItem('ccih.usuario') || '', abaAtual: 'importar' };
 
+/* Todo texto que entra na tela por aqui sai com as datas no formato brasileiro
+   (datasParaBR, leitura.js). Exceções: textarea (o texto é o VALOR editável — converter
+   gravaria a data trocada de volta no banco), script e style. Atributos (value de input
+   date, value de option) não são tocados: continuam em ISO, que é o que o código lê. */
+const _TAGS_SEM_DATA_BR = new Set(['textarea', 'script', 'style']);
 function el(tag, attrs, ...filhos) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
@@ -35,9 +40,10 @@ function el(tag, attrs, ...filhos) {
     else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
     else if (v !== null && v !== undefined) e.setAttribute(k, v);
   }
+  const converter = typeof datasParaBR === 'function' && !_TAGS_SEM_DATA_BR.has(String(tag).toLowerCase());
   for (const f of filhos.flat()) {
     if (f == null) continue;
-    e.append(f.nodeType ? f : document.createTextNode(f));
+    e.append(f.nodeType ? f : document.createTextNode(converter ? datasParaBR(f) : f));
   }
   return e;
 }

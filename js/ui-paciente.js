@@ -208,6 +208,10 @@ async function montarPaciente(conteudo) {
       c.DuracaoMin ? c.DuracaoMin + ' min' : '',
       c.ProfilaxiaAntibiotico ? 'profilaxia: ' + c.ProfilaxiaAntibiotico : '',
       c.ISC === 'S' ? 'ISC: ' + (c.TipoISC || 'sim') : ''].filter(Boolean).join(' · '), { tipo: 'cirurgia', registro: c }));
+  /* Checklists de bundle do Tasy (1116/2166): um evento por avaliação. */
+  daPessoa(bancos.dispositivos.checklists || []).forEach(k => juntar(k.Data, 'dispositivo',
+    `Checklist de ${k.Tipo || 'bundle'}${k.Dispositivo ? ' (' + k.Dispositivo + ')' : ''}`,
+    [k.Setor, k.Leito ? 'leito ' + k.Leito : '', k.Hora, k.Avaliador ? 'por ' + k.Avaliador : ''].filter(Boolean).join(' · ')));
   dispositivos.forEach(d => {
     juntar(d.DataInstalacao, 'dispositivo', 'Instalado: ' + (d.Dispositivo || d.Categoria || ''), d.Categoria || '');
     if (d.DataRetirada) juntar(d.DataRetirada, 'dispositivo', 'Retirado: ' + (d.Dispositivo || d.Categoria || ''),

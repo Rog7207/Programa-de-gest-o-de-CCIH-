@@ -355,6 +355,9 @@ async function processarArquivo(arquivo, codificacao, opcoesAba) {
           const matrizCrua = XLSX.utils.sheet_to_json(wbCru.Sheets[n], { header: 1, raw: true, defval: '' });
           const niss = lerCensoNISS(matrizCrua);
           if (niss.reconhecido && niss.linhas.length) { telaCensoNISS(arquivo, niss); return; }
+          /* Checklists de bundle (1116 CVC/SVD, 2166 PAV): reconhecido mesmo vazio, para avisar. */
+          const chk = lerChecklistsTasy(matrizCrua);
+          if (chk.reconhecido) { await telaChecklistsTasy(arquivo, chk); return; }
           /* IMAS (2485): lista oficial de IRAS por classificação. Datas dd/mm/aaaa em texto
              — por isso também vai na leitura crua. */
           const imas = lerImasOcorrencias(matrizCrua);
@@ -830,6 +833,58 @@ function telaCensoNISS(arquivo, leitura) {
         imp.forcarPlanilhaComum = true;
         processarArquivo(arquivo, 'auto');
       } }, 'Não é isso — ler como planilha comum'))));
+}
+
+/* Checklists de bundle do Tasy (1116 — CVC/SVD; 2166 — PAV): uma avaliação por linha. Vai para
+   dispositivos.xlsx, aba checklists, sem duplicar; o prontuário vem do censo pelo atendimento.
+   Aparece na ficha do paciente (linha do tempo) e no cartão da aba UTI. */
+async function telaChecklistsTasy(arquivo, leitura) {
+  const porTipo = {}, porSetor = {};
+  leitura.linhas.forEach(l => { porTipo[l.Tipo || '?'] = (porTipo[l.Tipo || '?'] || 0) + 1; porSetor[l.Setor || '(sem setor)'] = (porSetor[l.Setor || '(sem setor)'] || 0) + 1; });
+  const datas = [...new Set(leitura.linhas.map(l => l.Data))].sort();
+  const atendimentos = new Set(leitura.linhas.map(l => l.Atendimento)).size;
+  if (!leitura.linhas.length) {
+    imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' },
+      el('h2', {}, 'Relatório de checklists veio vazio'),
+      el('p', {}, `Reconheci ${arquivo.name} como "${leitura.titulo || 'checklists de dispositivos'}", mas não há nenhuma avaliação listada`
+        + (leitura.resumo.avaliacoes != null ? ` (quadro-resumo: ${leitura.resumo.avaliacoes} avaliações, ${leitura.resumo.conformes ?? '?'} conformes)` : '') + '.'),
+      el('p', { class: 'texto-suave' }, 'No Tasy, confira o período e o filtro de setor/unidade do relatório e gere de novo. Nada foi importado.')));
+    return;
+  }
+  const msg = el('p', { class: 'aviso-erro-texto' });
+  imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
+    el('h2', {}, 'Checklists de bundle (Tasy)'),
+    el('p', {}, `Reconheci ${arquivo.name} como "${leitura.titulo}": ${fmtInt(leitura.linhas.length)} avaliações de ${fmtInt(atendimentos)} atendimentos, `
+      + `de ${datas[0]} a ${datas[datas.length - 1]}.`),
+    el('p', { class: 'texto-suave' }, 'Por tipo: ' + Object.entries(porTipo).map(([k, v]) => `${k}: ${v}`).join(' · ')
+      + ' — por setor: ' + Object.entries(porSetor).map(([k, v]) => `${k}: ${v}`).join(' · ')),
+    leitura.problemas.length ? el('details', {}, el('summary', {}, `${fmtInt(leitura.problemas.length)} linha(s) com problema`),
+      el('ul', {}, leitura.problemas.slice(0, 30).map(p => el('li', {}, p)))) : null,
+    el('div', { class: 'linha-botoes' },
+      el('button', { class: 'botao-primario', onclick: async () => {
+        imp.detalhes.replaceChildren(el('div', { class: 'cartao' }, el('p', {}, 'Gravando…')));
+        try {
+          const resumo = await comTrava(['dispositivos'], async () => {
+            const banco = await lerBanco('dispositivos').catch(() => ({ dispositivos: [] }));
+            const bPac = await lerBanco('pacientes').catch(() => ({ internacoes: [] }));
+            const r = mesclarChecklists(leitura.linhas, banco.checklists || [], bPac.internacoes || [], app.usuario, agoraCurto());
+            banco.checklists = r.linhas;
+            if (r.novas || r.resolvidas) await gravarBanco('dispositivos', banco);
+            return { ...r, semProntuario: r.linhas.filter(x => !String(x.Prontuario || '').trim()).length };
+          });
+          await arquivarOriginal(arquivo, 'bundles_1116_2166', 'checklists', resumo.novas);
+          imp.detalhes.replaceChildren(el('div', { class: 'cartao' },
+            el('h2', {}, 'Importado'),
+            el('p', {}, `${fmtInt(resumo.novas)} avaliações novas (${fmtInt(leitura.linhas.length - resumo.novas)} já estavam no banco); ${fmtInt(resumo.linhas.length)} no total.`),
+            resumo.semProntuario ? el('p', { class: 'texto-suave' }, `${fmtInt(resumo.semProntuario)} avaliação(ões) sem prontuário: o atendimento não está no censo — importe o censo (50023) e elas se resolvem na próxima carga.`) : null,
+            el('p', { class: 'texto-suave' }, 'As avaliações aparecem na ficha do paciente (linha do tempo) e no cartão de checklists da aba UTI.')));
+        } catch (e) {
+          imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao gravar: ' + e.message));
+        }
+      } }, 'Importar'),
+      ' ',
+      el('button', { onclick: () => { imp.forcarPlanilhaComum = true; processarArquivo(arquivo, 'auto'); } }, 'Não é isso — ler como planilha comum')),
+    msg));
 }
 
 /* Movimentação de pacientes (2536): passagens por unidade (atendimento+prontuário+nome+

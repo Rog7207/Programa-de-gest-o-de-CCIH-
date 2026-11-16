@@ -1379,6 +1379,22 @@ async function montarUti(conteudo) {
     ]);
     indice = indiceDeIdentificacao(bancoPacientes.pacientes, bancoPacientes.internacoes);
     dispositivos = bancoDispositivos.dispositivos || [];
+    /* Checklists de bundle do Tasy (1116/2166) dos últimos 30 dias: quantas avaliações, de
+       quantos pacientes, por tipo e por setor (16/11/2026). */
+    const checklists = bancoDispositivos.checklists || [];
+    if (checklists.length) {
+      const corte = new Date(Date.parse(hojeISO() + 'T00:00:00Z') - 30 * 864e5).toISOString().slice(0, 10);
+      const recentes = checklists.filter(k => String(k.Data || '') >= corte);
+      const porTipo = {}, porSetor = {};
+      recentes.forEach(k => { porTipo[k.Tipo || '?'] = (porTipo[k.Tipo || '?'] || 0) + 1; porSetor[k.Setor || '(sem setor)'] = (porSetor[k.Setor || '(sem setor)'] || 0) + 1; });
+      const ultima = checklists.map(k => k.Data).sort().slice(-1)[0];
+      conteudo.append(el('div', { class: 'cartao' },
+        el('h2', {}, 'Checklists de bundle (Tasy 1116 / 2166)'),
+        el('p', {}, `Últimos 30 dias: ${fmtInt(recentes.length)} avaliações em ${fmtInt(new Set(recentes.map(k => k.Atendimento)).size)} atendimentos`
+          + ` (${Object.entries(porTipo).map(([k, v]) => k + ': ' + v).join(' · ')}). Última avaliação: ${ultima || '—'}.`),
+        el('p', { class: 'texto-suave' }, 'Por setor: ' + Object.entries(porSetor).map(([k, v]) => `${k}: ${v}`).join(' · ')
+          + '. Cada avaliação aparece na ficha do paciente. O relatório lista que o checklist foi feito; os itens conformes ficam no Tasy.')));
+    }
   } catch (e) { /* sem cadastro de pacientes ainda */ }
   const identificacaoDe = registro => identificarPaciente(registro.Prontuario, registro.Data, indice);
   const nomeDe = registro => {

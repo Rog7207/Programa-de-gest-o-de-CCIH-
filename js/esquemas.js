@@ -158,7 +158,11 @@ const ESQUEMAS = {
   dispositivos: {
     arquivo: 'dispositivos.xlsx',
     abas: {
-      dispositivos: ['ID_Dispositivo', 'Prontuario', 'Nome', 'Dispositivo', 'Categoria', 'DataInstalacao', 'DataRetirada', 'Status', 'CriadoPor', 'CriadoEm']
+      dispositivos: ['ID_Dispositivo', 'Prontuario', 'Nome', 'Dispositivo', 'Categoria', 'DataInstalacao', 'DataRetirada', 'Status', 'CriadoPor', 'CriadoEm'],
+      /* Checklists de bundle do Tasy (relatórios 1116 CVC/SVD e 2166 PAV, 16/11/2026): uma
+         linha por avaliação feita à beira do leito (atendimento, data/hora, avaliador, leito).
+         Tipo = PAV/CVC/SVD; Dispositivo = VM/CVC/SVD. Prontuário resolvido pelo censo. */
+      checklists: ['ID_Checklist', 'Atendimento', 'Prontuario', 'Setor', 'Leito', 'Data', 'Hora', 'Avaliador', 'Tipo', 'Dispositivo', 'TipoAvaliacao', 'CriadoPor', 'CriadoEm']
     }
   },
   isolamentos: {
@@ -269,6 +273,7 @@ const VOCAB_APLICACAO = {
     ['evolucoes', 'sinais_vitais', 'Setor'],
     ['evolucoes', 'corpus', 'Setor'],
     ['evolucoes_historico', 'evolucoes', 'Setor'],
+  ['dispositivos', 'checklists', 'Setor'],
     ['higiene_maos', 'observacoes', 'Setor'], ['higiene_maos', 'consumo_alcool', 'Setor'],
     ['surtos', 'investigacoes', 'Setor'],
     ['denominadores', 'censo_setor', 'Setor'], ['denominadores', 'dispositivos_dia', 'Setor'],

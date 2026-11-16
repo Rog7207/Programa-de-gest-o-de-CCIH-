@@ -1953,6 +1953,100 @@ function mesclarEvolucoes(retidasNovas, antigas, bancos, hoje) {
   return { evolucoes: (retidasNovas || []).concat(persistidas), persistidas: persistidas.length };
 }
 
+/* ---- Checklists de bundle (relatórios 1116 — CVC/SVD — e 2166 — PAV — do Tasy, 16/11/2026) ----
+   Lista das avaliações de checklist feitas à beira do leito: ATENDIMENTO | PACIENTE |
+   DT_AVALIACAO | AVALIADOR | LEITO | TIPO_AVALIACAO, agrupadas por setor (linha só com o nome
+   do setor antes das avaliações dele). O 1116 pode vir só com o quadro "Taxa de conformidade"
+   (quantidade de avaliações, conformes, taxa) sem lista — é reconhecido mesmo assim, para a
+   tela dizer que veio vazio em vez de cair no assistente de planilha comum. */
+function tipoDeChecklist(texto) {
+  const t = normalizarTexto(texto);
+  if (/pav|pneumonia|ventila/.test(t)) return 'PAV';
+  if (/cvc|cateter venoso|cateter central|venoso central/.test(t)) return 'CVC';
+  if (/svd|sonda vesical|urinari|vesical/.test(t)) return 'SVD';
+  return '';
+}
+const DISPOSITIVO_DO_CHECKLIST = { PAV: 'VM', CVC: 'CVC', SVD: 'SVD' };
+function lerChecklistsTasy(matriz) {
+  const linhas = [], problemas = [];
+  let reconhecido = false, titulo = '', tipoTitulo = '', cab = -1, col = {}, setor = '';
+  const resumo = {};
+  const limpas = (matriz || []).map(bruta => (bruta || []).map(c => String(c == null ? '' : c).trim()));
+  for (let i = 0; i < Math.min(limpas.length, 12); i++) {
+    const n = limpas[i].map(c => normalizarTexto(c));
+    const juntas = n.join(' ');
+    if (!titulo && /checklist|check list/.test(juntas.replace(/\s/g, ''))) { titulo = limpas[i].filter(Boolean).join(' '); reconhecido = true; tipoTitulo = tipoDeChecklist(titulo); }
+    const iAtd = n.findIndex(x => x === 'atendimento' || x === 'nratendimento');
+    const iData = n.findIndex(x => x === 'dtavaliacao' || x === 'dataavaliacao' || x === 'dtavaliacao');
+    if (iAtd >= 0 && iData >= 0) {
+      cab = i; reconhecido = true;
+      col = { atd: iAtd, data: iData, nome: n.findIndex(x => x === 'paciente' || x === 'nmpaciente' || x === 'nome'),
+        avaliador: n.findIndex(x => x === 'avaliador' || x === 'nmavaliador'), leito: n.findIndex(x => x === 'leito' || x === 'cdleito'),
+        tipo: n.findIndex(x => x === 'tipoavaliacao' || x === 'tipo') };
+      break;
+    }
+  }
+  if (!reconhecido) return { reconhecido: false, linhas, problemas, titulo, resumo };
+  /* Quadro-resumo do 1116 (quando existe): "Quantidade de avaliações: 12". */
+  for (const l of limpas) {
+    const texto = l.filter(Boolean).join(' ');
+    const m = texto.match(/quantidade de avalia[cç][oõ]es(?: conforme)?:\s*(\d+)/i);
+    if (m) { if (/conforme/i.test(texto)) resumo.conformes = Number(m[1]); else resumo.avaliacoes = Number(m[1]); }
+    const t = texto.match(/taxa de conformidade:\s*([\d.,]+)/i);
+    if (t) resumo.taxa = t[1];
+  }
+  if (cab < 0) return { reconhecido, linhas, problemas, titulo, resumo };
+  for (const l of limpas.slice(cab + 1)) {
+    const celulas = l.filter(Boolean);
+    if (!celulas.length) continue;
+    const c = i => (i >= 0 ? (l[i] || '') : '');
+    const junta = normalizarTexto(celulas.join(' '));
+    if (/impressoem|^pagina/.test(junta)) continue;
+    /* Atendimento é só dígitos; qualquer outra linha de uma célula é o nome do setor que
+       agrupa as avaliações seguintes — menos o título do relatório, repetido a cada página. */
+    if (!/^\d+$/.test(c(col.atd))) {
+      if (celulas.length === 1 && !/relatorio|checklist|check list|^atendimento/.test(junta.replace(/\s/g, ' '))) setor = celulas[0];
+      continue;
+    }
+    const atd = normalizarProntuario(c(col.atd));
+    const bruto = c(col.data);
+    const m = bruto.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+    if (!m) { problemas.push('atendimento ' + atd + ' com data ilegível: ' + bruto); continue; }
+    const data = `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    const hora = m[4] ? `${m[4].padStart(2, '0')}:${m[5]}` : '';
+    const tipoAval = c(col.tipo);
+    const tipo = tipoDeChecklist(tipoAval) || tipoTitulo;
+    linhas.push({ Atendimento: atd, NomePaciente: c(col.nome), Setor: setor, Leito: c(col.leito).replace(/^0+$/, ''),
+      Data: data, Hora: hora, Avaliador: c(col.avaliador), Tipo: tipo, Dispositivo: DISPOSITIVO_DO_CHECKLIST[tipo] || '', TipoAvaliacao: tipoAval });
+  }
+  return { reconhecido, linhas, problemas, titulo, resumo };
+}
+
+/* Junta as avaliações lidas às já gravadas sem duplicar (atendimento + data + hora + tipo),
+   resolvendo o prontuário pelo censo (atendimento → prontuário). Devolve { linhas, novas }. */
+function mesclarChecklists(novas, existentes, internacoes, usuario, agora) {
+  const mapa = new Map();
+  for (const i of (internacoes || [])) { const a = String(i.Atendimento || '').trim(); if (a) mapa.set(a, normalizarProntuario(i.Prontuario)); }
+  const chave = x => [x.Atendimento, x.Data, x.Hora, x.Tipo].join('|');
+  const vistas = new Set((existentes || []).map(chave));
+  const linhas = (existentes || []).slice();
+  let n = linhas.length, adicionadas = 0;
+  for (const x of (novas || [])) {
+    if (vistas.has(chave(x))) continue;
+    vistas.add(chave(x));
+    n++;
+    linhas.push({ ID_Checklist: 'CHK-' + String(n).padStart(6, '0'), Atendimento: x.Atendimento,
+      Prontuario: mapa.get(String(x.Atendimento)) || '', Setor: x.Setor, Leito: x.Leito, Data: x.Data, Hora: x.Hora,
+      Avaliador: x.Avaliador, Tipo: x.Tipo, Dispositivo: x.Dispositivo, TipoAvaliacao: x.TipoAvaliacao,
+      CriadoPor: usuario || '', CriadoEm: agora || '' });
+    adicionadas++;
+  }
+  /* Linhas antigas sem prontuário ganham o do censo quando ele chegou depois. */
+  let resolvidas = 0;
+  for (const x of linhas) if (!String(x.Prontuario || '').trim() && mapa.has(String(x.Atendimento))) { x.Prontuario = mapa.get(String(x.Atendimento)); resolvidas++; }
+  return { linhas, novas: adicionadas, resolvidas };
+}
+
 /* ---- Foto dos internados (relatório 2396 do Tasy) ----
    Uma linha por atendimento internado NO MOMENTO: nº do atendimento, data de entrada, setor
    onde o paciente ESTÁ e leito. É o que o censo (50023) não diz — lá fica o setor de entrada.
@@ -5220,6 +5314,7 @@ if (typeof module !== 'undefined' && module.exports) {
     principioAtivo, aplicarObitos,
     classificarParaVigilancia, categoriaDeVigilancia, CATEGORIAS_VIGILANCIA, CATEGORIAS_VIGILANCIA_PADRAO,
     diasDesde, telefoneWhatsApp, casaBuscaLivre, mensagemVigilancia, linkWhatsApp, JANELA_VIGILANCIA,
+    lerChecklistsTasy, mesclarChecklists, tipoDeChecklist, DISPOSITIVO_DO_CHECKLIST,
     prescricaoAtiva, analisarDose, cursosDeAntibiotico, prescricoesComFimEfetivo, alertasDeAntibioticos, DIAS_CURSO_PROLONGADO, TETO_DOSE_DIARIA_MG,
     grupoTopografia, gravidadeTopografia, mesmoCasoIras, casoIndeterminado, marcarIndeterminados, resolverIndeterminado, STATUS_INDETERMINADO, CLASSE_INDETERMINADA, registrarCasoIras, agruparCasosIrasDuplicados, identidadePorNome, conciliarComTasy, aplicarConciliacao, culturasDoEpisodio, SEM_CULTURA_VALIDA, cirurgiasDoEpisodio, tipoIscDaTopografia, vincularCirurgiaIsc, reclassificarCulturaComoAgente, ISC_JANELA_DIAS, ISC_JANELA_IMPLANTE_DIAS, ISC_CANDIDATAS_DIAS, fichaDeNotificacao, htmlDasFichas,
     fundirCasosIras, deduplicarCasosIras, IRAS_JANELA_DUPLICATA_DIAS

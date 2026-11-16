@@ -73,7 +73,7 @@ abrem o assistente de 5 passos (mapear as colunas uma vez e salvar o perfil).
 | 5 | **Evoluções (2394)** | hoje | reconhecido sozinho | sinais de infecção, visita à UTI, histórico do dossiê (precisa ser todo dia: o Tasy só exporta o recorte do dia) |
 | 6 | **Sinais vitais (2411)** | últimos 2 dias | reconhecido sozinho | vitais alterados na preparação da visita |
 | 7 | **Pacientes em isolamento (1042)** | hoje (foto) | tipo "Pacientes em isolamento" | encerra sozinho quem saiu; pendências de MDR |
-| 8 | **Bundles CVC/SVD (1116) e PAV (2166)** | hoje | tipo "Dispositivos invasivos" | dispositivo-dia, utilização, PAV/IPCS/ITU associadas |
+| 8 | **Checklists de bundle CVC/SVD (1116) e PAV (2166)** | hoje (ou desde a última carga) | reconhecidos sozinhos | avaliações de checklist por paciente/dia: ficha do paciente e cartão da aba UTI. Se vier só o quadro de conformidade sem lista, confira o filtro de setor no Tasy |
 | 9 | **Análise de antibióticos (2362)** | hoje | tipo "Análise de antibióticos" | abre os cursos com o fim **previsto** |
 | 10 | **Prescrições diárias de antimicrobianos (2365)** | hoje | tipo "Antibióticos prescritos", perfil "Antibióticos (1)"; mapear também **"Nr dia util" → "Dia de terapia (Tasy)"** | diz quando um esquema **parou**; sem ele os cursos emendam e a aba Antibióticos avisa "diário parado" |
 

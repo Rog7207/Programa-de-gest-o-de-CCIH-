@@ -6684,6 +6684,36 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     } finally { Object.assign(global, antesG); }
   }
 
+  /* == 113. Checklists de bundle do Tasy (1116 CVC/SVD, 2166 PAV) — leitor e mescla (16/11/2026) == */
+  {
+    console.log('\n== 113. Checklists de bundle do Tasy: leitor, setor por seção, tipo, vazio e mescla sem duplicar ==');
+    const m = [
+      ['HNSC - Relatório Avaliações Check-List PAV UTI Adulto', '', '', '', '', '', '', '', '', ''],
+      ['', 'ATENDIMENTO', 'PACIENTE', 'DT_AVALIACAO', '', 'AVALIADOR', '', 'LEITO', 'TIPO_AVALIACAO', ''],
+      ['', 'CTI - Dr. Joaquim David Ferreira Lima', '', '', '', '', '', '', '', ''],
+      ['', '1476814', 'Paciente Um', '01/11/2026 14:05:32', '', 'Enf. A', '', '04', 'CCIH - HNSC - Check List de Prevenção da PAV', ''],
+      ['', '1473863', 'Paciente Dois', '02/11/2026 09:00:00', '', 'Enf. B', '', '0', 'CCIH - HNSC - Check List de Prevenção da PAV', ''],
+      ['', 'Impresso em:  10/11/2026 10:28:10', '', '', 'Página   1', '', 'MS012041', '', '', 'CATE2166']
+    ];
+    const r = imp.lerChecklistsTasy(m);
+    verificar('reconhece o 2166 e lê as avaliações com setor da seção, data ISO, hora e tipo PAV → VM',
+      r.reconhecido && r.linhas.length === 2 && r.linhas[0].Setor === 'CTI - Dr. Joaquim David Ferreira Lima' && r.linhas[0].Data === '2026-11-01'
+      && r.linhas[0].Hora === '14:05' && r.linhas[0].Tipo === 'PAV' && r.linhas[0].Dispositivo === 'VM' && r.linhas[0].Leito === '04' && r.linhas[1].Leito === '',
+      JSON.stringify(r.linhas));
+    const vazio = imp.lerChecklistsTasy([['', ''], ['HNSC - Checklists Dispositivos', ''], ['', 'TAXA DE CONFORMIDADE'], ['', 'Quantidade de avaliações: 12'], ['', 'Quantidade de avaliações conforme: 9'], ['', 'Taxa de Conformidade: 75,0'], ['', 'Impresso em: 10/11/2026', 'CATE1116']]);
+    verificar('o 1116 só com o quadro-resumo é reconhecido (sem linhas) e os números do quadro são lidos',
+      vazio.reconhecido && vazio.linhas.length === 0 && vazio.resumo.avaliacoes === 12 && vazio.resumo.conformes === 9 && vazio.resumo.taxa === '75,0', JSON.stringify(vazio));
+    verificar('planilha comum não é reconhecida', !imp.lerChecklistsTasy([['Prontuário', 'Nome', 'Setor'], ['1', 'x', 'y']]).reconhecido);
+    verificar('tipo pelo texto: CVC e SVD', imp.tipoDeChecklist('Check List CVC - Cateter venoso central') === 'CVC' && imp.tipoDeChecklist('Checklist SVD') === 'SVD');
+    const internacoes = [{ Atendimento: '1476814', Prontuario: '500' }];
+    const m1 = imp.mesclarChecklists(r.linhas, [], internacoes, 'Teste', '2026-11-16 10:00');
+    const antesM2 = m1.linhas.map(x => x.Prontuario);
+    const m2 = imp.mesclarChecklists(r.linhas, m1.linhas, internacoes.concat([{ Atendimento: '1473863', Prontuario: '600' }]), 'Teste', '2026-11-16 10:01');
+    verificar('mescla: 2 novas com prontuário pelo censo; reimportar não duplica e resolve o prontuário que faltava',
+      m1.novas === 2 && antesM2[0] === '500' && antesM2[1] === '' && m2.novas === 0 && m2.linhas.length === 2 && m2.linhas[1].Prontuario === '600' && m2.resolvidas === 1,
+      JSON.stringify({ m1: m1.linhas.map(x => x.ID_Checklist + ':' + x.Prontuario), m2: m2.linhas.map(x => x.ID_Checklist + ':' + x.Prontuario) }));
+  }
+
   console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
   process.exit(falharam ? 1 : 0);
 })();

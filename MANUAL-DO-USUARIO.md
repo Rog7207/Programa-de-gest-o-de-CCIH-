@@ -181,7 +181,12 @@ semanal).
 5. **Evoluções (Tasy 2394)** — colunas "Ie evolucao clinica", "Dt evolucao", "Ds evolucao". *Atenção: o 2362 é a análise de antibióticos, não as evoluções.*
 6. **Sinais vitais (Tasy 2411)** — uma linha por aferição (PA, FC, FR, temperatura, SatO2); alimenta a visita à UTI e os "vitais alterados" do dossiê.
 7. **Isolamentos (Tasy 1042)**.
-8. **Bundles — CVC/SVD (1116) e PAV (2166)**.
+8. **Checklists de bundle — CVC/SVD (1116) e PAV (2166)** — reconhecidos sozinhos: uma linha
+   por avaliação de checklist feita à beira do leito (atendimento, data/hora, avaliador,
+   leito, setor). Entram em `dispositivos.xlsx`, aba `checklists`, sem duplicar; o prontuário
+   vem do censo pelo atendimento. Aparecem na ficha do paciente e no cartão "Checklists de
+   bundle" da aba UTI. Se o relatório vier só com o quadro "Taxa de conformidade" e nenhuma
+   avaliação, o app avisa que veio vazio — confira período e filtro de setor no Tasy.
 9. **Análise de antibióticos (Tasy 2362)** — vem por atendimento, por isso **depois** do censo. Traz só as prescrições iniciadas nos últimos 2 dias, com o fim **previsto**.
 10. **Prescrições diárias de antimicrobianos (Tasy 2365)** — tipo "Antibióticos prescritos" (perfil "Antibióticos (1)"), mapeando também "Nr dia util" → "Dia de terapia (Tasy)". Uma linha por prescrição do dia, com dose: é o que diz quando um esquema **parou** e corta o fim previsto do 2362. Sem ele, um antibiótico suspenso e reiniciado dias depois aparece como um curso só, e a aba Antibióticos avisa que o diário está parado.
 11. **IRAS para conciliação (Tasy 2485)** — por último: casa com os pacientes e casos já carregados.

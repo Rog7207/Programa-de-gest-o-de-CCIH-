@@ -111,10 +111,16 @@ const pasta = {
     return false;
   },
 
+  /* Leitura resistente a gravação concorrente (17/11/2026): numa unidade de rede com várias
+     pessoas, outra sessão pode gravar o arquivo entre o getFile() e o fim da leitura, e o
+     Chrome recusa com "state had changed since it was read from disk" (InvalidStateError /
+     NotReadableError). Basta pegar o arquivo de novo e reler. */
   async lerArquivo(nome) {
-    const fh = await this.handle.getFileHandle(nome);
-    const arquivo = await fh.getFile();
-    return new Uint8Array(await arquivo.arrayBuffer());
+    return _comReleitura(async () => {
+      const fh = await this.handle.getFileHandle(nome);
+      const arquivo = await fh.getFile();
+      return new Uint8Array(await arquivo.arrayBuffer());
+    });
   },
 
   async existe(nome) {
@@ -218,9 +224,27 @@ function planilhaParaObjetos(workbook, nomeAba) {
 const _cacheBancos = new Map();
 
 async function _assinaturaDe(nomeArquivo) {
-  const fh = await pasta.handle.getFileHandle(nomeArquivo);
-  const arquivo = await fh.getFile();
-  return arquivo.lastModified + '-' + arquivo.size;
+  return _comReleitura(async () => {
+    const fh = await pasta.handle.getFileHandle(nomeArquivo);
+    const arquivo = await fh.getFile();
+    return arquivo.lastModified + '-' + arquivo.size;
+  });
+}
+
+/* Arquivo mudou no disco durante a leitura → tenta de novo (até 4 vezes, com pausa curta). */
+function _arquivoMudouNoDisco(e) {
+  return !!e && (e.name === 'InvalidStateError' || e.name === 'NotReadableError'
+    || /state had changed|could not be read/i.test(String(e.message || '')));
+}
+async function _comReleitura(fn, tentativas) {
+  const max = tentativas || 4;
+  for (let i = 1; ; i++) {
+    try { return await fn(); }
+    catch (e) {
+      if (i >= max || !_arquivoMudouNoDisco(e)) throw e;
+      await new Promise(r => setTimeout(r, 400 * i));
+    }
+  }
 }
 
 async function lerBanco(nomeEsquema) {
@@ -511,14 +535,26 @@ async function liberarTrava(nomeEsquema) {
 
 /* ---- Arquivamento do relatório bruto importado ---- */
 
+/* Arquiva a cópia do relatório importado em importados/AAAA-MM/ e registra a carga.
+   Chamado DEPOIS de os dados já estarem gravados, então nunca derruba a importação
+   (17/11/2026): usa o conteúdo lido no início (imp.buffer) em vez de reler o arquivo — o
+   original pode ter mudado ou sumido nesse meio-tempo (download do Chrome ainda terminando,
+   arquivo aberto no Excel) e a releitura falhava com "state had changed since it was read
+   from disk", mostrando "Erro ao gravar" com tudo já gravado. Falha no arquivamento só vai
+   ao console; a carga é registrada mesmo assim. */
 async function arquivarOriginal(arquivo, relatorio, tipo, linhas) {
-  const mes = new Date().toISOString().slice(0, 7);
-  const destino = await pasta.subpasta('importados/' + mes);
-  const carimbo = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-  const fh = await destino.getFileHandle(`${carimbo}_${arquivo.name}`, { create: true });
-  const escrita = await fh.createWritable();
-  await escrita.write(await arquivo.arrayBuffer());
-  await escrita.close();
+  try {
+    let bytes = null;
+    if (typeof imp !== 'undefined' && imp && imp.arquivo === arquivo && imp.buffer) bytes = imp.buffer;
+    if (!bytes) bytes = await arquivo.arrayBuffer();
+    const mes = new Date().toISOString().slice(0, 7);
+    const destino = await pasta.subpasta('importados/' + mes);
+    const carimbo = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const fh = await destino.getFileHandle(`${carimbo}_${arquivo.name}`, { create: true });
+    const escrita = await fh.createWritable();
+    await escrita.write(bytes);
+    await escrita.close();
+  } catch (e) { console.warn('cópia do relatório original não arquivada em importados/:', e); }
   if (relatorio) await registrarCarga(relatorio, tipo, arquivo.name, linhas);
 }
 

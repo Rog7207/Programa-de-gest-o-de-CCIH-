@@ -93,6 +93,7 @@ como está e avise a equipe: a linha fica "○ falta hoje" e, no dia seguinte, "
 | Situação | O que fazer |
 |---|---|
 | "sem perfil — importe manualmente uma vez" | abra o arquivo pelo assistente, mapeie as colunas, salve o perfil com o nome do relatório; da próxima vez entra sozinho |
+| "state had changed since it was read from disk" | um arquivo mudou no disco no meio da leitura (outra pessoa gravando, ou o relatório baixado ainda terminando). Desde 17/11/2026 o aplicativo relê sozinho; se ainda aparecer, espere o download terminar, feche o relatório no Excel e importe de novo — reimportar não duplica |
 | arquivo em edição por outra pessoa (trava) | aguarde um minuto e confirme de novo; se persistir, peça à pessoa que feche a tela que está gravando |
 | relatório importado antes do censo | importe o censo e **reimporte** o relatório; nada duplica |
 | número de linhas muito diferente do habitual (ex.: 2365 com 20 linhas) | o período do relatório provavelmente saiu errado; puxe de novo antes de importar |

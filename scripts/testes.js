@@ -6729,6 +6729,28 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       && br('1.234') === '1.234' && br('') === '' && br(null) === '' && br(2026) === '2026', [br('reportCATE-2166-20261110'), br('2026-13-40')].join(' | '));
   }
 
+  /* == 115. Leitura do banco resiste a gravação concorrente (17/11/2026) == */
+  {
+    console.log('\n== 115. Arquivo que muda no disco durante a leitura: relê em vez de falhar ==');
+    const excel = require(path.join(__dirname, '..', 'js', 'excel.js'));
+    let chamadas = 0;
+    const erroMudou = Object.assign(new Error('An operation that depends on state cached in an interface object was made but the state had changed since it was read from disk.'), { name: 'InvalidStateError' });
+    const handleAntes = excel.pasta.handle;
+    excel.pasta.handle = { getFileHandle: async () => ({ getFile: async () => ({ arrayBuffer: async () => { chamadas++; if (chamadas < 3) throw erroMudou; return new Uint8Array([1, 2, 3]).buffer; } }) }) };
+    try {
+      const bytes = await excel.pasta.lerArquivo('pacientes.xlsx');
+      verificar('duas falhas "state had changed" seguidas de sucesso: a leitura devolve os bytes', bytes.length === 3 && chamadas === 3, 'chamadas=' + chamadas);
+      chamadas = -10;
+      let erro = null;
+      try { await excel.pasta.lerArquivo('pacientes.xlsx'); } catch (e) { erro = e; }
+      verificar('se continuar mudando, desiste depois de 4 tentativas e mostra o erro original', erro && erro.name === 'InvalidStateError' && chamadas === -6, 'chamadas=' + chamadas);
+      excel.pasta.handle = { getFileHandle: async () => ({ getFile: async () => ({ arrayBuffer: async () => { throw Object.assign(new Error('arquivo não existe'), { name: 'NotFoundError' }); } }) }) };
+      erro = null;
+      try { await excel.pasta.lerArquivo('x.xlsx'); } catch (e) { erro = e; }
+      verificar('outros erros (arquivo inexistente) não são repetidos', erro && erro.name === 'NotFoundError');
+    } finally { excel.pasta.handle = handleAntes; }
+  }
+
   console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
   process.exit(falharam ? 1 : 0);
 })();

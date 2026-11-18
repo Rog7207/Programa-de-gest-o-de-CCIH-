@@ -721,7 +721,8 @@ atropelam: cada gravação trava o arquivo, relê e só então grava.
   pendência, um registro": a mesma pessoa avaliando o mesmo curso de antibiótico no mesmo dia
   por dois caminhos atualiza a avaliação em vez de duplicá-la.
 - **Reunião da CCIH** — indicadores em formato de apresentação (um slide por tema, setas para
-  avançar), na ordem decidida pela CCIH em 21/10/2026: (1) **IRAS do mês** — taxa por 1.000
+  avançar; o botão **"⬇ Exportar PDF"** abre a impressão com todos os slides, um por página A4
+  deitada — escolha "Salvar como PDF"), na ordem decidida pela CCIH em 21/10/2026: (1) **IRAS do mês** — taxa por 1.000
   pacientes-dia, número de casos e barras por sítio; (2) **IRAS por mês** nos últimos 12 meses
   (colunas); (3) **Dispositivos** no CTI — taxa de utilização (dias de dispositivo ÷
   pacientes-dia do NISS) e densidade de IRAS por 1.000 dias, o mês ao lado dos 6 meses

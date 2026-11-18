@@ -238,3 +238,22 @@ tr.linha-mdr td:first-child { border-left: 4px solid #b03a2e; }
 .pend-bloco-cab { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .form-decisao { margin: 6px 0; }
 @media (max-width: 900px) { .pend-grade { grid-template-columns: 1fr; } .pend-lista { max-height: none; } }
+
+/* Reunião em PDF (18/11/2026): só o bloco de impressão, um slide por página A4 deitada. */
+.reuniao-impressao { display: none; }
+@media print {
+  @page { size: A4 landscape; margin: 10mm 12mm; }
+  body.imprimindo-reuniao > *:not(.reuniao-impressao) { display: none !important; }
+  body.imprimindo-reuniao { background: #fff; }
+  body.imprimindo-reuniao .reuniao-impressao { display: block; }
+  .reuniao-pagina { page-break-after: always; break-after: page; padding: 0 2mm; font-size: 13px;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .reuniao-pagina:last-child { page-break-after: auto; break-after: auto; }
+  .reuniao-pagina h2 { font-size: 22px; margin: 4px 0 12px; color: #0d3f7a; }
+  .reuniao-pagina .numero-grande { font-size: 34px; }
+  .reuniao-pagina .cartao { box-shadow: none; break-inside: avoid; }
+  .reuniao-pagina .reuniao-grafico { max-width: 200mm; max-height: 75mm; }
+  .reuniao-pagina-cabecalho { display: flex; justify-content: space-between; font-size: 11px; color: #61707f;
+    border-bottom: 1px solid #dde3ea; padding-bottom: 3px; }
+  .reuniao-pagina-rodape { margin-top: 10px; font-size: 10px; color: #61707f; border-top: 1px solid #dde3ea; padding-top: 3px; }
+}

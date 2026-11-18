@@ -330,12 +330,44 @@ async function montarReuniao(conteudo) {
   };
   window.addEventListener('keydown', aoTeclar);
 
+  /* Exportar em PDF (pedido de 18/11/2026): todos os slides, um por página A4 deitada, com
+     cabeçalho e rodapé; o navegador abre a impressão e "Salvar como PDF" gera o arquivo. Os
+     slides são redesenhados num bloco só de impressão — a tela continua no slide atual. */
+  const exportarPDF = () => {
+    const anterior = document.querySelector('.reuniao-impressao');
+    if (anterior) anterior.remove();
+    const gerado = datasParaBR(agoraCurto());
+    const bloco = el('div', { class: 'reuniao-impressao' },
+      slides.map((s, i) => el('section', { class: 'reuniao-pagina' },
+        el('div', { class: 'reuniao-pagina-cabecalho' }, `CCIH — Reunião · dados de ${rotuloMes}`, el('span', {}, `${i + 1} / ${slides.length}`)),
+        el('h2', {}, s.titulo),
+        s.corpo(),
+        el('div', { class: 'reuniao-pagina-rodape' }, `Aplicativo CCIH · gerado em ${gerado} por ${app.usuario || '—'} · só IRAS confirmadas com segunda assinatura`))));
+    document.body.append(bloco);
+    /* Cada slide numa página: mede a altura na largura útil da A4 deitada (273 mm) e reduz o que
+       não cabe na altura útil (186 mm). */
+    bloco.style.cssText = 'display:block;position:absolute;left:-10000px;top:0;width:273mm';
+    /* gráficos com o mesmo tamanho na medição e na impressão */
+    for (const g of bloco.querySelectorAll('.reuniao-grafico')) { g.style.maxWidth = '200mm'; g.style.maxHeight = '75mm'; }
+    const mm = bloco.getBoundingClientRect().width / 273;
+    for (const pg of bloco.querySelectorAll('.reuniao-pagina')) {
+      const altura = pg.scrollHeight / mm;
+      if (altura > 186) pg.style.zoom = String(Math.max(0.45, Math.floor(186 / altura * 100) / 100));
+    }
+    bloco.style.cssText = '';
+    document.body.classList.add('imprimindo-reuniao');
+    const limpar = () => { document.body.classList.remove('imprimindo-reuniao'); bloco.remove(); window.removeEventListener('afterprint', limpar); };
+    window.addEventListener('afterprint', limpar);
+    window.print();
+  };
+
   conteudo.append(
     el('div', { class: 'reuniao-nav' },
       el('button', { class: 'botao-secundario', onclick: () => ir(-1) }, '‹ Anterior'),
       contador,
       el('button', { class: 'botao-primario', onclick: () => ir(1) }, 'Próximo ›'),
-      el('span', { class: 'texto-suave' }, 'setas do teclado também funcionam')),
+      el('span', { class: 'texto-suave' }, 'setas do teclado também funcionam'),
+      el('button', { class: 'botao-secundario', style: 'margin-left:auto', onclick: exportarPDF }, '⬇ Exportar PDF (todos os slides)')),
     area);
   desenhar();
 }

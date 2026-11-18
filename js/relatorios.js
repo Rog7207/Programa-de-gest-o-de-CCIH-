@@ -1505,7 +1505,10 @@ function indicadoresReuniao(bancos, hoje) {
      taxas do trimestre continua saindo (`taxas`) para quem a usava. */
   const tri = meses.slice(-3);
   const seis = meses.slice(-7, -1);
-  const setoresNISS = [...new Set(((bancos.denominadores || {}).dispositivos_dia || []).map(l => l.Setor))].filter(Boolean);
+  /* Só a UTI adulto (CTI): o 3066 às vezes é importado para outros setores (AVC, Acolhimento),
+     que misturavam o denominador e escondiam o NISS incompleto da CTI (18/11/2026). */
+  const todosNISS = [...new Set(((bancos.denominadores || {}).dispositivos_dia || []).map(l => l.Setor))].filter(Boolean);
+  const setoresNISS = todosNISS.filter(_setorUTIAdulto).length ? todosNISS.filter(_setorUTIAdulto) : todosNISS;
   const casosNISS = (de, ate) => casosIras.filter(k => relPeriodo(k.DataInfeccao, de, ate)
     && relEscopo(k.Setor, setoresNISS.length ? setoresNISS : null));
   const dispositivos = setoresNISS.length
@@ -1876,7 +1879,11 @@ function compararComBenchmarks(bancos, hoje) {
       valor: null, numerador: null, denominador: null, utilizacao: null, referencias: ind.referencias, posicao: null };
     if (ind.tipo === 'dispositivo') {
       const l = util && util.linhas.find(x => x.dispositivo === ind.dispositivo);
-      if (l) { linha.valor = l.densidade; linha.numerador = l.iras; linha.denominador = l.dias; linha.utilizacao = l.utilizacao; }
+      if (l && util.incompleto) {
+        /* NISS que não cobre o trimestre: a densidade sairia inflada (18/11/2026). */
+        linha.numerador = l.iras; linha.denominador = l.dias;
+        linha.nota = [linha.nota, `censo NISS incompleto no trimestre (${util.diasComCenso} de ${util.diasPeriodo} dias) — importe o 3066 completo`].filter(Boolean).join(' · ');
+      } else if (l) { linha.valor = l.densidade; linha.numerador = l.iras; linha.denominador = l.dias; linha.utilizacao = l.utilizacao; }
     } else if (ind.tipo === 'isc') {
       const doGrupo = cirurgias.filter(c => ind.categorias.includes(String(c.ProcedimentoNHSN || '').trim()));
       if (doGrupo.length) {

@@ -4646,13 +4646,16 @@ console.log('\n== 76. Indicadores da reunião da CCIH ==');
       { ID_IRAS: 'B1', DataInfeccao: '2026-07-15', Setor: 'Obstetrícia', Topografia: 'ISC incisional superficial', StatusInvestigacao: 'confirmado', ConfirmadoPor: 'Dra. B', ID_CirurgiaAssociada: 'C0' },
       { ID_IRAS: 'B2', DataInfeccao: '2026-07-15', Setor: 'Obstetrícia', Topografia: 'ISC incisional superficial', StatusInvestigacao: 'digitado', ConfirmadoPor: 'Dra. B', ID_CirurgiaAssociada: 'C1' }
     ] },
-    denominadores: { dispositivos_dia: ['2026-06', '2026-07', '2026-08'].flatMap(m => [
-      { Data: m + '-10', Competencia: m, Setor: 'CTI - Dr. Joaquim', Dispositivo: 'Pacientes-dia', Contagem: 500 },
-      { Data: m + '-10', Competencia: m, Setor: 'CTI - Dr. Joaquim', Dispositivo: 'Cateter venoso central', Contagem: 300 },
-      { Data: m + '-10', Competencia: m, Setor: 'CTI - Dr. Joaquim', Dispositivo: 'Ventilação mecânica', Contagem: 200 },
-      { Data: m + '-10', Competencia: m, Setor: 'CTI - Dr. Joaquim', Dispositivo: 'Sonda vesical de demora', Contagem: 250 },
-      { Data: m + '-10', Competencia: m, Setor: 'UTI Pediátrica', Dispositivo: 'Cateter venoso central', Contagem: 999 }
-    ]) },
+    /* NISS diário como o 3066 real (18/11/2026): o total do mês espalhado por todos os dias */
+    denominadores: { dispositivos_dia: ['2026-06', '2026-07', '2026-08'].flatMap(m => {
+      const dias = new Date(Date.UTC(+m.slice(0, 4), +m.slice(5), 0)).getUTCDate();
+      return Array.from({ length: dias }, (_, i) => `${m}-${String(i + 1).padStart(2, '0')}`).flatMap(d => [
+        { Data: d, Competencia: m, Setor: 'CTI - Dr. Joaquim', Dispositivo: 'Pacientes-dia', Contagem: 500 / dias },
+        { Data: d, Competencia: m, Setor: 'CTI - Dr. Joaquim', Dispositivo: 'Cateter venoso central', Contagem: 300 / dias },
+        { Data: d, Competencia: m, Setor: 'CTI - Dr. Joaquim', Dispositivo: 'Ventilação mecânica', Contagem: 200 / dias },
+        { Data: d, Competencia: m, Setor: 'CTI - Dr. Joaquim', Dispositivo: 'Sonda vesical de demora', Contagem: 250 / dias },
+        { Data: d, Competencia: m, Setor: 'UTI Pediátrica', Dispositivo: 'Cateter venoso central', Contagem: 999 / dias }]);
+    }) },
     cirurgias: { cirurgias: [
       ...Array.from({ length: 50 }, (_, i) => ({ ID_Cirurgia: 'C' + i, DataCirurgia: '2026-07-15', ProcedimentoNHSN: 'Cesariana', ISC: i < 2 ? 'S' : '' })),
       { ID_Cirurgia: 'Q1', DataCirurgia: '2026-07-20', ProcedimentoNHSN: 'Artroplastia de quadril', ISC: '' },
@@ -4666,6 +4669,10 @@ console.log('\n== 76. Indicadores da reunião da CCIH ==');
     antibioticos: { prescricoes: [] }, pacientes: { internacoes: [] }
   };
   const b = rel.compararComBenchmarks(bancosBench, '2026-09-16');
+  /* NISS incompleto no trimestre: densidade não sai (18/11/2026) */
+  const bParcial = rel.compararComBenchmarks({ ...bancosBench, denominadores: { dispositivos_dia: bancosBench.denominadores.dispositivos_dia.filter(l => l.Data < '2026-08-07') } }, '2026-09-16');
+  const ipcsParcial = bParcial.linhas.find(l => l.id === 'ipcs');
+  verificar('benchmarks: NISS sem o fim de agosto → densidade da UTI em branco com aviso de importar o 3066', ipcsParcial.valor === null && /NISS incompleto/.test(ipcsParcial.nota), JSON.stringify(ipcsParcial));
   const ipcs = b.linhas.find(l => l.id === 'ipcs'), pav = b.linhas.find(l => l.id === 'pav'), itu = b.linhas.find(l => l.id === 'itu');
   verificar('benchmarks: período é o trimestre fechado e só a UTI adulto entra (pediátrica fora)',
     b.periodo === '2026-06 a 2026-08' && b.setoresUTI.length === 1 && b.pacientesDiaUTI === 1500, JSON.stringify([b.periodo, b.setoresUTI, b.pacientesDiaUTI]));

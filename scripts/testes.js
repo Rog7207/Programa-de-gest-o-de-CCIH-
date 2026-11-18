@@ -4513,8 +4513,15 @@ console.log('\n== 76. Indicadores da reunião da CCIH ==');
 
   const bancos = {
     iras: { casos: [
-      { DataInfeccao: '2026-08-10', Setor: 'CTI', Topografia: 'PAV', Microrganismo: 'Klebsiella pneumoniae', StatusInvestigacao: 'confirmado' },
-      { DataInfeccao: '2026-07-05', Setor: 'CTI', Topografia: 'IPCS clínica', Microrganismo: '', StatusInvestigacao: 'digitado' },
+      { ID_IRAS: 'R1', DataInfeccao: '2026-08-10', Setor: 'CTI', Topografia: 'PAV', Microrganismo: 'Klebsiella pneumoniae', StatusInvestigacao: 'confirmado', ConfirmadoPor: 'Dra. B' },
+      { ID_IRAS: 'R2', DataInfeccao: '2026-07-05', Setor: 'CTI', Topografia: 'IPCS clínica', Microrganismo: '', StatusInvestigacao: 'digitado', ConfirmadoPor: 'Dra. B' },
+      /* 18/11/2026: digitado que veio SÓ do Tasy (sem segunda assinatura) e confirmado sem assinatura: fora */
+      { ID_IRAS: 'R5', DataInfeccao: '2026-08-12', Setor: 'CTI', Topografia: 'PAV', StatusInvestigacao: 'digitado', CriterioDiagnostico: 'Notificação IMAS — PAV' },
+      { ID_IRAS: 'R6', DataInfeccao: '2026-08-14', Setor: 'CTI', Topografia: 'IPCS laboratorial', StatusInvestigacao: 'confirmado' },
+      /* ISC confirmada de julho (cirurgia X3): entra pelo mês da cirurgia, não no mês de referência */
+      { ID_IRAS: 'R7', DataInfeccao: '2026-07-04', Setor: 'Clínica', Topografia: 'ISC incisional superficial', StatusInvestigacao: 'confirmado', ConfirmadoPor: 'Dra. B', ID_CirurgiaAssociada: 'X3' },
+      /* ISC confirmada de agosto: o mês de referência ainda não conta ISC */
+      { ID_IRAS: 'R8', DataInfeccao: '2026-08-03', Setor: 'Clínica', Topografia: 'ISC incisional profunda', StatusInvestigacao: 'confirmado', ConfirmadoPor: 'Dra. B' },
       /* descartado e em investigação NÃO contam na reunião */
       { DataInfeccao: '2026-08-20', Setor: 'CTI', Topografia: 'ITU associada a cateter vesical', StatusInvestigacao: 'descartado' },
       { DataInfeccao: '2026-08-21', Setor: 'CTI', Topografia: 'ISC incisional superficial', StatusInvestigacao: 'em investigação' }
@@ -4550,7 +4557,10 @@ console.log('\n== 76. Indicadores da reunião da CCIH ==');
     },
     culturas: { culturas: [
       { ID_Cultura: 'C1', Prontuario: '1', DataColeta: '2026-08-10', Setor: 'CTI', Microrganismo: 'Acinetobacter baumannii',
-        MecanismoResistencia: 'CRAb', AvaliacaoCCIH: 'IRAS' }
+        MecanismoResistencia: 'CRAb', AvaliacaoCCIH: 'IRAS', ID_IRAS: 'R1' },
+      /* cultura de IRAS ligada a caso sem segunda assinatura: fora do MDR */
+      { ID_Cultura: 'C2', Prontuario: '3', DataColeta: '2026-08-12', Setor: 'CTI', Microrganismo: 'Klebsiella pneumoniae',
+        MecanismoResistencia: 'KPC', AvaliacaoCCIH: 'IRAS', ID_IRAS: 'R5' }
     ], sensibilidade: [] },
     antibioticos: { prescricoes: [], avaliacoes: [] },
     isolamentos: { precaucoes: [
@@ -4588,6 +4598,12 @@ console.log('\n== 76. Indicadores da reunião da CCIH ==');
     JSON.stringify(d.dispositivos));
   verificar('MDR do trimestre agrupada (Acinetobacter CRAb no CTI)',
     d.mdr.length === 1 && d.mdr[0].germe === 'Acinetobacter' && d.mdr[0].n === 1, JSON.stringify(d.mdr));
+  /* Regra de 18/11/2026: só segunda assinatura; ISC um mês antes */
+  verificar('agosto: digitado só do Tasy e confirmado sem assinatura ficam fora; ISC de agosto ainda não conta (pendente)',
+    ago.irasSemIsc === 1 && ago.isc === null && ago.iscPendente === true, JSON.stringify(ago));
+  verificar('julho soma a ISC confirmada da cirurgia de julho', d.serie[10].mes === '2026-07' && d.serie[10].isc === 1 && d.serie[10].iras === 2, JSON.stringify(d.serie[10]));
+  verificar('slide 1: ISC das cirurgias do mês anterior (julho) = 1, e o sítio aparece rotulado com o mês',
+    d.mesIsc === '2026-07' && d.iscDoMesIsc === 1 && d.sitios.some(s => /Sítio cirúrgico \(cirurgias de 07\/26\)/.test(s[0]) && s[1] === 1), JSON.stringify(d.sitios));
   verificar('isolamentos ativos: 1 sem data de fim',
     d.isolamentos.ativos === 1 && d.isolamentos.porTipo[0][0] === 'Contato');
 
@@ -4595,7 +4611,7 @@ console.log('\n== 76. Indicadores da reunião da CCIH ==');
   verificar('reunião: descartado e em investigação não contam (agosto = 1 IRAS, não 3)', ago.iras === 1);
   verificar('densidade do mês: 1 IRAS em 14 pacientes-dia (11 + 3, dias inclusivos) → 71,43/1.000',
     ago.pacientesDia === 14 && ago.densidade === 71.43, JSON.stringify(ago));
-  verificar('sítios do mês: PAV vira "Respiratória"', d.sitios.length === 1 && d.sitios[0][0] === 'Respiratória (PAV/PNM/TQB)' && d.sitios[0][1] === 1, JSON.stringify(d.sitios));
+  verificar('sítios do mês: PAV vira "Respiratória"', d.sitios.some(s => s[0] === 'Respiratória (PAV/PNM/TQB)' && s[1] === 1) && !d.sitios.some(s => /ISC incisional profunda/.test(s[0])), JSON.stringify(d.sitios));
   const vmMes = d.dispositivos.mes.linhas.find(l => l.dispositivo === 'Ventilação mecânica');
   verificar('utilização de VM no mês: 20 dias de VM / 50 pacientes-dia = 0,40; densidade 50/1.000',
     vmMes && vmMes.utilizacao === 0.4 && vmMes.pacientesDia === 50 && vmMes.iras === 1 && vmMes.densidade === 50, JSON.stringify(d.dispositivos.mes));
@@ -4623,9 +4639,12 @@ console.log('\n== 76. Indicadores da reunião da CCIH ==');
   global.categoriaDeVigilancia = global.categoriaVigilanciaAntes || (() => '');
   const bancosBench = { ...bancos,
     iras: { casos: [
-      { DataInfeccao: '2026-07-10', Setor: 'CTI - Dr. Joaquim', Topografia: 'IPCS com confirmação laboratorial', StatusInvestigacao: 'confirmado' },
-      { DataInfeccao: '2026-08-10', Setor: 'CTI - Dr. Joaquim', Topografia: 'PAV', StatusInvestigacao: 'confirmado' },
-      { DataInfeccao: '2026-08-12', Setor: 'CTI - Dr. Joaquim', Topografia: 'ITU associada a cateter vesical', StatusInvestigacao: 'descartado' }
+      { DataInfeccao: '2026-07-10', Setor: 'CTI - Dr. Joaquim', Topografia: 'IPCS com confirmação laboratorial', StatusInvestigacao: 'confirmado', ConfirmadoPor: 'Dra. B' },
+      { DataInfeccao: '2026-08-10', Setor: 'CTI - Dr. Joaquim', Topografia: 'PAV', StatusInvestigacao: 'confirmado', ConfirmadoPor: 'Dra. B' },
+      { DataInfeccao: '2026-08-12', Setor: 'CTI - Dr. Joaquim', Topografia: 'ITU associada a cateter vesical', StatusInvestigacao: 'descartado' },
+      /* ISC das cesáreas C0 e C1 confirmadas com segunda assinatura (18/11/2026) */
+      { ID_IRAS: 'B1', DataInfeccao: '2026-07-15', Setor: 'Obstetrícia', Topografia: 'ISC incisional superficial', StatusInvestigacao: 'confirmado', ConfirmadoPor: 'Dra. B', ID_CirurgiaAssociada: 'C0' },
+      { ID_IRAS: 'B2', DataInfeccao: '2026-07-15', Setor: 'Obstetrícia', Topografia: 'ISC incisional superficial', StatusInvestigacao: 'digitado', ConfirmadoPor: 'Dra. B', ID_CirurgiaAssociada: 'C1' }
     ] },
     denominadores: { dispositivos_dia: ['2026-06', '2026-07', '2026-08'].flatMap(m => [
       { Data: m + '-10', Competencia: m, Setor: 'CTI - Dr. Joaquim', Dispositivo: 'Pacientes-dia', Contagem: 500 },
@@ -4636,8 +4655,12 @@ console.log('\n== 76. Indicadores da reunião da CCIH ==');
     ]) },
     cirurgias: { cirurgias: [
       ...Array.from({ length: 50 }, (_, i) => ({ ID_Cirurgia: 'C' + i, DataCirurgia: '2026-07-15', ProcedimentoNHSN: 'Cesariana', ISC: i < 2 ? 'S' : '' })),
-      { ID_Cirurgia: 'Q1', DataCirurgia: '2026-08-15', ProcedimentoNHSN: 'Artroplastia de quadril', ISC: '' },
-      { ID_Cirurgia: 'F1', DataCirurgia: '2026-05-15', ProcedimentoNHSN: 'Cesariana', ISC: 'S' }
+      { ID_Cirurgia: 'Q1', DataCirurgia: '2026-07-20', ProcedimentoNHSN: 'Artroplastia de quadril', ISC: '' },
+      /* ISC: trimestre das cirurgias um mês antes (mai–jul) — abril fica fora; agosto também */
+      { ID_Cirurgia: 'F1', DataCirurgia: '2026-04-15', ProcedimentoNHSN: 'Cesariana', ISC: 'S' },
+      { ID_Cirurgia: 'F2', DataCirurgia: '2026-08-15', ProcedimentoNHSN: 'Cesariana', ISC: 'S' },
+      /* ISC marcada na cirurgia mas SEM caso confirmado: não conta */
+      { ID_Cirurgia: 'F3', DataCirurgia: '2026-07-16', ProcedimentoNHSN: 'Cesariana', ISC: 'S' }
     ] },
     higiene_maos: { observacoes: Array.from({ length: 100 }, (_, i) => ({ Data: '2026-07-0' + (1 + i % 9), Setor: 'CTI', Momento: 'Antes do contato com paciente', Acao: i < 75 ? 'Higienizou' : 'Não higienizou' })) },
     antibioticos: { prescricoes: [] }, pacientes: { internacoes: [] }
@@ -4651,7 +4674,8 @@ console.log('\n== 76. Indicadores da reunião da CCIH ==');
   verificar('PAV: 1 em 600 VM-dia = 1,67 → até o P25 (Anvisa P25 = 2,5)', pav.valor === 1.67 && pav.posicao.nivel === 0, JSON.stringify(pav.posicao));
   verificar('ITU descartada não conta: 0 casos → até o P25', itu.numerador === 0 && itu.posicao.nivel === 0, JSON.stringify(itu));
   const csec = b.linhas.find(l => l.id === 'isc_csec'), hpro = b.linhas.find(l => l.id === 'isc_hpro'), kpro = b.linhas.find(l => l.id === 'isc_kpro');
-  verificar('ISC cesárea: 2 em 50 = 4% → acima do P90 nacional (3,8); maio fica fora', csec.valor === 4 && csec.denominador === 50 && csec.posicao.nivel === 4, JSON.stringify(csec));
+  verificar('ISC cesárea: cirurgias de mai–jul; 2 confirmadas em 51 = 3,92% → acima do P90 nacional (3,8); abril e agosto fora; ISC sem caso confirmado não conta',
+    csec.valor === 3.92 && csec.numerador === 2 && csec.denominador === 51 && csec.posicao.nivel === 4 && /05\/26 a 07\/26/.test(csec.nota), JSON.stringify(csec));
   verificar('ISC quadril 0/1 → até o P25; joelho sem cirurgias → sem valor', hpro.valor === 0 && hpro.posicao.nivel === 0 && kpro.valor === null && kpro.posicao === null);
   const hig = b.linhas.find(l => l.id === 'higiene');
   verificar('higiene 75% ≥ 70% → verde', hig.valor === 75 && hig.posicao.nivel === 0 && /70/.test(hig.posicao.rotulo), JSON.stringify(hig.posicao));
@@ -6420,10 +6444,10 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
         { ID_Cirurgia: '8', Prontuario: 'P8', DataCirurgia: '2026-08-12', Procedimento: 'Herniorrafia Inguinal', ProcedimentoNHSN: 'Herniorrafia', PotencialContaminacao: 'Limpa', StatusVigilancia: 'sem infecção' }
       ] },
       iras: { casos: [
-        { ID_IRAS: 'I1', Prontuario: 'U1', DataInfeccao: '2026-09-10', Setor: cti, Topografia: 'IPCS com confirmação laboratorial', Microrganismo: 'Klebsiella pneumoniae', ID_CulturaAgente: 'C1', StatusInvestigacao: 'confirmado' },
-        { ID_IRAS: 'I2', Prontuario: 'U2', DataInfeccao: '2026-09-12', Setor: cti, Topografia: 'PAV', Microrganismo: 'Acinetobacter spp', StatusInvestigacao: 'confirmado' },
+        { ID_IRAS: 'I1', Prontuario: 'U1', DataInfeccao: '2026-09-10', Setor: cti, Topografia: 'IPCS com confirmação laboratorial', Microrganismo: 'Klebsiella pneumoniae', ID_CulturaAgente: 'C1', StatusInvestigacao: 'confirmado', ConfirmadoPor: 'Dra. B' },
+        { ID_IRAS: 'I2', Prontuario: 'U2', DataInfeccao: '2026-09-12', Setor: cti, Topografia: 'PAV', Microrganismo: 'Acinetobacter spp', StatusInvestigacao: 'confirmado', ConfirmadoPor: 'Dra. B' },
         { ID_IRAS: 'I3', Prontuario: 'U3', DataInfeccao: '2026-09-15', Setor: cti, Topografia: 'IPCS clínica', Microrganismo: 'Klebsiella pneumoniae', StatusInvestigacao: 'descartado' },
-        { ID_IRAS: 'I4', Prontuario: 'N1', DataInfeccao: '2026-09-20', Setor: 'UTI Neonatal / Pediátrica', Topografia: 'IPCS clínica', Microrganismo: 'Staphylococcus coagulase-negativo', StatusInvestigacao: 'confirmado' }
+        { ID_IRAS: 'I4', Prontuario: 'N1', DataInfeccao: '2026-09-20', Setor: 'UTI Neonatal / Pediátrica', Topografia: 'IPCS clínica', Microrganismo: 'Staphylococcus coagulase-negativo', StatusInvestigacao: 'confirmado', ConfirmadoPor: 'Dra. B' }
       ] },
       denominadores: { dispositivos_dia: [1, 2, 3, 4, 5].flatMap(d => [
         { Data: '2026-09-0' + d, Competencia: '2026-09', Setor: cti, Dispositivo: 'Pacientes-dia', Contagem: 20 },

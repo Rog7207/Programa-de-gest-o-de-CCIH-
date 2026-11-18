@@ -176,16 +176,20 @@ async function montarReuniao(conteudo) {
     /* 1. Só o essencial: taxa, número e sítios (pedido de 21/10/2026). */
     { titulo: `IRAS — ${rotuloMes}`, corpo: () => el('div', {},
       slideNumeros([
-        ['IRAS por 1.000 pacientes-dia', ultimo.densidade],
-        ['IRAS confirmadas no mês', ultimo.iras]
+        ['IRAS por 1.000 pacientes-dia (exceto ISC)', ultimo.densidade],
+        ['IRAS confirmadas no mês (exceto ISC)', ultimo.irasSemIsc],
+        [`ISC — cirurgias de ${mesCurto(dados.mesIsc)}`, dados.iscDoMesIsc]
       ]),
       el('h3', {}, 'Sítios de infecção'),
       dados.sitios.length ? barrasCategorias(dados.sitios) : el('p', { class: 'texto-suave' }, 'Nenhuma IRAS confirmada no mês.'),
-      el('p', { class: 'texto-suave' }, `Mês fechado mais recente; ${fmtInt(ultimo.pacientesDia)} pacientes-dia (censo individual). Só casos confirmados pela CCIH ou digitados no Tasy.`)) },
+      el('p', { class: 'texto-suave' }, `IRAS de ${rotuloMes} (mês fechado mais recente; ${fmtInt(ultimo.pacientesDia)} pacientes-dia, censo individual) e ISC das cirurgias de `
+        + `${mesCurto(dados.mesIsc)} — a vigilância pós-alta leva 30 dias. Só casos confirmados com segunda assinatura na CCIH; suspeitas e casos que vieram só do Tasy ficam fora.`)) },
 
     /* 2. Número de IRAS por mês, colunas verticais. */
     { titulo: 'IRAS por mês — últimos 12 meses', corpo: () => el('div', {},
-      colunasMensais(dados.serie, 'iras', { titulo: 'IRAS por mês' })) },
+      colunasMensais(dados.serie, 'iras', { titulo: 'IRAS por mês' }),
+      el('p', { class: 'texto-suave' }, `Cada mês soma as IRAS confirmadas com segunda assinatura (a base histórica antes de 07/2026 foi validada no sistema anterior). `
+        + `Em ${rotuloMes} ainda não entram as ISC: as cirurgias desse mês estão na vigilância pós-alta de 30 dias e entram na próxima reunião.`)) },
 
     /* 3. Utilização de dispositivos e densidade, mês × 6 meses anteriores. */
     ...(dados.dispositivos && dados.dispositivos.mes ? [{

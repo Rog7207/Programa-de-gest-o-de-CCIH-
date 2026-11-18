@@ -80,6 +80,12 @@ const EDICAO_TIPOS = {
     /* Depois de editarRegistro, ainda dentro da trava: agente e cirurgia têm efeitos nos
        outros bancos (mesmas regras de editarAgente / gravarVinculoCirurgia da aba Infecções). */
     aposEditar: async (alvo, antes, mudancas, usuario, agora) => {
+      /* Mudar a situação para confirmado/digitado pela correção também é uma segunda
+         assinatura: registra quem confirmou (sem isso o caso não entra nos indicadores). */
+      if (['confirmado', 'digitado'].includes(String(alvo.StatusInvestigacao || '')) && !String(alvo.ConfirmadoPor || '').trim()
+        && String(antes.StatusInvestigacao || '') !== String(alvo.StatusInvestigacao || '')) {
+        alvo.ConfirmadoPor = usuario; alvo.ConfirmadoEm = String(agora || '').slice(0, 10);
+      }
       if ('ID_CulturaAgente' in mudancas && String(mudancas.ID_CulturaAgente || '') !== String(antes.ID_CulturaAgente || '')) {
         const bCul = await lerBanco('culturas');
         const escolhida = (bCul.culturas || []).find(c => c.ID_Cultura === alvo.ID_CulturaAgente);

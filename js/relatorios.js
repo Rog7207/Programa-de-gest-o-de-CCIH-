@@ -519,7 +519,9 @@ function relatorioSepse(bancos, setoresEscopo, inicio, fim) {
 }
 
 /* ---- 7. ISC e vigilância pós-alta ---- */
-function relatorioPosAlta(bancos, setoresEscopo, inicio, fim) {
+function relatorioPosAlta(bancos, setoresEscopo, inicio, fim, opcoes) {
+  /* opcoes.soConfirmadas (Reunião): ISC só quando o caso tem segunda assinatura. */
+  const temIsc = opcoes && opcoes.soConfirmadas ? _indiceIscConfirmada((bancos.iras || {}).casos || []) : (c => c.ISC === 'S');
   const doPeriodo = ((bancos.cirurgias || {}).cirurgias || [])
     .filter(c => relPeriodo(c.DataCirurgia, inicio, fim));
   /* Cateter, bloqueio anestésico, endoscopia diagnóstica: passam pelo centro cirúrgico,
@@ -532,7 +534,7 @@ function relatorioPosAlta(bancos, setoresEscopo, inicio, fim) {
   const ENTROU_NA_VIGILANCIA = RESPOSTAS_VIGILANCIA
     .concat(['sob vigilância', 'mensagem enviada', 'encerrada sem contato', 'encerrada — óbito',
       'encerrada — número incorreto']);
-  const isc = cirurgias.filter(c => c.ISC === 'S');
+  const isc = cirurgias.filter(temIsc);
   const semInfeccao = cirurgias.filter(c => normalizarTexto(c.StatusVigilancia) === 'seminfeccao');
   const comDesfecho = semInfeccao.length + isc.length;
 
@@ -547,7 +549,7 @@ function relatorioPosAlta(bancos, setoresEscopo, inicio, fim) {
     const vigiadas = lista.filter(c => ENTROU_NA_VIGILANCIA.includes(st(c)));
     const respostas = lista.filter(c => RESPOSTAS_VIGILANCIA.includes(st(c)));
     const semInf = lista.filter(c => normalizarTexto(c.StatusVigilancia) === 'seminfeccao').length;
-    const comIsc = lista.filter(c => c.ISC === 'S').length;
+    const comIsc = lista.filter(temIsc).length;
     return [rotulo, lista.length, vigiadas.length, respostas.length, semInf, comIsc,
       relPct(comIsc, semInf + comIsc)];
   };
@@ -1337,11 +1339,36 @@ function _mesesFechados(hoje, quantos) {
 /* Caso de IRAS que CONTA na reunião: confirmado (dupla assinatura) ou digitado no Tasy.
    Descartados, em investigação e indeterminados ficam fora — a reunião mostra o que a CCIH
    fechou, não a fila de trabalho (pedido de 21/10/2026). */
+/* Regra da Reunião e das análises (decisão da CCIH, 18/11/2026): só conta IRAS CONFIRMADA
+   com a SEGUNDA ASSINATURA registrada aqui (ConfirmadoPor). Suspeitas, descartadas e
+   indeterminadas ficam fora; e caso que entrou "digitado" vindo só do Tasy (reimportação do
+   IMAS, sem segunda assinatura) também fica fora — a reimportação não está confiável. A base
+   histórica (infecção antes do início da dupla assinatura, 01/07/2026) foi validada no
+   sistema antigo, que não registrava quem confirmou: continua contando. */
+const INICIO_SEGUNDA_ASSINATURA = '2026-07-01';
+function _inicioSegundaAssinatura() {
+  const c = typeof config !== 'undefined' && config && config.conciliacaoDesde;
+  return /^\d{4}-\d{2}-\d{2}/.test(String(c || '')) ? String(c).slice(0, 10) : INICIO_SEGUNDA_ASSINATURA;
+}
 function _casoValeReuniao(k) {
   if (_indeterminado(k)) return false;
   const s = normalizarTexto(k.StatusInvestigacao);
-  return s === 'confirmado' || s === 'digitado' || (!s && String(k.ConfirmadoPor || '').trim() !== '');
+  if (s !== 'confirmado' && s !== 'digitado' && s) return false;
+  if (String(k.ConfirmadoPor || '').trim()) return true;
+  return !!s && String(k.DataInfeccao || '').slice(0, 10) < _inicioSegundaAssinatura();
 }
+/* ISC de uma cirurgia que conta: a cirurgia marcada com ISC E ligada a um caso de IRAS que
+   vale (ID_IRAS na cirurgia ou ID_CirurgiaAssociada no caso). Cirurgia antes do início da dupla
+   assinatura: vale a marca (base histórica). */
+function _indiceIscConfirmada(casos) {
+  const validos = (casos || []).filter(_casoValeReuniao);
+  const idsCasos = new Set(validos.map(k => String(k.ID_IRAS || '')).filter(Boolean));
+  const idsCirurgias = new Set(validos.map(k => String(k.ID_CirurgiaAssociada || '')).filter(Boolean));
+  const inicio = _inicioSegundaAssinatura();
+  return c => c.ISC === 'S' && (String(c.DataCirurgia || '').slice(0, 10) < inicio
+    || idsCasos.has(String(c.ID_IRAS || '')) || idsCirurgias.has(String(c.ID_Cirurgia || '')));
+}
+const _ehCasoIsc = k => (typeof grupoTopografia === 'function' ? grupoTopografia(k.Topografia) : '') === 'isc';
 
 /* Rótulo curto do sítio, para o gráfico de barras da reunião (agrupa pelos mesmos grupos da
    desduplicação: ISC, respiratória, IPCS, ITU...). */
@@ -1406,20 +1433,29 @@ function avaliacoesUTIReuniao(bancos, inicio, fim) {
 function indicadoresReuniao(bancos, hoje) {
   const meses = _mesesFechados(hoje, 12);
   const mesRef = meses[meses.length - 1];
+  /* Cirúrgicas um mês antes (decisão de 18/11/2026): a ISC tem a data da cirurgia e só se
+     conhece depois do contato pós-alta de 30 dias — em novembro, as demais IRAS são de outubro
+     e as ISC de setembro. */
+  const mesIsc = meses[meses.length - 2];
   const casosIras = ((bancos.iras || {}).casos || []).filter(_casoValeReuniao);
   const internacoes = ((bancos.pacientes || {}).internacoes || []);
 
   /* Série mensal: IRAS, internações, IRAS/100, densidade/1.000 pacientes-dia, óbitos e
-     permanência média (pelo mês da ALTA). */
-  const serie = meses.map(m => {
-    const iras = casosIras.filter(k => relPeriodo(k.DataInfeccao, m.inicio, m.fim)).length;
+     permanência média (pelo mês da ALTA). No mês de referência a ISC ainda está em vigilância
+     (iscPendente): o mês conta só as demais IRAS e a ISC entra no mês seguinte da reunião. */
+  const serie = meses.map((m, i) => {
+    const doMes = casosIras.filter(k => relPeriodo(k.DataInfeccao, m.inicio, m.fim));
+    const iscPendente = i === meses.length - 1;
+    const irasSemIsc = doMes.filter(k => !_ehCasoIsc(k)).length;
+    const iscMes = iscPendente ? null : doMes.filter(_ehCasoIsc).length;
+    const iras = irasSemIsc + (iscMes || 0);
     const iniciadas = internacoes.filter(i => relPeriodo(i.DataInternacao, m.inicio, m.fim)).length;
     const pd = pacientesDia(internacoes, m.inicio, m.fim);
     const altas = internacoes.filter(i => relPeriodo(i.DataAlta, m.inicio, m.fim));
     const obitos = altas.filter(i => i.Obito === 'S' || /obito/.test(normalizarTexto(i.Desfecho))).length;
     const dias = altas.map(i => relDiasEntre(i.DataInternacao, i.DataAlta)).filter(d => d !== null && d >= 0);
     const permanencia = dias.length ? dias.reduce((a, b) => a + b, 0) / dias.length : null;
-    return { mes: m.mes, iras, internacoes: iniciadas,
+    return { mes: m.mes, iras, irasSemIsc, isc: iscMes, iscPendente, internacoes: iniciadas,
       por100: iniciadas ? +(iras / iniciadas * 100).toFixed(2) : null,
       pacientesDia: Math.round(pd), densidade: pd ? +(iras / pd * 1000).toFixed(2) : null,
       altas: altas.length, obitos,
@@ -1427,9 +1463,14 @@ function indicadoresReuniao(bancos, hoje) {
       permanencia: permanencia === null ? null : +permanencia.toFixed(1) };
   });
 
-  /* Sítios das IRAS do mês de referência, para o gráfico de barras. */
-  const casosMes = casosIras.filter(k => relPeriodo(k.DataInfeccao, mesRef.inicio, mesRef.fim));
-  const sitios = relContar(casosMes, _sitioDaIRAS);
+  /* Sítios para o gráfico de barras: IRAS (exceto ISC) do mês de referência + ISC das
+     cirurgias do mês anterior a ele. */
+  const casosMes = casosIras.filter(k => relPeriodo(k.DataInfeccao, mesRef.inicio, mesRef.fim) && !_ehCasoIsc(k));
+  const iscDoMesIsc = casosIras.filter(k => relPeriodo(k.DataInfeccao, mesIsc.inicio, mesIsc.fim) && _ehCasoIsc(k));
+  const rotuloMesIsc = mesIsc.mes.slice(5) + '/' + mesIsc.mes.slice(2, 4);
+  const sitios = relContar(casosMes, _sitioDaIRAS)
+    .concat(iscDoMesIsc.length ? [[`Sítio cirúrgico (cirurgias de ${rotuloMesIsc})`, iscDoMesIsc.length]] : [])
+    .sort((a, b) => b[1] - a[1]);
 
   /* Dispositivos (setores com censo NISS, hoje o CTI): utilização e densidade no mês de
      referência, lado a lado com os 6 meses anteriores (pedido de 21/10/2026). A tabela de
@@ -1447,11 +1488,16 @@ function indicadoresReuniao(bancos, hoje) {
           ...(utilizacaoDispositivos(bancos, casosNISS(seis[0].inicio, seis[seis.length - 1].fim), seis[0].inicio, seis[seis.length - 1].fim, setoresNISS) || { linhas: [] }) } }
     : null;
 
-  /* MDR no trimestre: culturas de IRAS com mecanismo, germe × setor (como a seção 5 do perfil). */
+  /* MDR no trimestre: culturas de IRAS com mecanismo, germe × setor (como a seção 5 do perfil).
+     Só cultura ligada a caso que vale (segunda assinatura) — antes do início da dupla
+     assinatura, vale a classificação da cultura (base histórica). */
   const sensPorCultura = indiceSensibilidade(bancos);
   const mdrMapa = new Map();
+  const idsCasosValidos = new Set(casosIras.map(k => String(k.ID_IRAS || '')).filter(Boolean));
+  const inicioAss = _inicioSegundaAssinatura();
   for (const c of ((bancos.culturas || {}).culturas || [])) {
     if (!String(c.AvaliacaoCCIH || '').startsWith('IRAS')) continue;
+    if (String(c.DataColeta || '').slice(0, 10) >= inicioAss && !idsCasosValidos.has(String(c.ID_IRAS || ''))) continue;
     if (!relPeriodo(c.DataColeta, tri[0].inicio, mesRef.fim)) continue;
     const mecanismo = mecanismoDaCultura(c, sensPorCultura);
     if (!mecanismo) continue;
@@ -1471,7 +1517,7 @@ function indicadoresReuniao(bancos, hoje) {
   const rAtb = relatorioAntibioticos(bancos, null, mesRef.inicio, mesRef.fim);
   const rHig = relatorioHigiene(bancos, null, tri[0].inicio, mesRef.fim);
   const mesPos = meses[meses.length - 2];
-  const rPos = relatorioPosAlta(bancos, null, mesPos.inicio, mesPos.fim);
+  const rPos = relatorioPosAlta(bancos, null, mesPos.inicio, mesPos.fim, { soConfirmadas: true });
   const doResumo = (rel2, rotulo) => { const p = (rel2.resumo || []).find(x => x[0] === rotulo); return p ? p[1] : null; };
   const panAtb = (rAtb.secoes.find(s => s.titulo === 'Panorama') || { itens: [] }).itens
     .concat((rAtb.secoes.find(s => s.titulo === 'Análises de antibiótico (Tasy)') || { itens: [] }).itens);
@@ -1489,7 +1535,7 @@ function indicadoresReuniao(bancos, hoje) {
   const consumoAtb = consumoAntibioticosMensal(bancos, meses, { tabela: tabelaDDD, hojeISO: hoje });
 
   return {
-    mesReferencia: mesRef.mes, trimestre: tri[0].mes + ' a ' + mesRef.mes, serie, consumoAtb,
+    mesReferencia: mesRef.mes, mesIsc: mesIsc.mes, iscDoMesIsc: iscDoMesIsc.length, trimestre: tri[0].mes + ' a ' + mesRef.mes, serie, consumoAtb,
     sitios, dispositivos, mdr,
     atb: { dot: doResumo(rAtb, 'DOT'), dotMil: doResumo(rAtb, 'DOT/1.000 pac-dia'),
       analisadas: doPanorama('analisadas no período'),
@@ -1774,7 +1820,12 @@ function compararComBenchmarks(bancos, hoje) {
   const setoresUTI = [...new Set(((bancos.denominadores || {}).dispositivos_dia || []).map(l => String(l.Setor || '').trim()))].filter(s => s && _setorUTIAdulto(s));
   const util = setoresUTI.length
     ? utilizacaoDispositivos(bancos, casos.filter(k => relEscopo(k.Setor, setoresUTI)), inicio, fim, setoresUTI) : null;
-  const cirurgias = ((bancos.cirurgias || {}).cirurgias || []).filter(c => relPeriodo(c.DataCirurgia, inicio, fim)
+  /* ISC: trimestre das CIRURGIAS um mês antes (o desfecho só se conhece após 30 dias) e só
+     ISC com segunda assinatura (18/11/2026). */
+  const mesesIsc = _mesesFechados(meses[meses.length - 1].inicio, 3);
+  const inicioIsc = mesesIsc[0].inicio, fimIsc = mesesIsc[mesesIsc.length - 1].fim;
+  const temIsc = _indiceIscConfirmada((bancos.iras || {}).casos || []);
+  const cirurgias = ((bancos.cirurgias || {}).cirurgias || []).filter(c => relPeriodo(c.DataCirurgia, inicioIsc, fimIsc)
     && (typeof categoriaDeVigilancia !== 'function' || categoriaDeVigilancia(c) !== 'nao_cirurgico'));
   const obsHig = ((bancos.higiene_maos || {}).observacoes || []).filter(o => relPeriodo(o.Data, inicio, fim)
     && (o.Acao === 'Higienizou' || o.Acao === 'Não higienizou'));
@@ -1789,7 +1840,8 @@ function compararComBenchmarks(bancos, hoje) {
     } else if (ind.tipo === 'isc') {
       const doGrupo = cirurgias.filter(c => ind.categorias.includes(String(c.ProcedimentoNHSN || '').trim()));
       if (doGrupo.length) {
-        linha.denominador = doGrupo.length; linha.numerador = doGrupo.filter(c => c.ISC === 'S').length;
+        linha.denominador = doGrupo.length; linha.numerador = doGrupo.filter(temIsc).length;
+        linha.nota = [linha.nota, `cirurgias de ${mesesIsc[0].mes.slice(5)}/${mesesIsc[0].mes.slice(2, 4)} a ${mesesIsc[2].mes.slice(5)}/${mesesIsc[2].mes.slice(2, 4)}`].filter(Boolean).join(' · ');
         linha.valor = +(linha.numerador / linha.denominador * 100).toFixed(2);
       }
     } else if (ind.tipo === 'percentual') {

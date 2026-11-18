@@ -199,3 +199,24 @@ rótulo de mês sozinho em MM/AAAA). O banco continua em ISO (AAAA-MM-DD): é o 
 compara certo e o que todos os cálculos usam. A conversão é só na exibição — `datasParaBR`
 (leitura.js) aplicada pelo `el()` de app.js e nas páginas de impressão; textarea, campos de
 data e valores de opção não são tocados. As exportações para Excel continuam em ISO.
+
+## Reunião e análises: só IRAS com segunda assinatura; ISC um mês antes (18/11/2026)
+
+Decisão dele: a reimportação do Tasy (IMAS 2485 / IRAS digitadas) não está confiável, então
+as análises usam só casos **confirmados com segunda assinatura registrada no aplicativo**
+(ConfirmadoPor). Suspeitas, descartados, indeterminados e casos que vieram só do Tasy ficam
+fora. A base histórica (infecção antes de 01/07/2026, início da dupla assinatura = data de
+início da conciliação) foi validada no sistema anterior e continua contando. Mês de referência:
+o mês fechado anterior (em novembro, outubro). **ISC: um mês antes** (em novembro, cirurgias de
+setembro), porque a vigilância pós-alta leva 30 dias — no slide 1 as ISC de setembro aparecem ao
+lado das demais IRAS de outubro; na série de 12 meses o mês de referência ainda não soma ISC;
+benchmarks de ISC usam o trimestre das cirurgias deslocado um mês; pós-alta conta só ISC ligada a
+caso assinado. MDR: só cultura ligada a caso assinado. Corrigir a situação para "confirmado" pela
+ficha passa a registrar quem confirmou. Defeito corrigido: descartar uma ISC limpava só a primeira
+cirurgia ligada ao caso (script corrigir-isc-descartadas, 12 cirurgias de set/2026 no banco local).
+
+Pendências achadas na conferência com o banco local (18/11/2026): (1) 969 internações de outubro
+sem data de alta inflam os pacientes-dia (18.595 × ~10.000 nos outros meses; pelas passagens do
+2536, outubro tem 8.931) — falta fonte de altas na rotina; (2) julho–agosto têm 29 IRAS que só
+existem como "digitado" vindo do Tasy, sem segunda assinatura — saem do painel até serem
+confirmadas; (3) 6 das 12 ISC de setembro (revisão de culturas) não estão ligadas à cirurgia.

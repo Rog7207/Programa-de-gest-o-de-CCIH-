@@ -634,7 +634,17 @@ async function montarInfeccoes(conteudo) {
           }
           /* Suspeita que veio da vigilância pós-alta fecha o ciclo lá também. */
           const atualCir = await lerBanco('cirurgias');
-          const cirurgia = atualCir.cirurgias.find(c => c.ID_IRAS === caso.ID_IRAS);
+          /* Descarte limpa TODAS as cirurgias ligadas ao caso (18/11/2026): havia caso com duas
+             cirurgias apontando para ele, e só a primeira perdia a marca de ISC. */
+          if (statusNovo !== 'confirmado') {
+            const ligadas = atualCir.cirurgias.filter(c => c.ID_IRAS === caso.ID_IRAS);
+            for (const c of ligadas) {
+              if (normalizarTexto(c.StatusVigilancia) === 'eminvestigacao' || c.ISC === 'S') c.StatusVigilancia = 'sem infecção';
+              c.ISC = ''; c.TipoISC = '';
+            }
+            if (ligadas.length) await gravarBanco('cirurgias', atualCir);
+          }
+          const cirurgia = statusNovo === 'confirmado' ? atualCir.cirurgias.find(c => c.ID_IRAS === caso.ID_IRAS) : null;
           if (cirurgia) {
             if (statusNovo === 'confirmado') {
               cirurgia.StatusVigilancia = 'infecção confirmada';

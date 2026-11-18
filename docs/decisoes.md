@@ -220,3 +220,16 @@ sem data de alta inflam os pacientes-dia (18.595 × ~10.000 nos outros meses; pe
 2536, outubro tem 8.931) — falta fonte de altas na rotina; (2) julho–agosto têm 29 IRAS que só
 existem como "digitado" vindo do Tasy, sem segunda assinatura — saem do painel até serem
 confirmadas; (3) 6 das 12 ISC de setembro (revisão de culturas) não estão ligadas à cirurgia.
+
+## Pacientes-dia pelo 2536; NISS incompleto; utilização fora do slide (18/11/2026)
+
+Decisão dele: pacientes-dia do hospital pelas passagens por setor (2536 + foto 2396) —
+`pacientesDiaHospital` em relatorios.js, usado na Reunião, no consumo de antibióticos, nos
+relatórios padrão e nos indicadores da aba Infecções; censo individual só antes do início das
+passagens (jan/2025). Consumo da UTI: NISS que não cobre o mês cai nas passagens da UTI com aviso
+(outubro/2026 tinha 6 de 31 dias da CTI e o DOT/1.000 saía 6.894; corrigido para 1.478,6). Slide 3
+da Reunião: taxa de utilização retirada (está muito abaixo da real — conferir a importação do
+NISS); densidade não aparece quando o NISS do mês está incompleto. ISC sem cirurgia:
+`scripts/ligar-isc-cirurgia.js` liga só quando sobra uma candidata na janela depois de tirar as
+cirurgias de 0–1 dia (tratamento da infecção) e linhas repetidas; set/2026: 2 ligadas, 4 para
+decidir na ficha.

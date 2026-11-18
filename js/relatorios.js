@@ -127,6 +127,26 @@ function pacientesDiaDasPassagens(bancos, inicio, fim, setoresEscopo) {
   return total > 0 ? { dias: total, meses: meses.size, origem: 'passagens' } : null;
 }
 
+/* Pacientes-dia do HOSPITAL (decisão de 18/11/2026): pelas passagens por setor (2536 + foto
+   2396), que trazem entrada e saída. O censo individual de internações não serve desde out/2026:
+   a rotina não traz as altas, e internação sem alta conta como internada até o fim do período
+   (outubro dava 18.595 contra ~10.000). O censo individual só entra para período anterior ao
+   início das passagens. Devolve { dias, origem }. */
+const _inicioPassagensCache = new WeakMap();
+function pacientesDiaHospital(bancos, inicio, fim) {
+  const passagens = ((bancos.denominadores || {}).passagem_setor || []);
+  let primeira = _inicioPassagensCache.get(passagens);
+  if (primeira === undefined) {
+    primeira = passagens.reduce((m, p) => { const e = String(p.EntradaSetor || '').slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(e) && (!m || e < m) ? e : m; }, '');
+    _inicioPassagensCache.set(passagens, primeira);
+  }
+  if (primeira && primeira <= String(inicio).slice(0, 10)) {
+    const r = pacientesDiaDasPassagens(bancos, inicio, fim, null);
+    if (r && r.dias) return { dias: r.dias, origem: 'passagens por setor (2536)' };
+  }
+  return { dias: pacientesDia((bancos.pacientes || {}).internacoes, inicio, fim), origem: 'censo individual de internações' };
+}
+
 /* Dias de dispositivo no período, do banco `denominadores`. É o denominador das taxas que
    a CCIH de fato reporta: PAV por 1.000 dias de ventilação, ICS por 1.000 dias de cateter
    central, ITU por 1.000 dias de sonda vesical.
@@ -237,7 +257,7 @@ function relatorioIRAS(bancos, setoresEscopo, inicio, fim) {
      partir do censo individual (ver pacientesDia). */
   const doCenso = pacientesDiaDoCenso(bancos, inicio, fim, setoresEscopo);
   const pd = doCenso ? doCenso.dias
-    : (setoresEscopo ? 0 : pacientesDia((bancos.pacientes || {}).internacoes, inicio, fim));
+    : (setoresEscopo ? 0 : pacientesDiaHospital(bancos, inicio, fim).dias);
   const densidade = pd ? (casos.length / pd * 1000).toFixed(2) : null;
   const fonteDenominador = doCenso
     ? `censo mensal por setor (${doCenso.meses} mês(es) de competência)`
@@ -377,7 +397,7 @@ function relatorioAntibioticos(bancos, setoresEscopo, inicio, fim) {
      dá por setor), senão o censo individual, que só vale para o hospital inteiro. */
   const doCenso = pacientesDiaDoCenso(bancos, inicio, fim, setoresEscopo);
   const pd = doCenso ? doCenso.dias
-    : (setoresEscopo ? 0 : pacientesDia((bancos.pacientes || {}).internacoes, inicio, fim));
+    : (setoresEscopo ? 0 : pacientesDiaHospital(bancos, inicio, fim).dias);
   const dotMil = pd ? (dot / pd * 1000).toFixed(0) : null;
   /* Avaliações de TODAS as fontes: a aba própria e as feitas na visita da UTI pelo
      miniapp (uti.avaliacoes_atb) — sem isso as da UTI ficavam órfãs no relatório. */
@@ -1388,15 +1408,22 @@ function _sitioDaIRAS(k) {
 function utilizacaoDispositivos(bancos, casos, inicio, fim, setoresEscopo) {
   const linhasNISS = ((bancos.denominadores || {}).dispositivos_dia || []);
   let pacientesDiaNISS = 0;
+  const diasComCenso = new Set();
   for (const l of linhasNISS) {
     const data = String(l.Data || '').slice(0, 10);
     if (!/^\d{4}-/.test(data) || data < inicio || data > fim || !relEscopo(l.Setor, setoresEscopo)) continue;
     if (!/pacientes.?dia/i.test(String(l.Dispositivo || ''))) continue;
     const n = Number(String(l.Contagem == null ? '' : l.Contagem).replace(',', '.'));
-    if (isFinite(n) && n > 0) pacientesDiaNISS += n;
+    if (isFinite(n) && n > 0) { pacientesDiaNISS += n; diasComCenso.add(data); }
   }
   const denominador = diasDeDispositivo(bancos, inicio, fim, setoresEscopo);
   if (!denominador) return null;
+  /* Censo NISS que não cobre o período inteiro (18/11/2026: outubro da CTI tinha só 6 de 31 dias):
+     a densidade ficaria errada — IRAS do mês inteiro sobre dispositivo-dia de poucos dias. O núcleo
+     só sinaliza (incompleto, diasComCenso, diasPeriodo); quem mostra decide (o slide da reunião
+     esconde a densidade e avisa). */
+  const diasPeriodo = Math.round((Date.parse(fim + 'T00:00:00Z') - Date.parse(inicio + 'T00:00:00Z')) / 86400000) + 1;
+  const incompleto = diasComCenso.size < diasPeriodo;
   const linhas = [];
   for (const [grupo, dias] of [...denominador.porGrupo.entries()].sort()) {
     const iras = casos.filter(k => grupoDispositivoDaIRAS(k) === grupo).length;
@@ -1404,7 +1431,8 @@ function utilizacaoDispositivos(bancos, casos, inicio, fim, setoresEscopo) {
       utilizacao: pacientesDiaNISS ? +(dias / pacientesDiaNISS).toFixed(2) : null,
       iras, densidade: dias ? +(iras / dias * 1000).toFixed(2) : null });
   }
-  return { linhas, pacientesDia: Math.round(pacientesDiaNISS), diasContados: denominador.diasContados };
+  return { linhas, pacientesDia: Math.round(pacientesDiaNISS), diasContados: denominador.diasContados,
+    diasComCenso: diasComCenso.size, diasPeriodo, incompleto };
 }
 
 /* Setor de UTI adulto para a reunião: o CTI (não neonatal nem pediátrico) — decisão de 21/10/2026. */
@@ -1450,7 +1478,7 @@ function indicadoresReuniao(bancos, hoje) {
     const iscMes = iscPendente ? null : doMes.filter(_ehCasoIsc).length;
     const iras = irasSemIsc + (iscMes || 0);
     const iniciadas = internacoes.filter(i => relPeriodo(i.DataInternacao, m.inicio, m.fim)).length;
-    const pd = pacientesDia(internacoes, m.inicio, m.fim);
+    const pd = pacientesDiaHospital(bancos, m.inicio, m.fim).dias;
     const altas = internacoes.filter(i => relPeriodo(i.DataAlta, m.inicio, m.fim));
     const obitos = altas.filter(i => i.Obito === 'S' || /obito/.test(normalizarTexto(i.Desfecho))).length;
     const dias = altas.map(i => relDiasEntre(i.DataInternacao, i.DataAlta)).filter(d => d !== null && d >= 0);
@@ -1704,10 +1732,22 @@ function consumoAntibioticosMensal(bancos, meses, opcoes) {
     const soma = mapa => [...mapa.values()].reduce((s, v) => s + v, 0);
     /* mês em curso: internação aberta conta só até hoje, não até o fim do mês */
     const fimPd = m.fim > hoje ? hoje : m.fim;
-    const pdHosp = fimPd >= m.inicio ? pacientesDia(internacoes, m.inicio, fimPd) : 0;
-    let pdUti = niss.filter(l => String(l.Competencia || '').slice(0, 7) === m.mes).reduce((s, l) => s + (Number(String(l.Contagem).replace(',', '.')) || 0), 0);
+    const pdHosp = fimPd >= m.inicio ? pacientesDiaHospital(bancos, m.inicio, fimPd).dias : 0;
+    const nissMes = niss.filter(l => String(l.Competencia || '').slice(0, 7) === m.mes);
+    let pdUti = nissMes.reduce((s, l) => s + (Number(String(l.Contagem).replace(',', '.')) || 0), 0);
     let fonteUti = pdUti ? 'NISS' : '';
-    if (!pdUti && setoresUTI.length) { const r = pacientesDiaDasPassagens(bancos, m.inicio, m.fim, setoresUTI); if (r && r.dias) { pdUti = r.dias; fonteUti = 'passagens'; } }
+    /* NISS que não cobre o mês (até hoje, no mês em curso) não serve de denominador: outubro/2026
+       tinha só 6 dias da CTI e o DOT/1.000 saía 6.894. Cai nas passagens da UTI, com aviso. */
+    const diasEsperados = Math.round((Date.parse(fimPd + 'T00:00:00Z') - Date.parse(m.inicio + 'T00:00:00Z')) / 86400000) + 1;
+    /* linha sem data = total do mês (censo agregado): cobre o mês inteiro */
+    const totalMensal = nissMes.some(l => !/^\d{4}-\d{2}-\d{2}/.test(String(l.Data || '')));
+    const diasNiss = totalMensal ? diasEsperados : new Set(nissMes.map(l => String(l.Data || '').slice(0, 10))).size;
+    const nissIncompleto = pdUti && diasNiss < diasEsperados;
+    if ((!pdUti || nissIncompleto) && setoresUTI.length) {
+      const r = pacientesDiaDasPassagens(bancos, m.inicio, fimPd, setoresUTI);
+      if (r && r.dias) { pdUti = r.dias; fonteUti = nissIncompleto ? `passagens (NISS incompleto: ${diasNiss} de ${diasEsperados} dias)` : 'passagens'; }
+      else if (nissIncompleto) { pdUti = 0; fonteUti = `NISS incompleto (${diasNiss} de ${diasEsperados} dias)`; }
+    } else if (nissIncompleto) { pdUti = 0; fonteUti = `NISS incompleto (${diasNiss} de ${diasEsperados} dias)`; }
     const dot = a.dot.size, dotUti = a.dotUti.size, ddd = soma(a.ddd), dddUti = soma(a.dddUti);
     /* cobertura = fração dos dias de terapia que tinham dose convertível; abaixo de
        DDD_COBERTURA_MINIMA o DDD do mês sai nulo (subestimaria), mas a cobertura é mostrada */
@@ -1898,7 +1938,7 @@ function setoresEmUso(bancos) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { relatorioIRAS, casosParaRelatorio, pacientesDiaDoCenso, pacientesDiaDasPassagens, relatorioMicrobiologico, relatorioHigiene,
-    relatorioAntibioticos, relatorioIsolamentos, relatorioSepse, relatorioPosAlta, relatorioISCAnvisa, relatorioAnvisa,
+    pacientesDiaHospital, relatorioAntibioticos, relatorioIsolamentos, relatorioSepse, relatorioPosAlta, relatorioISCAnvisa, relatorioAnvisa,
     relatorioResumoExecutivo, RELATORIOS_PADRAO, BANCOS_RELATORIOS, setoresEmUso, pacientesDia, pacientesDiaDoCenso,
     relMediana, relDiasEntre, mesAnteriorIntervalo,
     diasDeDispositivo, taxasPorDispositivo, grupoDoDispositivo, grupoDispositivoDaIRAS, indicadoresReuniao, utilizacaoDispositivos, avaliacoesUTIReuniao, compararComBenchmarks, posicaoNoBenchmark, BENCHMARKS_EXTERNOS,

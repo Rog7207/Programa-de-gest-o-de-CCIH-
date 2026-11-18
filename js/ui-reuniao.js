@@ -182,7 +182,7 @@ async function montarReuniao(conteudo) {
       ]),
       el('h3', {}, 'Sítios de infecção'),
       dados.sitios.length ? barrasCategorias(dados.sitios) : el('p', { class: 'texto-suave' }, 'Nenhuma IRAS confirmada no mês.'),
-      el('p', { class: 'texto-suave' }, `IRAS de ${rotuloMes} (mês fechado mais recente; ${fmtInt(ultimo.pacientesDia)} pacientes-dia, censo individual) e ISC das cirurgias de `
+      el('p', { class: 'texto-suave' }, `IRAS de ${rotuloMes} (mês fechado mais recente; ${fmtInt(ultimo.pacientesDia)} pacientes-dia pelas passagens por setor do 2536) e ISC das cirurgias de `
         + `${mesCurto(dados.mesIsc)} — a vigilância pós-alta leva 30 dias. Só casos confirmados com segunda assinatura na CCIH; suspeitas e casos que vieram só do Tasy ficam fora.`)) },
 
     /* 2. Número de IRAS por mês, colunas verticais. */
@@ -195,24 +195,30 @@ async function montarReuniao(conteudo) {
     ...(dados.dispositivos && dados.dispositivos.mes ? [{
       titulo: `Dispositivos — ${dados.dispositivos.setores.join(', ')}`,
       corpo: () => {
+        /* Taxa de utilização retirada do slide (pedido de 18/11/2026: o valor está muito abaixo
+           do real — provável problema de importação do NISS; o cálculo continua no núcleo). Mês
+           com censo NISS incompleto não mostra densidade (IRAS do mês inteiro sobre poucos dias). */
         const d = dados.dispositivos;
         const antes = new Map((d.seisMeses.linhas || []).map(l => [l.dispositivo, l]));
-        const pct = v => (v === null || v === undefined) ? '—' : Math.round(v * 100) + '%';
         const num = v => (v === null || v === undefined) ? '—' : String(v);
+        const incompleto = !!d.mes.incompleto;
         return el('div', {},
           el('table', { class: 'tabela reuniao-tabela' },
             el('thead', {},
-              el('tr', {}, el('th', { rowspan: '2' }, 'Dispositivo'), el('th', { colspan: '2' }, 'Taxa de utilização'), el('th', { colspan: '2' }, 'Densidade de IRAS / 1.000 dias')),
-              el('tr', {}, ...[rotuloMes, '6 meses anteriores', rotuloMes, '6 meses anteriores'].map(c => el('th', {}, c)))),
+              el('tr', {}, el('th', { rowspan: '2' }, 'Dispositivo'), el('th', { colspan: '2' }, 'Densidade de IRAS / 1.000 dias de dispositivo')),
+              el('tr', {}, ...[rotuloMes, '6 meses anteriores'].map(c => el('th', {}, c)))),
             el('tbody', {}, d.mes.linhas.map(l => {
               const a = antes.get(l.dispositivo) || {};
               return el('tr', {}, el('td', {}, l.dispositivo),
-                el('td', { class: 'reuniao-destaque' }, pct(l.utilizacao)), el('td', {}, pct(a.utilizacao)),
-                el('td', { class: 'reuniao-destaque' }, num(l.densidade) + (l.iras ? ` (${l.iras})` : '')), el('td', {}, num(a.densidade) + (a.iras ? ` (${a.iras})` : '')));
+                el('td', { class: 'reuniao-destaque' }, incompleto ? '—' : num(l.densidade) + (l.iras ? ` (${l.iras})` : '')),
+                el('td', {}, (d.seisMeses.incompleto ? '—' : num(a.densidade)) + (a.iras && !d.seisMeses.incompleto ? ` (${a.iras})` : '')));
             }))),
+          incompleto ? el('p', { class: 'aviso-erro-texto' },
+            `⚠ Censo de invasividade (NISS, Tasy 3066) de ${rotuloMes} incompleto: ${d.mes.diasComCenso} de ${d.mes.diasPeriodo} dias. `
+            + 'A densidade do mês não é calculada. Importe o 3066 do mês inteiro da CTI.') : null,
           el('p', { class: 'texto-suave' },
-            `Utilização = dias de dispositivo ÷ pacientes-dia (${fmtInt(d.mes.pacientesDia)} no mês; ${fmtInt(d.seisMeses.pacientesDia || 0)} em ${d.seisMeses.periodo}). `
-            + 'Densidade = IRAS do dispositivo por 1.000 dias de dispositivo (número de casos entre parênteses). Censo diário de invasividade (NISS). PAV→ventilação mecânica, IPCS→cateter central, ITU→sonda vesical.'));
+            'Densidade = IRAS do dispositivo por 1.000 dias de dispositivo (número de casos entre parênteses). Censo diário de invasividade (NISS). PAV→ventilação mecânica, IPCS→cateter central, ITU→sonda vesical. '
+            + 'A taxa de utilização foi retirada deste slide até a conferência da importação do NISS.'));
       } }] : []),
 
     /* 3b. Trimestre × benchmarks externos (Anvisa 2024, NHSN 2012, INICC), com referências. */

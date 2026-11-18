@@ -52,11 +52,11 @@ function densidade(casos, diasPaciente) {
 
 async function montarInfeccoes(conteudo) {
   conteudo.append(el('h1', {}, 'Infecções relacionadas à assistência'));
-  let bancoIras, bancoCulturas, bancoPacientes, bancoEvolucoes, bancoCirurgias;
+  let bancoIras, bancoCulturas, bancoPacientes, bancoEvolucoes, bancoCirurgias, bancoDenominadores;
   try {
-    [bancoIras, bancoCulturas, bancoPacientes, bancoEvolucoes, bancoCirurgias] = await Promise.all([
+    [bancoIras, bancoCulturas, bancoPacientes, bancoEvolucoes, bancoCirurgias, bancoDenominadores] = await Promise.all([
       lerBanco('iras'), lerBanco('culturas'), lerBanco('pacientes'), lerBanco('evolucoes').catch(() => ({ evolucoes: [] })),
-      lerBanco('cirurgias').catch(() => ({ cirurgias: [] }))
+      lerBanco('cirurgias').catch(() => ({ cirurgias: [] })), lerBanco('denominadores').catch(() => ({ passagem_setor: [] }))
     ]);
   } catch (e) { conteudo.append(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message)); return; }
 
@@ -702,7 +702,10 @@ async function montarInfeccoes(conteudo) {
     const casosPeriodo = noPeriodo(casos, 'DataInfeccao');
     filtradasAtuais = inf;
 
-    const dias = pacientesDia(internacoes, campoDe.value, campoAte.value);
+    /* Pacientes-dia pelas passagens do 2536 (o censo individual não tem as altas desde out/2026). */
+    const dias = typeof pacientesDiaHospital === 'function'
+      ? pacientesDiaHospital({ denominadores: bancoDenominadores, pacientes: bancoPacientes }, campoDe.value, campoAte.value).dias
+      : pacientesDia(internacoes, campoDe.value, campoAte.value);
     const comMecanismo = inf.filter(c => String(c.MecanismoResistencia || '').trim());
     const episodios = episodiosDeInfeccao(inf);
 

@@ -6542,7 +6542,9 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
         { ID_Prescricao: 'P3', Prontuario: 'B', Atendimento: '2', Antibiotico: 'Ceftriaxona', Dose: '', DataInicio: '2026-09-10', DataFim: '2026-09-14', Setor: 'Unidade 5' },
         { ID_Prescricao: 'P4', Prontuario: 'C', Atendimento: '3', Antibiotico: 'Clindamicina', Dose: '4 ml 8/8h IV', DataInicio: '2026-09-20', DataFim: '2026-09-20', Setor: 'Unidade 5' },
         { ID_Prescricao: 'P5', Prontuario: 'D', Atendimento: '4', Antibiotico: 'Cefazolina', Dose: '', DataInicio: '2026-08-10', DataFim: '2026-08-11' }] },
-      denominadores: { passagem_setor: [{ Atendimento: '1', Setor: 'CTI - Dr. Joaquim David Ferreira Lima', EntradaSetor: '2026-09-01 10:00:00', SaidaSetor: '2026-09-08 09:00:00' }, { Atendimento: '1', Setor: 'Unidade 5', EntradaSetor: '2026-09-08 09:00:00', SaidaSetor: '' }],
+      denominadores: { passagem_setor: [{ Atendimento: '1', Setor: 'CTI - Dr. Joaquim David Ferreira Lima', EntradaSetor: '2026-09-01 10:00:00', SaidaSetor: '2026-09-08 09:00:00' }, { Atendimento: '1', Setor: 'Unidade 5', EntradaSetor: '2026-09-08 09:00:00', SaidaSetor: '' },
+        /* 18/11/2026: o hospital também sai das passagens (2536) — os outros dois internados */
+        { Atendimento: '2', Setor: 'Unidade 5', EntradaSetor: '2026-09-01 08:00:00', SaidaSetor: '' }, { Atendimento: '9', Setor: 'Unidade 7', EntradaSetor: '2026-08-01 08:00:00', SaidaSetor: '' }],
         dispositivos_dia: [{ Setor: 'CTI - Dr. Joaquim David Ferreira Lima', Competencia: '2026-09', Dispositivo: 'Pacientes-dia', Contagem: '800' }] },
       pacientes: { internacoes: [{ Prontuario: 'A', Atendimento: '1', DataInternacao: '2026-09-01', DataAlta: '2026-09-30' }, { Prontuario: 'B', Atendimento: '2', DataInternacao: '2026-09-01', DataAlta: '2026-09-30' }, { Prontuario: 'X', Atendimento: '9', DataInternacao: '2026-08-01', DataAlta: '2026-09-30' }] }
     };
@@ -6550,12 +6552,22 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     const set = c.find(m => m.mes === '2026-09'), ago = c.find(m => m.mes === '2026-08');
     verificar('DOT setembro: meropenem 10 dias (renovação sobreposta não duplica) + ceftriaxona 5 + clindamicina 1 = 16; UTI = 8 (o dia da transferência, 08/09, conta para o setor onde começou)', set.dot === 16 && set.dotUti === 8, [set.dot, set.dotUti]);
     verificar('DDD setembro: meropenem 10 dias × 1 DDD = 10; UTI 8; ceftriaxona sem dose e clindamicina em mL ficam fora', perto(set.ddd, 10) && perto(set.dddUti, 8), [set.ddd, set.dddUti]);
-    verificar('pacientes-dia: UTI pelo NISS (800); hospital pelo censo (3 internações × 30 d = 90); por 1.000 = 8/800 e 16/90', set.pdUti === 800 && set.fonteUti === 'NISS' && set.pdHosp === 90 && perto(set.dotMilUti, 10) && perto(set.dotMil, 177.8), [set.pdUti, set.pdHosp, set.dotMilUti, set.dotMil]);
+    verificar('pacientes-dia: UTI pelo NISS (800); hospital pelas passagens do 2536 (3 pacientes × 30 d = 90); por 1.000 = 8/800 e 16/90', set.pdUti === 800 && set.fonteUti === 'NISS' && set.pdHosp === 90 && perto(set.dotMilUti, 10) && perto(set.dotMil, 177.8), [set.pdUti, set.pdHosp, set.dotMilUti, set.dotMil]);
     verificar('contagem de doses: 3 com dose, 1 sem; 1 não convertível (mL)', set.comDose === 3 && set.semDose === 1 && set.naoConvertida.length === 1 && set.naoConvertida[0][1] === 1, [set.comDose, set.semDose, set.naoConvertida]);
     verificar('agosto sem nenhuma dose: DOT sai, DDD fica null (não é zero); cobertura 0%', ago.dot === 2 && ago.ddd === null && ago.dddMil === null && ago.coberturaDose === 0, [ago.dot, ago.ddd]);
     verificar('setembro: cobertura de dose = 10 de 16 dias (63%)', set.coberturaDose === 63, set.coberturaDose);
     const parcial = rel.consumoAntibioticosMensal(bancos, [{ mes: '2026-09', inicio: '2026-09-01', fim: '2026-09-30' }], { hojeISO: '2026-09-15' })[0];
     verificar('mês em curso: pacientes-dia do hospital só até hoje (15 d × 3 = 45)', parcial.pdHosp === 45, parcial.pdHosp);
+    /* internação sem alta não infla mais: o censo individual diria 3 × 30 mais a internação aberta */
+    const bancosSemAlta = { ...bancos, pacientes: { internacoes: bancos.pacientes.internacoes.concat([{ Prontuario: 'Z', Atendimento: '77', DataInternacao: '2026-09-02', DataAlta: '' }]) } };
+    const semAlta = rel.consumoAntibioticosMensal(bancosSemAlta, meses, { hojeISO: '2026-10-21' }).find(m => m.mes === '2026-09');
+    verificar('internação sem data de alta não infla os pacientes-dia do hospital (passagens mandam)', semAlta.pdHosp === 90, semAlta.pdHosp);
+    /* NISS diário só com 6 dias do mês (outubro/2026 da CTI): não serve; cai nas passagens da UTI, com aviso */
+    const bancosNissParcial = { ...bancos, denominadores: { ...bancos.denominadores, dispositivos_dia: [1, 2, 3, 4, 5, 6].map(d => ({ Data: `2026-09-0${d}`, Setor: 'CTI - Dr. Joaquim David Ferreira Lima', Competencia: '2026-09', Dispositivo: 'Pacientes-dia', Contagem: '27' })) } };
+    const parcialNiss = rel.consumoAntibioticosMensal(bancosNissParcial, meses, { hojeISO: '2026-10-21' }).find(m => m.mes === '2026-09');
+    verificar('NISS com 6 de 30 dias não vira denominador da UTI: usa as passagens e avisa', parcialNiss.pdUti === 7 && /NISS incompleto: 6 de 30 dias/.test(parcialNiss.fonteUti), [parcialNiss.pdUti, parcialNiss.fonteUti]);
+    verificar('período anterior às passagens cai no censo individual', rel.pacientesDiaHospital(bancos, '2026-07-01', '2026-07-31').origem === 'censo individual de internações'
+      && rel.pacientesDiaHospital(bancos, '2026-09-01', '2026-09-30').origem === 'passagens por setor (2536)');
     verificar('indicadoresReuniao traz consumoAtb com 12 meses', rel.indicadoresReuniao({ ...bancos, iras: { casos: [] }, culturas: { culturas: [], sensibilidade: [] }, isolamentos: { precaucoes: [] }, higiene_maos: { observacoes: [] }, sepse: { casos: [] }, cirurgias: { cirurgias: [] } }, '2026-10-21').consumoAtb.length === 12);
   }
 

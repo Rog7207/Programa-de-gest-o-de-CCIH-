@@ -161,7 +161,7 @@ notificação à Anvisa (dia 15).
 
 | Situação | O que fazer |
 |---|---|
-| 2550 sem a coluna de telefone | puxe o relatório com a coluna; reimporte — a linha existente ganha o telefone |
+| cirurgias entraram sem telefone | reimporte o mesmo 2550 (pelo assistente ou arrastando o arquivo): as cirurgias que já existem ganham o telefone e o caráter que faltavam, nada duplica |
 | 1714 com cirurgias que não estão no banco | o 2550 da mesma semana não entrou; importe-o e reimporte o 1714 |
 | 3066 reconhecido só para um setor | o relatório do Tasy sai por setor; puxe o segundo (UTI neonatal) e importe também |
 | 2485 avisa "duas linhas para o mesmo episódio" | é duplicidade no Tasy; a segunda não entra — corrigir lá, não aqui |

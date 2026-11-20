@@ -1854,7 +1854,9 @@ async function renderPasso4() {
         + c.duplicadasNoTasy.slice(0, 8).map(x => `id ${x.linha.ID_Tasy || '?'} (${x.linha.DataInfeccao} · ${x.linha.Topografia})`).join('; ')
         + (c.duplicadasNoTasy.length > 8 ? '…' : '')) : null)) : null;
   const botaoConfirmar = el('button', { class: 'botao-primario', onclick: () => irParaPasso(4) },
-    d.novos.length || (c && c.casados.length) ? 'Confirmar e gravar' : 'Salvar perfil e arquivar (nada novo)');
+    d.novos.length || (c && c.casados.length) ? 'Confirmar e gravar'
+      : imp.tipo === 'cirurgias' ? 'Completar as cirurgias já existentes (telefone, caráter…) e arquivar'
+      : 'Salvar perfil e arquivar (nada novo)');
 
   imp.area.append(el('div', { class: 'cartao' },
     el('h2', {}, 'Prévia da importação'),
@@ -1952,6 +1954,14 @@ async function renderPasso5() {
     const { novos } = definicao.modo ? { novos: [] } : deduplicar(imp.dedup.novos, existentes, imp.tipo,
       { identidadeDe: identidadePorNome((imp.bancoPacientes || {}).pacientes) });
     if (!definicao.modo) anotar(`Registros a gravar após verificação final: ${fmtInt(novos.length)}`);
+    /* Reimportação de cirurgias pelo assistente (20/11/2026): completa telefone, caráter,
+       cirurgião etc. das cirurgias que JÁ existem — antes só a importação automática fazia isso,
+       e "recarregar" um 2550 pelo assistente não trazia o telefone que faltava. */
+    let cirurgiasCompletadas = 0;
+    if (imp.tipo === 'cirurgias') {
+      cirurgiasCompletadas = atualizarCirurgiasExistentes(existentes, imp.dedup.novos.concat(imp.dedup.duplicados || [], imp.dedup.duplicadosInternos || []));
+      if (cirurgiasCompletadas) anotar(`${fmtInt(cirurgiasCompletadas)} cirurgia(s) já existente(s) completada(s) (telefone, caráter, cirurgião…).`);
+    }
     if (imp.tipo === 'internacoes') {
       const atualizadas = atualizarInternacoesExistentes(existentes, imp.dedup.novos.concat(imp.dedup.duplicados));
       if (atualizadas) {
@@ -1973,7 +1983,7 @@ async function renderPasso5() {
         + `${fmtInt(encerradas)} precauções encerradas por não constarem mais.`);
     }
 
-    if (novos.length || encerradas || conciliados) {
+    if (novos.length || encerradas || conciliados || cirurgiasCompletadas) {
       const gerarID = proximoID(existentes, definicao.campoID, definicao.prefixoID);
       const tempoCorte = config.tempoCortePorProcedimento();
       const linhasSensibilidade = [];

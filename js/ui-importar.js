@@ -131,9 +131,8 @@ async function importarArquivoAutomatico(arquivo) {
   const cabecalhos = (bruto.linhas[linhaCab] || []).map(String);
   const perfil = config.perfilPorFingerprint(calcularFingerprint(cabecalhos));
   if (!perfil) return { nome: arquivo.name, situacao: 'sem perfil — importe manualmente uma vez' };
-  const porNome = {};
-  JSON.parse(perfil.MapeamentoJSON || '[]').forEach(m => { porNome[normalizarTexto(m.cabecalho)] = m.destino; });
-  const mapeamento = cabecalhos.map((cab, i) => ({ coluna: i, cabecalho: cab, destino: porNome[normalizarTexto(cab)] || '' }));
+  /* casa por título E ordem de ocorrência (títulos repetidos, como as duas "Telefone" do 2550) */
+  const mapeamento = mapeamentoDoPerfil(cabecalhos, JSON.parse(perfil.MapeamentoJSON || '[]'), bruto.linhas.slice(linhaCab + 1, linhaCab + 40), perfil.Tipo);
   const tipo = perfil.Tipo;
   const definicao = TIPOS_RELATORIO[tipo];
   const { registros } = normalizarLinhas(bruto.linhas, linhaCab, mapeamento, tipo, config.aliases);
@@ -1565,11 +1564,8 @@ function aplicarPerfil(perfil) {
   imp.tipo = perfil.Tipo;
   imp.nomePerfil = perfil.Nome;
   const salvo = JSON.parse(perfil.MapeamentoJSON || '[]');
-  const porNome = {};
-  salvo.forEach(m => { porNome[normalizarTexto(m.cabecalho)] = m.destino; });
-  imp.mapeamento = imp.cabecalhos.map((cab, i) => ({
-    coluna: i, cabecalho: cab, destino: porNome[normalizarTexto(cab)] || ''
-  }));
+  /* casa por título E ordem de ocorrência (títulos repetidos, como as duas "Telefone" do 2550) */
+  imp.mapeamento = mapeamentoDoPerfil(imp.cabecalhos, salvo, imp.bruto.linhas.slice(imp.linhaCabecalho + 1, imp.linhaCabecalho + 40), perfil.Tipo);
   irParaPasso(2);
 }
 

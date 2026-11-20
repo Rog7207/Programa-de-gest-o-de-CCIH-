@@ -233,3 +233,13 @@ NISS); densidade não aparece quando o NISS do mês está incompleto. ISC sem ci
 `scripts/ligar-isc-cirurgia.js` liga só quando sobra uma candidata na janela depois de tirar as
 cirurgias de 0–1 dia (tratamento da infecção) e linhas repetidas; set/2026: 2 ligadas, 4 para
 decidir na ficha.
+
+## Perfil de importação com colunas de título repetido (20/11/2026)
+
+O 2550 traz duas colunas "Telefone" (a primeira vazia). O perfil casava coluna pelo título e a
+segunda ocorrência, sem destino, sobrescrevia a primeira: o perfil salvo em 16/11 ficou sem
+telefone e 336 das 349 cirurgias da carga entraram sem número (o defeito anterior, de 05/11, era o
+formato do número). Agora `mapeamentoDoPerfil` (importacao.js) casa pela ordem de ocorrência do
+título, herda o destino entre ocorrências repetidas e completa pela sugestão automática o que o
+perfil não mapeou — no assistente e na importação em lote. `preencher-telefones-cirurgias.js`
+passou a ler também os arquivos "reportCATE-2550-…"; aplicado no banco local (335 telefones).

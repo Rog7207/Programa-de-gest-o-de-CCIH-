@@ -38,7 +38,9 @@ const arquivos = [];
 if (fs.existsSync(pastaImp)) for (const sub of fs.readdirSync(pastaImp)) {
   const dir = path.join(pastaImp, sub);
   if (!fs.statSync(dir).isDirectory()) continue;
-  for (const f of fs.readdirSync(dir)) if (/cirur|cesar|\bcc\b/i.test(f) && /\.xlsx?$/i.test(f)) arquivos.push(path.join(dir, f));
+  /* pelo nome que a equipe dá ao arquivo ou pelo número do relatório do Tasy (2550 — o export
+     vem como "reportCATE-2550-…", 20/11/2026) */
+  for (const f of fs.readdirSync(dir)) if (/cirur|cesar|\bcc\b|2550/i.test(f) && /\.xlsx?$/i.test(f)) arquivos.push(path.join(dir, f));
 }
 console.log(`cirurgias no banco: ${banco.cirurgias.length} | sem telefone: ${banco.cirurgias.filter(c => !String(c.Telefone).trim()).length} | relatórios guardados: ${arquivos.length}`);
 

@@ -6794,6 +6794,26 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
     } finally { excel.pasta.handle = handleAntes; }
   }
 
+  /* == 116. Perfil de importação com títulos repetidos (2550: duas colunas "Telefone") — 20/11/2026 == */
+  {
+    console.log('\n== 116. Perfil com duas colunas "Telefone": o telefone não se perde ==');
+    const cab = ['Paciente', 'Atendimento', 'Telefone', 'Telefone', 'Procedimento', 'Data', 'Obito', 'Medico', 'Carater'];
+    const linhas = [cab, ['Fulano de Tal', '1476814', '', '51999990000', 'Colecistectomia', '10/11/2026', 'N', 'Dr. A', 'Eletivo'],
+      ['Beltrana', '1476815', '', '51988880000', 'Cesariana', '11/11/2026', 'N', 'Dr. B', 'Urgência']];
+    const bom = [{ coluna: 0, cabecalho: 'Paciente', destino: 'NomePaciente' }, { coluna: 1, cabecalho: 'Atendimento', destino: 'Atendimento' },
+      { coluna: 2, cabecalho: 'Telefone', destino: 'Telefone' }, { coluna: 3, cabecalho: 'Telefone', destino: '' },
+      { coluna: 4, cabecalho: 'Procedimento', destino: 'Procedimento' }, { coluna: 5, cabecalho: 'Data', destino: 'DataCirurgia' }];
+    const m1 = imp.mapeamentoDoPerfil(cab, bom, linhas.slice(1), 'cirurgias');
+    verificar('perfil bom: o 1º "Telefone" fica com o destino (a 2ª ocorrência sem destino não sobrescreve mais)', m1[2].destino === 'Telefone' && m1[3].destino === '', JSON.stringify(m1.slice(2, 4)));
+    const r1 = imp.normalizarLinhas(linhas, 0, m1, 'cirurgias', []).registros;
+    verificar('e a leitura cai na coluna gêmea quando a 1ª vem vazia: os dois telefones entram', r1.length === 2 && r1.every(r => /\d{10,11}/.test(String(r.Telefone).replace(/\D/g, ''))), JSON.stringify(r1.map(r => r.Telefone)));
+    const defeituoso = bom.map(m => m.cabecalho === 'Telefone' ? { ...m, destino: '' } : m);
+    const m2 = imp.mapeamentoDoPerfil(cab, defeituoso, linhas.slice(1), 'cirurgias');
+    const r2 = imp.normalizarLinhas(linhas, 0, m2, 'cirurgias', []).registros;
+    verificar('perfil salvo com o defeito (as duas sem destino): a sugestão automática recupera o Telefone', m2.some(m => m.destino === 'Telefone')
+      && r2.every(r => /\d{10,11}/.test(String(r.Telefone || '').replace(/\D/g, ''))), JSON.stringify({ map: m2.slice(2, 4), tel: r2.map(r => r.Telefone) }));
+  }
+
   console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
   process.exit(falharam ? 1 : 0);
 })();

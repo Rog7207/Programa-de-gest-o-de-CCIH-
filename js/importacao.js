@@ -247,6 +247,47 @@ function pareceData(valor) {
 
 /* Sugere o mapeamento coluna→campo para um tipo de relatório.
    Retorna [{coluna, cabecalho, destino, pontos}] — destino '' = ignorar, '@antibiograma' = coluna de antibiograma. */
+/* Mapeamento de um arquivo a partir de um perfil salvo (20/11/2026). O perfil casa coluna pelo
+   TÍTULO; com títulos repetidos (o 2550 traz duas colunas "Telefone", a primeira vazia) a casar
+   só pelo nome a segunda sobrescrevia a primeira — e o perfil perdia o destino "Telefone", sem
+   nenhum telefone entrar. Agora casa pela ordem de ocorrência do título (1º "Telefone" com o 1º,
+   2º com o 2º); um título repetido sem destino herda o destino que outra ocorrência dele tem;
+   e campo que o perfil não mapeou e a sugestão automática reconhece (perfil salvo já com o
+   defeito) é preenchido pela sugestão, se ninguém mais o usa. */
+function mapeamentoDoPerfil(cabecalhos, salvo, linhasDados, tipo) {
+  const ocorrenciasSalvas = new Map();
+  for (const m of (salvo || [])) {
+    const k = normalizarTexto(m.cabecalho);
+    if (!ocorrenciasSalvas.has(k)) ocorrenciasSalvas.set(k, []);
+    ocorrenciasSalvas.get(k).push(m.destino || '');
+  }
+  const vistos = new Map();
+  const mapeamento = (cabecalhos || []).map((cab, i) => {
+    const k = normalizarTexto(cab);
+    const n = vistos.get(k) || 0; vistos.set(k, n + 1);
+    const lista = ocorrenciasSalvas.get(k) || [];
+    return { coluna: i, cabecalho: cab, destino: lista[n] || '' };
+  });
+  /* título repetido: se nenhuma das ocorrências ficou com destino, a 1ª herda o de qualquer
+     ocorrência salva (a leitura cai na gêmea quando a 1ª vem vazia) */
+  const usados = new Set(mapeamento.map(m => m.destino).filter(Boolean));
+  for (const [k, lista] of ocorrenciasSalvas) {
+    const destino = lista.find(Boolean);
+    if (!destino || usados.has(destino)) continue;
+    const primeira = mapeamento.find(m => normalizarTexto(m.cabecalho) === k && !m.destino);
+    if (primeira) { primeira.destino = destino; usados.add(destino); }
+  }
+  if (tipo) {
+    const sugestao = sugerirMapeamento(cabecalhos, linhasDados || [], tipo);
+    for (const m of mapeamento) {
+      if (m.destino) continue;
+      const s = sugestao[m.coluna] && sugestao[m.coluna].destino;
+      if (s && !usados.has(s)) { m.destino = s; usados.add(s); }
+    }
+  }
+  return mapeamento;
+}
+
 function sugerirMapeamento(cabecalhos, linhasDados, tipo) {
   const definicao = TIPOS_RELATORIO[tipo];
   const resultado = cabecalhos.map((cab, i) => ({ coluna: i, cabecalho: String(cab).trim(), destino: '', pontos: 0 }));
@@ -5298,7 +5339,7 @@ if (typeof module !== 'undefined' && module.exports) {
     editarRegistro, procedimentoAnvisa, PROCEDIMENTOS_ANVISA, atualizarCirurgiasExistentes, etapa90, contato90Respondido, JANELA_VIGILANCIA,
     textoEvolucaoNormalizado,
     normalizarData, normalizarProntuario, normalizarValorAntibiograma,
-    sugerirMapeamento, normalizarLinhas, validar, deduplicar, chaveNaturalDe, proximoID,
+    sugerirMapeamento, mapeamentoDoPerfil, normalizarLinhas, validar, deduplicar, chaveNaturalDe, proximoID,
     analisarPDFCulturas, ehPseudoProntuario, sugerirUnificacoes, sugerirUnificacoesPorInternacao, paresAtendimentoProntuario, corrigirProntuarioAtendimento, sugerirUnificacoesVocabulario, auditarVocabulario, distanciaEdicao,
     indiceDeObitos, faleceuAposCirurgia, acrescentarObservacao,
     descartarRegistroProvisorio, reverterDescarteProvisorio,

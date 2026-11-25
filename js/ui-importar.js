@@ -288,6 +288,7 @@ async function importarArquivoAutomatico(arquivo) {
         + (conciliacao ? `, ${fmtInt(conciliados)} casos conciliados (digitados)` + (conciliacao.duplicadasNoTasy.length ? `, ⚠ ${fmtInt(conciliacao.duplicadasNoTasy.length)} duplicadas no Tasy ignoradas` : '') : '')
         + (reparadasAntigas ? `, ${fmtInt(reparadasAntigas)} registros antigos reparados` : '')
         + (casaveis ? `, ${fmtInt(casaveis)} registros do laboratório passíveis de unificação` : '')
+        + (tipo === 'cirurgias' && avisoTelefonesCirurgias(validos) ? ' — ' + avisoTelefonesCirurgias(validos) : '')
     };
   });
 }
@@ -1840,6 +1841,8 @@ async function renderPasso4() {
 
   const colunas = definicao.chaveNatural.concat(['Setor']).filter((c, i, a) => a.indexOf(c) === i);
   const amostra = d.novos.slice(0, 10);
+  const avisoTelefone = imp.tipo === 'cirurgias'
+    ? avisoTelefonesCirurgias(d.novos.concat(d.duplicados || [], d.duplicadosInternos || [])) : '';
 
   const areaTrava = el('div', {});
   const c = imp.conciliacao;
@@ -1860,6 +1863,7 @@ async function renderPasso4() {
 
   imp.area.append(el('div', { class: 'cartao' },
     el('h2', {}, 'Prévia da importação'),
+    avisoTelefone ? el('div', { class: 'aviso-alerta' }, avisoTelefone + '. Use "Voltar" para ajustar.') : null,
     el('div', { class: 'grade-cartoes' }, cartoes.map(([rotulo, n]) =>
       el('div', { class: 'cartao cartao-numero' },
         el('div', { class: 'numero-grande' }, fmtInt(n)), el('div', { class: 'texto-suave' }, rotulo)))),

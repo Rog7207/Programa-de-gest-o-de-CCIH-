@@ -4039,6 +4039,18 @@ function casaBuscaLivre(consulta, campos) {
     : textos.some(x => x.includes(t)));
 }
 
+/* Relatório de cirurgias que chega quase sem telefone (25/11/2026): é quase sempre o
+   perfil salvo apontando a coluna errada (as duas "Telefone" do 2550) ou o relatório puxado
+   sem a coluna — e a pós-alta só descobre semanas depois. Devolve o aviso, ou '' se está bem. */
+function avisoTelefonesCirurgias(registros) {
+  const lista = registros || [];
+  if (lista.length < 5) return '';
+  const com = lista.filter(r => String(r.Telefone || '').replace(/\D/g, '').length >= 8).length;
+  if (com >= lista.length * 0.5) return '';
+  return `⚠ só ${com} de ${lista.length} cirurgias com telefone — confira no mapeamento se a coluna `
+    + '"Telefone" preenchida está ligada ao campo Telefone (o 2550 traz duas colunas com esse nome)';
+}
+
 /* Telefone brasileiro para o wa.me: só dígitos, com o 55 na frente.
    Devolve '' quando o número não tem cara de celular/fixo válido. */
 function telefoneWhatsApp(telefone) {
@@ -5354,7 +5366,7 @@ if (typeof module !== 'undefined' && module.exports) {
     momentoCanonico, categoriaProfissional, normalizarObservacaoHigiene, MOMENTOS_OMS,
     principioAtivo, aplicarObitos,
     classificarParaVigilancia, categoriaDeVigilancia, CATEGORIAS_VIGILANCIA, CATEGORIAS_VIGILANCIA_PADRAO,
-    diasDesde, telefoneWhatsApp, casaBuscaLivre, mensagemVigilancia, linkWhatsApp, JANELA_VIGILANCIA,
+    diasDesde, telefoneWhatsApp, avisoTelefonesCirurgias, casaBuscaLivre, mensagemVigilancia, linkWhatsApp, JANELA_VIGILANCIA,
     lerChecklistsTasy, mesclarChecklists, tipoDeChecklist, DISPOSITIVO_DO_CHECKLIST,
     prescricaoAtiva, analisarDose, cursosDeAntibiotico, prescricoesComFimEfetivo, alertasDeAntibioticos, DIAS_CURSO_PROLONGADO, TETO_DOSE_DIARIA_MG,
     grupoTopografia, gravidadeTopografia, mesmoCasoIras, casoIndeterminado, marcarIndeterminados, resolverIndeterminado, STATUS_INDETERMINADO, CLASSE_INDETERMINADA, registrarCasoIras, agruparCasosIrasDuplicados, identidadePorNome, conciliarComTasy, aplicarConciliacao, culturasDoEpisodio, SEM_CULTURA_VALIDA, cirurgiasDoEpisodio, tipoIscDaTopografia, vincularCirurgiaIsc, reclassificarCulturaComoAgente, ISC_JANELA_DIAS, ISC_JANELA_IMPLANTE_DIAS, ISC_CANDIDATAS_DIAS, fichaDeNotificacao, htmlDasFichas,

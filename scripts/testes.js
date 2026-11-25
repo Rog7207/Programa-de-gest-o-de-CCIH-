@@ -2491,6 +2491,14 @@ console.log('\n== 41. Vigilância pós-alta ==');
   verificar('30 dias exatos entram na conta', imp.diasDesde('2026-08-02', '2026-09-01') === 30);
   verificar('data ilegível devolve null', imp.diasDesde('', '2026-09-01') === null);
 
+  {
+    const av = imp.avisoTelefonesCirurgias;
+    const comTel = n => Array.from({ length: n }, () => ({ Telefone: '48999990000' }));
+    const semTel = n => Array.from({ length: n }, () => ({ Telefone: '' }));
+    verificar('aviso de telefones: lote bom não avisa', av(comTel(8).concat(semTel(2))) === '');
+    verificar('aviso de telefones: lote sem telefone avisa', /só 1 de 10/.test(av(comTel(1).concat(semTel(9)))));
+    verificar('aviso de telefones: lote pequeno não avisa', av(semTel(3)) === '');
+  }
   const t = imp.telefoneWhatsApp;
   verificar('celular com DDD ganha 55', t('(48) 99988-7766') === '5548999887766');
   verificar('fixo com DDD ganha 55', t('48 3333-2222') === '554833332222');

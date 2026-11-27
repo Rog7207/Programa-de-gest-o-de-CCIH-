@@ -729,7 +729,8 @@ async function telaFotoInternados(arquivo, leitura) {
       previa.textContent = `Prévia: ${fmtInt(r.internacoes)} internações reconhecidas (${fmtInt(r.setorAtualizado)} mudam de setor, `
         + `${fmtInt(r.leitoAtualizado)} de leito); passagem por setores: ${fmtInt(r.passagensNovas)} abertas, `
         + `${fmtInt(r.transferencias)} transferências, ${fmtInt(r.encerradas)} encerradas (saíram da foto)`
-        + (r.desconhecidos ? `; ${fmtInt(r.desconhecidos)} atendimentos ainda sem internação no banco (importe o censo 50023 antes, se possível).` : '.');
+        + (r.internacoesCriadas ? `; ${fmtInt(r.internacoesCriadas)} internações que o censo não trouxe serão criadas (prontuário pelo 2536)` : '')
+        + (r.desconhecidos ? `; ${fmtInt(r.desconhecidos)} atendimentos sem prontuário conhecido (importe o 2536 antes da foto).` : '.');
     } catch (e) { previa.textContent = 'Erro ao ler o banco: ' + e.message; }
   };
   campoData.addEventListener('change', simular);
@@ -779,7 +780,8 @@ async function telaFotoInternados(arquivo, leitura) {
             r.reconciliacao && (r.reconciliacao.cobertasPelo2536 + r.reconciliacao.fechadasPorPosterior + r.reconciliacao.fechadasPorAlta + r.reconciliacao.invalidas + r.reconciliacao.repetidas)
               ? el('p', { class: 'texto-suave' }, `Passagens conferidas com a movimentação (2536): ${fmtInt(r.reconciliacao.cobertasPelo2536)} da foto já cobertas pelo 2536 retiradas, `
                 + `${fmtInt(r.reconciliacao.fechadasPorPosterior + r.reconciliacao.fechadasPorAlta)} abertas esquecidas fechadas, ${fmtInt(r.reconciliacao.invalidas + r.reconciliacao.repetidas)} inválidas/repetidas retiradas.`) : null,
-            r.desconhecidos ? el('p', { class: 'texto-suave' }, `${fmtInt(r.desconhecidos)} atendimentos sem internação no banco — entram na passagem por setores, mas o setor atual só aparece na internação depois do censo.`) : null,
+            r.internacoesCriadas ? el('p', {}, `${fmtInt(r.internacoesCriadas)} internações criadas para atendimentos que o censo não trouxe (prontuário pelo 2536, data de entrada pela foto).`) : null,
+            r.desconhecidos ? el('p', { class: 'texto-suave' }, `${fmtInt(r.desconhecidos)} atendimentos sem prontuário conhecido — aparecem no leito como "sem cadastro" até o 2536 ou o censo trazê-los.`) : null,
             avisoInternados ? el('p', { class: 'texto-suave' }, avisoInternados) : null));
         } catch (e) {
           imp.detalhes.replaceChildren(el('div', { class: 'cartao aviso-erro' }, 'Erro ao gravar: ' + e.message));
@@ -949,10 +951,13 @@ async function telaMovimentacaoPacientes(arquivo, leitura) {
               const ja = porChave.get(chave);
               if (ja) {
                 if (String(l.SaidaSetor || '').trim() && String(ja.SaidaSetor || '') !== String(l.SaidaSetor)) { ja.SaidaSetor = l.SaidaSetor; saidasAtualizadas++; }
+                if (l.Prontuario && !String(ja.Prontuario || '').trim()) { ja.Prontuario = l.Prontuario; saidasAtualizadas++; }
                 continue;
               }
+              /* o prontuário vai junto: é ele que deixa a foto 2396 criar a internação que o
+                 censo não trouxe (27/11/2026) */
               const nova = { ID_Passagem: gerar(), Atendimento: l.Atendimento, Setor: l.Setor,
-                EntradaSetor: l.EntradaSetor, SaidaSetor: l.SaidaSetor, CriadoPor: app.usuario, CriadoEm: agora };
+                EntradaSetor: l.EntradaSetor, SaidaSetor: l.SaidaSetor, CriadoPor: app.usuario, CriadoEm: agora, Prontuario: l.Prontuario || '' };
               bDen.passagem_setor.push(nova);
               porChave.set(chave, nova);
               novos++;

@@ -1003,7 +1003,7 @@ function prepararVisitaUTI(bancos, setor, hoje) {
     const sinaisInfeccao = [...new Set(evolucoes.slice(0, 3).map(e => e.SinaisInfeccao).filter(Boolean))].join('; ');
     const nome = nomes.get(pron) || '';
     return {
-      prontuario: pron, atendimento: atd, nome, iniciais: iniciaisDe(nome),
+      prontuario: pron, atendimento: atd, nome, iniciais: iniciaisDe(nome), semInternacao: !!i._semInternacao,
       leito: String(i.Leito || '').trim(), setor: String(i.SetorAtual || '').trim(),
       dataInternacao: String(i.DataInternacao || '').slice(0, 10), dias: diasDesde(i.DataInternacao),
       dispositivos, antibioticos, culturasPendentes,

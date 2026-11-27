@@ -243,3 +243,13 @@ formato do número). Agora `mapeamentoDoPerfil` (importacao.js) casa pela ordem 
 título, herda o destino entre ocorrências repetidas e completa pela sugestão automática o que o
 perfil não mapeou — no assistente e na importação em lote. `preencher-telefones-cirurgias.js`
 passou a ler também os arquivos "reportCATE-2550-…"; aplicado no banco local (335 telefones).
+
+**Internados fora da lista do setor (27/11/2026).** A foto 2396 traz só o atendimento; o censo
+50023 só o movimento do dia (~80 linhas). Quem internou num dia sem censo carregado não tinha
+internação no banco e `internadosAgora` o descartava — no dia, 47 dos 263 atendimentos da foto
+(6 dos 27 do CTI). Agora: o 2536 grava o prontuário em cada passagem (colunas novas `Prontuario` e
+`Leito` em `passagem_setor`); a foto cria a internação que falta com esse prontuário e a data de
+entrada da própria foto (igual à do censo em 216/216 conferidos); atendimento sem prontuário em
+lugar nenhum continua na lista, marcado "sem cadastro", em vez de sumir. Ordem da carga diária
+(POP-01) já é 2536 antes da 2396. `scripts/religar-internados-foto.js` fez o reparo único com os
+2536 arquivados (aplicado no banco local: 98.926 passagens com prontuário, 45 internações criadas).

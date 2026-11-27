@@ -1231,7 +1231,7 @@ async function montarUti(conteudo) {
           return el('tr', {},
             el('td', {}, el('strong', {}, p.leito || '?'), setoresInternados.length > 1 && !selSetorLeitos.value ? el('div', { class: 'texto-suave' }, p.setor) : null),
             p.nome ? el('td', { class: 'linha-clicavel', title: 'Abrir a ficha do paciente', onclick: () => abrirPaciente(p.prontuario) }, p.nome)
-              : el('td', { class: 'texto-suave' }, 'nome não encontrado'),
+              : el('td', { class: 'texto-suave' }, p.semInternacao ? 'sem cadastro (atendimento fora do censo e do 2536)' : 'nome não encontrado'),
             el('td', {}, p.prontuario), el('td', { class: 'texto-suave' }, p.atendimento),
             el('td', {}, p.dias === null ? '—' : fmtInt(p.dias)),
             situacao, vitais, evo);

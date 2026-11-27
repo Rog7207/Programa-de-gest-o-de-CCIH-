@@ -152,7 +152,7 @@ const ESQUEMAS = {
          saída datadas. Dá pacientes-dia POR SETOR de verdade — o único que sabe ONDE o
          paciente ficou, não só por onde entrou. */
       passagem_setor: ['ID_Passagem', 'Atendimento', 'Setor', 'EntradaSetor', 'SaidaSetor',
-        'CriadoPor', 'CriadoEm']
+        'CriadoPor', 'CriadoEm', 'Prontuario', 'Leito']
     }
   },
   dispositivos: {

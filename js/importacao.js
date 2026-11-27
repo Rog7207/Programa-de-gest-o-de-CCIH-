@@ -2132,9 +2132,12 @@ function lerFotoInternados(matriz) {
    ganha história — mesmo setor: nada; setor novo: fecha a passagem aberta na data da foto e
    abre outra; atendimento que sumiu da foto: fecha a passagem aberta (saiu ou foi para fora
    do escopo). A primeira passagem de um atendimento começa na DATA DA FOTO, não na entrada:
-   não sabemos onde ele esteve antes da primeira foto. Atendimento sem internação no banco
-   (censo ainda não importado) só conta em `desconhecidos` — a foto não tem prontuário nem nome
-   para criar paciente. Devolve contagens. */
+   não sabemos onde ele esteve antes da primeira foto. Atendimento sem internação no banco: o
+   censo 50023 só traz o movimento do dia, e quem internou num dia sem censo carregado nunca
+   ganhava internação — sumia da lista do setor (27/11/2026: 47 de 263, 6 dos 27 do CTI). A foto
+   não tem prontuário, mas o 2536 tem (gravado na passagem): com ele a internação é CRIADA, com
+   a data de entrada da própria foto (= data da internação no censo, conferido 216/216). Sem
+   prontuário em lugar nenhum, conta em `desconhecidos`. Devolve contagens. */
 function aplicarFotoInternados(foto, dataFoto, bancos, usuario, agora) {
   const dia = String(dataFoto || '').slice(0, 10);
   const internacoes = ((bancos.pacientes || {}).internacoes) || [];
@@ -2153,23 +2156,41 @@ function aplicarFotoInternados(foto, dataFoto, bancos, usuario, agora) {
     if (!String(p.SaidaSetor || '').trim()) abertas.set(normalizarProntuario(p.Atendimento), p);
   }
   const gerarID = proximoID(den.passagem_setor, 'ID_Passagem', 'PAS');
-  const r = { internacoes: 0, setorAtualizado: 0, leitoAtualizado: 0, desconhecidos: 0, passagensNovas: 0, transferencias: 0, encerradas: 0 };
+  /* prontuário de cada atendimento, pelas passagens do 2536 (e pelo índice extra, se vier) */
+  const prontuarioDe = new Map(bancos.prontuarioPorAtendimento || []);
+  for (const p of den.passagem_setor) {
+    const a = normalizarProntuario(p.Atendimento), pr = normalizarProntuario(p.Prontuario);
+    if (a && pr && !prontuarioDe.has(a)) prontuarioDe.set(a, pr);
+  }
+  const gerarIDInternacao = proximoID(internacoes, 'ID_Internacao', 'INT');
+  const r = { internacoes: 0, setorAtualizado: 0, leitoAtualizado: 0, desconhecidos: 0, internacoesCriadas: 0, passagensNovas: 0, transferencias: 0, encerradas: 0 };
   const vistos = new Set();
   for (const f of foto || []) {
     const atd = normalizarProntuario(f.Atendimento);
     if (!atd || vistos.has(atd)) continue;
     vistos.add(atd);
-    const i = porAtd.get(atd);
+    let i = porAtd.get(atd);
+    if (!i && prontuarioDe.has(atd)) {
+      i = { ID_Internacao: gerarIDInternacao(), Prontuario: prontuarioDe.get(atd), Atendimento: atd,
+        DataInternacao: f.DataInternacao || dia, DataAlta: '', SetorAtual: f.Setor, Leito: f.Leito || '',
+        CriadoPor: (usuario || '') + ' (foto 2396)', CriadoEm: agora || '' };
+      internacoes.push(i);
+      porAtd.set(atd, i);
+      r.internacoesCriadas++;
+    }
     if (i) {
       r.internacoes++;
       if (String(i.SetorAtual || '').trim() !== f.Setor) { i.SetorAtual = f.Setor; r.setorAtualizado++; }
       if (f.Leito && String(i.Leito || '').trim() !== f.Leito) { i.Leito = f.Leito; r.leitoAtualizado++; }
     } else r.desconhecidos++;
     const aberta = abertas.get(atd);
-    if (aberta && normalizarTexto(aberta.Setor) === normalizarTexto(f.Setor)) continue;
+    if (aberta && normalizarTexto(aberta.Setor) === normalizarTexto(f.Setor)) {
+      if (f.Leito) aberta.Leito = f.Leito;
+      continue;
+    }
     if (aberta) { aberta.SaidaSetor = dia; r.transferencias++; }
     const nova = { ID_Passagem: gerarID(), Atendimento: atd, Setor: f.Setor, EntradaSetor: dia, SaidaSetor: '',
-      CriadoPor: usuario || '', CriadoEm: agora || '' };
+      CriadoPor: usuario || '', CriadoEm: agora || '', Prontuario: prontuarioDe.get(atd) || '', Leito: f.Leito || '' };
     den.passagem_setor.push(nova);
     abertas.set(atd, nova);
     r.passagensNovas++;
@@ -2281,8 +2302,10 @@ function reconciliarPassagens(passagens, internacoes) {
    fecha — no banco real havia 747 abertas para ~200 leitos. A fonte confiável é a última
    foto dos internados (2396): a passagem de setor ABERTA em denominadores.passagem_setor.
    Devolve uma internação por atendimento presente na última foto, com o setor da passagem
-   (o mais atual) e o leito da internação. Sem passagens (foto nunca importada), cai nas
-   internações sem alta. */
+   (o mais atual) e o leito da internação. Atendimento da foto SEM internação no banco não some
+   mais (27/11/2026): entra com o prontuário e o leito da passagem, marcado `_semInternacao`,
+   para o leito não aparecer vazio. Sem passagens (foto nunca importada), cai nas internações
+   sem alta. */
 function internadosAgora(bancos) {
   const internacoes = (((bancos || {}).pacientes || {}).internacoes || []);
   const passagens = (((bancos || {}).denominadores || {}).passagem_setor || []);
@@ -2301,10 +2324,15 @@ function internadosAgora(bancos) {
   const vistos = new Set();
   for (const p of abertas) {
     const a = normalizarProntuario(p.Atendimento);
-    const i = porAtd.get(a);
-    if (!i || vistos.has(a)) continue;
+    if (!a || vistos.has(a)) continue;
     vistos.add(a);
-    saida.push({ ...i, SetorAtual: String(p.Setor || i.SetorAtual || '').trim() });
+    const i = porAtd.get(a);
+    if (!i) {
+      saida.push({ Atendimento: a, Prontuario: normalizarProntuario(p.Prontuario), DataInternacao: '', DataAlta: '',
+        SetorAtual: String(p.Setor || '').trim(), Leito: String(p.Leito || '').trim(), _semInternacao: true });
+      continue;
+    }
+    saida.push({ ...i, SetorAtual: String(p.Setor || i.SetorAtual || '').trim(), Leito: String(i.Leito || p.Leito || '').trim() });
   }
   return saida;
 }

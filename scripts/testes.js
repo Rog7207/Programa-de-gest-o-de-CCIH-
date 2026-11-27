@@ -1766,6 +1766,25 @@ console.log('\n== 89. Sinais vitais na evolução e preparação da visita à UT
   verificar('internadosAgora: só quem tem passagem aberta (777 saiu, P2 foi transferido para a Unidade 05 pela foto), setor da passagem; sem passagens cai nas internações sem alta',
     agoraLista.map(i => i.Prontuario).sort().join(',') === 'P1,P2,P3' && agoraLista.find(i => i.Prontuario === 'P2').SetorAtual === 'Unidade 05'
     && imp.internadosAgora({ pacientes: bancosFoto.pacientes }).length === 5, JSON.stringify(agoraLista.map(i => i.Prontuario + '@' + i.SetorAtual)));
+  {
+    /* Atendimento fora do censo (27/11/2026): o prontuário vem da passagem do 2536 e a foto
+       cria a internação; sem prontuário nenhum, o leito aparece como sem cadastro. */
+    const b = { pacientes: { internacoes: [{ ID_Internacao: 'INT-000001', Prontuario: 'P1', Atendimento: '111', DataInternacao: '2026-11-01', DataAlta: '' }] },
+      denominadores: { passagem_setor: [
+        { ID_Passagem: 'PSS-1', Atendimento: '900', Prontuario: 'P9', Setor: 'CTI', EntradaSetor: '2026-11-25 10:00:00', SaidaSetor: '' }] } };
+    const foto = [{ Atendimento: '111', DataInternacao: '2026-11-01', Setor: 'CTI', Leito: '3' },
+      { Atendimento: '900', DataInternacao: '2026-11-20', Setor: 'CTI', Leito: '12' },
+      { Atendimento: '950', DataInternacao: '2026-11-26', Setor: 'CTI', Leito: '14' }];
+    const r = imp.aplicarFotoInternados(foto, '2026-11-27', b, 'teste', '');
+    const criada = b.pacientes.internacoes.find(i => i.Atendimento === '900');
+    verificar('foto cria a internação que o censo não trouxe, com o prontuário do 2536 e a entrada da foto',
+      r.internacoesCriadas === 1 && r.desconhecidos === 1 && criada && criada.Prontuario === 'P9' && criada.DataInternacao === '2026-11-20'
+      && criada.Leito === '12' && criada.ID_Internacao === 'INT-000002', JSON.stringify([r, criada]));
+    const lista = imp.internadosAgora(b);
+    const sem = lista.find(i => i.Atendimento === '950');
+    verificar('internadosAgora não descarta atendimento sem internação: entra com o leito da foto, marcado sem cadastro',
+      lista.length === 3 && sem && sem._semInternacao && sem.Leito === '14' && sem.SetorAtual === 'CTI', JSON.stringify(lista));
+  }
   const prepFoto = alertas.prepararVisitaUTI(bancosFoto, '', hoje);
   verificar('visita à UTI segue a última foto: P2 (agora na enfermaria) e P7 (passagem encerrada) saem; ficam P1 e P3',
     prepFoto.pacientes.map(p => p.prontuario).sort().join(',') === 'P1,P3', prepFoto.pacientes.map(p => p.prontuario));

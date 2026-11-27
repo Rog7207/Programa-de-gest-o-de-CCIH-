@@ -273,7 +273,7 @@ async function montarPerfilMicro(conteudo) {
   let bancos;
   try {
     const [bCulturas, bIras, bPacientes] = await Promise.all([
-      lerBanco('culturas'), lerBanco('iras'), lerBanco('pacientes')]);
+      lerBanco('culturas', { comArquivo: true }), lerBanco('iras'), lerBanco('pacientes', { comArquivo: true })]);
     bancos = { culturas: bCulturas, iras: bIras, pacientes: bPacientes };
   } catch (e) { conteudo.append(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message)); return; }
 
@@ -344,7 +344,7 @@ async function montarRelatorioMicro(conteudo) {
   conteudo.append(el('h1', {}, 'Relatório microbiológico'));
   let banco, bancoPacientes;
   try {
-    [banco, bancoPacientes] = await Promise.all([lerBanco('culturas'), lerBanco('pacientes'), carregarIndiceSepse()]);
+    [banco, bancoPacientes] = await Promise.all([lerBanco('culturas', { comArquivo: true }), lerBanco('pacientes', { comArquivo: true }), carregarIndiceSepse()]);
   } catch (e) { conteudo.append(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message)); return; }
   const nomes = new Map(bancoPacientes.pacientes.map(p => [normalizarProntuario(p.Prontuario), p.Nome]));
   const deSepse = c => culturaDeProtocoloSepse(c, indiceSepseUI);

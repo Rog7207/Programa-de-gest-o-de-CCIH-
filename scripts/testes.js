@@ -6841,6 +6841,93 @@ console.log('\n== 61. Fumaça da tela de dispositivos (DOM falso) ==');
       && r2.every(r => /\d{10,11}/.test(String(r.Telefone || '').replace(/\D/g, ''))), JSON.stringify({ map: m2.slice(2, 4), tel: r2.map(r => r.Telefone) }));
   }
 
+  /* == 117. Arquivo morto + gravação que não regrava o que não mudou (27/11/2026) == */
+  {
+    console.log('\n== 117. Arquivo morto e gravação sem mudança ==');
+    global.ESQUEMAS = esquemas.ESQUEMAS;
+    global.normalizarProntuario = imp.normalizarProntuario;
+    const am = require(path.join(__dirname, '..', 'js', 'arquivo-morto.js'));
+    verificar('corte padrão: 1º de janeiro do ano anterior', am.corteArquivoMorto('2026-11-27') === '2025-01-01');
+    const bancos = {
+      pacientes: {
+        pacientes: [{ Prontuario: '1' }, { Prontuario: '2' }, { Prontuario: '3' }, { Prontuario: '4' }],
+        internacoes: [
+          { ID_Internacao: 'INT-1', Prontuario: '1', DataInternacao: '2023-03-01', DataAlta: '2023-03-10' },
+          { ID_Internacao: 'INT-2', Prontuario: '2', DataInternacao: '2024-12-20', DataAlta: '2025-01-05' },
+          { ID_Internacao: 'INT-3', Prontuario: '3', DataInternacao: '2022-05-01', DataAlta: '' },
+          { ID_Internacao: 'INT-4', Prontuario: '4', DataInternacao: '2023-01-01', DataAlta: '2023-01-03' }] },
+      culturas: {
+        culturas: [
+          { ID_Cultura: 'C1', Prontuario: '1', DataColeta: '2023-03-02', StatusRevisao: 'revisada' },
+          { ID_Cultura: 'C2', Prontuario: '1', DataColeta: '2023-03-05', StatusRevisao: 'pendente' },
+          { ID_Cultura: 'C3', Prontuario: '4', DataColeta: '2023-01-02', StatusRevisao: 'revisada', ID_IRAS: 'IRA-9' },
+          { ID_Cultura: 'C4', Prontuario: '4', DataColeta: '2023-01-02', StatusRevisao: 'revisada' },
+          { ID_Cultura: 'C5', Prontuario: '2', DataColeta: '2025-02-01', StatusRevisao: 'revisada' }],
+        sensibilidade: [{ ID_Cultura: 'C1', Antibiotico: 'X' }, { ID_Cultura: 'C5', Antibiotico: 'Y' }] },
+      iras: { casos: [{ ID_IRAS: 'IRA-8', Prontuario: '9', ID_CulturaAgente: 'C4' }] }
+    };
+    const r = am.separarArquivoMorto(bancos, '2025-01-01');
+    const ids = l => l.map(x => x.ID_Cultura || x.ID_Internacao || x.Prontuario).sort().join(',');
+    verificar('culturas: sai só a antiga revisada sem IRAS (C1); pendente, ligada a IRAS (ID_IRAS ou agente) e recente ficam',
+      ids(r.morto.culturas.culturas) === 'C1' && ids(r.ativo.culturas.culturas) === 'C2,C3,C4,C5' && ids(r.morto.culturas.sensibilidade) === 'C1', JSON.stringify(r.contagem));
+    verificar('internações: saem as com entrada e alta antes do corte; alta depois do corte e sem alta ficam',
+      ids(r.morto.pacientes.internacoes) === 'INT-1,INT-4' && ids(r.ativo.pacientes.internacoes) === 'INT-2,INT-3');
+    verificar('cadastro: fica quem ainda tem internação ou cultura no ativo (1 pela cultura pendente, 2, 3, 4 pelas culturas de IRAS)',
+      r.morto.pacientes.pacientes.length === 0 && r.ativo.pacientes.pacientes.length === 4);
+    const r2 = am.separarArquivoMorto({ pacientes: { pacientes: [{ Prontuario: '7' }, { Prontuario: '8' }],
+      internacoes: [{ ID_Internacao: 'I7', Prontuario: '7', DataInternacao: '2022-01-01', DataAlta: '2022-01-02' }] },
+      cirurgias: { cirurgias: [{ Prontuario: '8' }] } }, '2025-01-01');
+    verificar('cadastro sem nada no ativo sai; quem aparece em outra tabela (cirurgia) fica',
+      ids(r2.morto.pacientes.pacientes) === '7' && ids(r2.ativo.pacientes.pacientes) === '8');
+
+    /* pasta falsa em memória para a camada de dados */
+    const excel = require(path.join(__dirname, '..', 'js', 'excel.js'));
+    let relogio = 1000, escritas = [];
+    const novoDir = () => {
+      const arquivos = new Map(), dirs = new Map();
+      const dir = {
+        kind: 'directory',
+        async getFileHandle(nome, op) {
+          if (!arquivos.has(nome)) { if (!(op && op.create)) throw Object.assign(new Error('não existe'), { name: 'NotFoundError' }); arquivos.set(nome, { bytes: new Uint8Array(), mod: relogio++ }); }
+          const reg = arquivos.get(nome);
+          return { kind: 'file', getFile: async () => ({ lastModified: reg.mod, size: reg.bytes.length, arrayBuffer: async () => reg.bytes.buffer.slice(0) }),
+            createWritable: async () => { let buf; return { write: async d => { buf = d; }, close: async () => { reg.bytes = new Uint8Array(buf); reg.mod = relogio++; escritas.push(nome); }, abort: async () => {} }; } };
+        },
+        async getDirectoryHandle(nome, op) {
+          if (!dirs.has(nome)) { if (!(op && op.create)) throw Object.assign(new Error('não existe'), { name: 'NotFoundError' }); dirs.set(nome, novoDir()); }
+          return dirs.get(nome);
+        },
+        async *entries() { for (const [n] of arquivos) yield [n, { kind: 'file' }]; for (const [n, d] of dirs) yield [n, d]; },
+        async removeEntry(nome) { arquivos.delete(nome); }
+      };
+      return dir;
+    };
+    const handleAntes = excel.pasta.handle;
+    excel.pasta.handle = novoDir();
+    try {
+      await excel.gravarBanco('culturas', { culturas: [{ ID_Cultura: 'C5', Prontuario: '2', DataColeta: '2025-02-01' }], sensibilidade: [] });
+      escritas = [];
+      const lido = await excel.lerBanco('culturas');
+      const res = await excel.gravarBanco('culturas', lido);
+      verificar('gravar o que acabou de ser lido, sem mudança, não regrava o arquivo', res.gravado === false && escritas.length === 0, JSON.stringify(escritas));
+      lido.culturas[0].Material = 'Sangue';
+      const res2 = await excel.gravarBanco('culturas', lido);
+      verificar('uma mudança de um campo regrava', res2.gravado === true && escritas.length === 1);
+      await excel.gravarArquivoMorto('culturas', 'ate-2024', { culturas: [{ ID_Cultura: 'C1', Prontuario: '1', DataColeta: '2023-03-02' }], sensibilidade: [{ ID_Cultura: 'C1', Antibiotico: 'X' }] });
+      await excel.gravarArquivoMorto('culturas', 'ate-2024', { culturas: [{ ID_Cultura: 'C1', Prontuario: '1', DataColeta: '2023-03-02' }, { ID_Cultura: 'C0', Prontuario: '1', DataColeta: '2022-01-01' }], sensibilidade: [] });
+      const ativo = await excel.lerBanco('culturas');
+      const tudo = await excel.lerBanco('culturas', { comArquivo: true });
+      verificar('lerBanco sem opção traz só o ativo; com comArquivo junta o arquivo morto (sem repetir C1), marcado _arquivo',
+        ativo.culturas.length === 1 && tudo.culturas.length === 3 && tudo.culturas.filter(c => c._arquivo === 'culturas-ate-2024').length === 2
+        && tudo.sensibilidade.length === 1, JSON.stringify(tudo.culturas.map(c => c.ID_Cultura + ':' + (c._arquivo || ''))));
+      tudo.culturas[0].Material = 'Urina';
+      await excel.gravarBanco('culturas', tudo);
+      const depois = await excel.lerBanco('culturas');
+      verificar('gravar um banco lido com o arquivo morto devolve ao ativo só as linhas ativas',
+        depois.culturas.length === 1 && depois.culturas[0].Material === 'Urina' && depois.sensibilidade.length === 0);
+    } finally { excel.pasta.handle = handleAntes; }
+  }
+
   console.log(`\nResultado: ${passaram} passaram, ${falharam} falharam.`);
   process.exit(falharam ? 1 : 0);
 })();

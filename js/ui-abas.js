@@ -432,20 +432,23 @@ async function montarPacientes(conteudo) {
   conteudo.append(el('h1', {}, 'Pacientes'));
   let banco, bancosBusca;
   try {
-    banco = await lerBanco('pacientes');
+    /* a busca acha também quem está no arquivo morto (só consulta: a unificação abaixo usa
+       só o banco ativo) */
+    banco = await lerBanco('pacientes', { comArquivo: true });
     /* Bancos da busca clínica: quem falhar entra vazio — a busca continua funcionando
        com os critérios que têm dados. */
     const nomes = ['iras', 'culturas', 'antibioticos', 'sepse', 'cirurgias', 'isolamentos'];
-    const lidos = await Promise.all(nomes.map(n => lerBanco(n).catch(() => ({}))));
+    const lidos = await Promise.all(nomes.map(n => lerBanco(n, { comArquivo: n === 'culturas' }).catch(() => ({}))));
     bancosBusca = { pacientes: banco };
     nomes.forEach((n, i) => { bancosBusca[n] = lidos[i]; });
   }
   catch (e) { conteudo.append(el('div', { class: 'cartao aviso-erro' }, 'Erro ao ler o banco: ' + e.message)); return; }
-  const pseudos = banco.pacientes.filter(p => ehPseudoProntuario(p.Prontuario) && p.Descartado !== 'S');
-  const descartados = banco.pacientes.filter(p => ehPseudoProntuario(p.Prontuario) && p.Descartado === 'S');
+  const ativos = lista => (lista || []).filter(l => !l._arquivo);
+  const pseudos = ativos(banco.pacientes).filter(p => ehPseudoProntuario(p.Prontuario) && p.Descartado !== 'S');
+  const descartados = ativos(banco.pacientes).filter(p => ehPseudoProntuario(p.Prontuario) && p.Descartado === 'S');
   /* Com as culturas, entram também os homônimos com PROVA de internação (cultura do
      registro órfão colhida dentro de uma internação do outro número). */
-  const sugestoes = sugerirUnificacoes(banco.pacientes, banco.internacoes || [], (bancosBusca.culturas || {}).culturas || []);
+  const sugestoes = sugerirUnificacoes(ativos(banco.pacientes), ativos(banco.internacoes), ativos((bancosBusca.culturas || {}).culturas));
   const msg = el('p', { class: 'aviso-erro-texto' });
 
   /* "Não é paciente internado": descarte reversível do registro provisório — o cadastro

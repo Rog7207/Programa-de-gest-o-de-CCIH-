@@ -42,7 +42,8 @@ async function montarPaciente(conteudo) {
   try {
     const nomes = ['pacientes', 'culturas', 'antibioticos', 'cirurgias', 'dispositivos',
       'uti', 'iras', 'isolamentos', 'sepse', 'evolucoes', 'sinan'];
-    const lidos = await Promise.all(nomes.map(n => lerBanco(n).catch(() => ({}))));
+    /* a ficha mostra a vida toda do paciente: pacientes e culturas com o arquivo morto */
+    const lidos = await Promise.all(nomes.map(n => lerBanco(n, { comArquivo: true }).catch(() => ({}))));
     bancos = {};
     nomes.forEach((n, i) => { bancos[n] = lidos[i]; });
   } catch (e) {

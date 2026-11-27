@@ -69,6 +69,19 @@ Alguns perfis já entram no cartão com medidor automático; outros (validação
 que o infectologista faz **só nos casos duvidosos** — e controle de procedimentos invasivos)
 por ora são **só cadastro** e ganham o medidor quando chegarmos à tela correspondente.
 
+### Arquivo morto (anos antigos)
+
+Para o banco do dia a dia não pesar, culturas, internações e cadastros de **antes do ano
+passado** vão para a pasta `arquivo/` da pasta de dados (em 2026: tudo antes de 2025). Eles
+continuam aparecendo na **ficha do paciente**, no **perfil** e no **relatório microbiológico** e
+na **busca de pacientes**, mas não podem mais ser editados. Nunca vão para o arquivo: cultura
+pendente ou ligada a IRAS, surto ou isolamento; internação sem alta; cadastro de quem aparece
+em qualquer outra tabela.
+
+**Quando:** uma vez por ano, em **março**, depois de fechado o relatório anual. **Como:**
+Configurações → *Arquivo morto* → **Simular** (mostra quanto sai) → **Arquivar agora**. Peça a
+todos que fechem o aplicativo antes. Há backup automático em `backups/arquivo-morto/`.
+
 ### Rotina da equipe (no Painel)
 
 Esse cadastro alimenta o cartão **Rotina da equipe**, no Painel. Para cada função ele mostra

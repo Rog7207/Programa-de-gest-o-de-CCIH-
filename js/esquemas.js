@@ -3,6 +3,7 @@
 const ESQUEMAS = {
   pacientes: {
     arquivo: 'pacientes.xlsx',
+    arquivoMorto: true,
     abas: {
       pacientes: ['Prontuario', 'Nome', 'DataNascimento', 'Sexo', 'Telefone', 'Descartado', 'DescartadoPor', 'DescartadoEm', 'CriadoPor', 'CriadoEm'],
       internacoes: ['ID_Internacao', 'Prontuario', 'Atendimento', 'DataInternacao', 'DataAlta', 'SetorAtual', 'Leito', 'Clinica', 'Desfecho', 'Obito', 'CriadoPor', 'CriadoEm', 'EditadoPor', 'EditadoEm', 'HistoricoEdicao'],
@@ -11,6 +12,7 @@ const ESQUEMAS = {
   },
   culturas: {
     arquivo: 'culturas.xlsx',
+    arquivoMorto: true,
     abas: {
       culturas: ['ID_Cultura', 'IDOrigem', 'Prontuario', 'DataColeta', 'DataResultado', 'Setor', 'Material', 'Sitio', 'Resultado', 'Microrganismo', 'MecanismoResistencia', 'Antibiograma', 'StatusRevisao', 'AvaliacaoCCIH', 'CriadoPor', 'CriadoEm', 'ID_IRAS',
         /* Regra automática que classificou (ou mandou avaliar por exceção) — 16/10/2026. */

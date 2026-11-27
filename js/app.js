@@ -1050,11 +1050,86 @@ async function montarConfiguracoes(conteudo) {
   conteudo.append(vocabDiv, el('div', { class: 'cartao' }, el('h2', {}, 'Sinônimos (aliases)'), aliasesDiv));
   /* Os cartões de miniapp (QR) agora ficam em CADA ABA (higiene na aba Higiene, decisão de
      ATB na aba Decisão ATB, etc.). Em Configurações ficam só as configurações deles. */
+  conteudo.append(montarArquivoMorto());
   conteudo.append(await montarPlanilhaGoogle());
   conteudo.append(montarMiniappsNaPasta());
   /* GitHub Pages é o plano B para o iPhone: com a planilha do Google configurada, o
      próprio Apps Script serve os miniapps por https (?app=…), e este cartão só confunde. */
   if (!(await sincronizacaoGoogle.configurada())) conteudo.append(montarPublicacaoWeb());
+}
+
+/* ---- Arquivo morto (27/11/2026) ----
+   Tira do banco do dia a dia o que é anterior ao ano passado (regras em arquivo-morto.js) e
+   guarda em arquivo/<banco>-ate-AAAA.xlsx, só para consulta. Uma vez por ano, em março,
+   depois de fechado o relatório anual. Backup completo antes, em backups/arquivo-morto. */
+const BANCOS_DA_SEPARACAO = ['pacientes', 'culturas', 'iras', 'cirurgias', 'antibioticos', 'isolamentos',
+  'sepse', 'surtos', 'uti', 'evolucoes', 'dispositivos', 'sinan', 'denominadores'];
+function montarArquivoMorto() {
+  const corte = corteArquivoMorto(hojeISO());
+  const lote = 'ate-' + (Number(corte.slice(0, 4)) - 1);
+  const area = el('div', {});
+  const carta = el('div', { class: 'cartao' }, el('h2', {}, 'Arquivo morto (anos antigos)'),
+    el('p', { class: 'texto-suave' }, `O banco do dia a dia fica com ${corte.slice(0, 4)} em diante; culturas, internações e cadastros `
+      + `anteriores vão para a pasta "arquivo/" e continuam aparecendo na ficha do paciente, no perfil e no relatório microbiológico e na busca `
+      + `de pacientes — só não podem mais ser editados. Nunca saem: cultura pendente ou ligada a IRAS, surto ou isolamento; internação sem alta; `
+      + `cadastro de quem aparece em qualquer outra tabela. Faça uma vez por ano, em março. Todos devem fechar o aplicativo antes.`),
+    area);
+  const lotes = async () => {
+    const partes = [];
+    for (const nome of ['pacientes', 'culturas']) {
+      for (const l of await lerArquivoMorto(nome)) {
+        partes.push(`${l.nome}: ` + Object.entries(l.abas).filter(([, v]) => v.length).map(([a, v]) => `${fmtInt(v.length)} ${a}`).join(', '));
+      }
+    }
+    return partes;
+  };
+  const desenhar = async () => {
+    const existentes = await lotes().catch(() => []);
+    area.replaceChildren(
+      el('p', {}, existentes.length ? 'Já arquivado: ' + existentes.join(' · ') : 'Nada arquivado ainda.'),
+      el('button', { class: 'botao-secundario', onclick: simular }, `Simular arquivamento até 31/12/${corte.slice(0, 4) - 1}`));
+  };
+  const lerTudo = async () => {
+    const lidos = await Promise.all(BANCOS_DA_SEPARACAO.map(n => lerBanco(n).catch(() => ({}))));
+    return Object.fromEntries(BANCOS_DA_SEPARACAO.map((n, i) => [n, lidos[i]]));
+  };
+  async function simular() {
+    area.replaceChildren(el('p', {}, 'Lendo os bancos…'));
+    try {
+      const r = separarArquivoMorto(await lerTudo(), corte);
+      const c = r.contagem;
+      if (!c.pacientes && !c.internacoes && !c.culturas) { area.replaceChildren(el('p', {}, 'Nada anterior ao corte para arquivar.')); return; }
+      area.replaceChildren(
+        el('p', {}, `Sairiam do banco do dia a dia: ${fmtInt(c.internacoes)} internações, ${fmtInt(c.pacientes)} cadastros, `
+          + `${fmtInt(c.culturas)} culturas (${fmtInt(c.sensibilidade)} linhas de antibiograma), anteriores a ${corte.split('-').reverse().join('/')}.`),
+        el('div', { class: 'linha-botoes' },
+          el('button', { class: 'botao-primario', onclick: executar }, 'Arquivar agora (com backup)'),
+          el('button', { class: 'botao-secundario', onclick: desenhar }, 'Cancelar')));
+    } catch (e) { area.replaceChildren(el('p', { class: 'aviso-erro-texto' }, 'Erro: ' + e.message)); }
+  }
+  async function executar() {
+    if (!confirm('Arquivar os anos antigos agora? Confirme que mais ninguém está com o aplicativo aberto.')) return;
+    area.replaceChildren(el('p', {}, 'Arquivando… não feche a página.'));
+    try {
+      const r = await comTrava(['pacientes', 'culturas'], async () => {
+        const bancos = await lerTudo();
+        const sep = separarArquivoMorto(bancos, corte);
+        await salvarBackup(['pacientes', 'culturas'], 'arquivo-morto',
+          { operacao: 'arquivo morto', corte, por: app.usuario, em: agoraCurto(), contagem: sep.contagem });
+        /* arquivo morto PRIMEIRO: se algo falhar no meio, o pior caso é linha repetida
+           (ativo + arquivo), nunca linha perdida */
+        await gravarArquivoMorto('pacientes', lote, sep.morto.pacientes);
+        await gravarArquivoMorto('culturas', lote, sep.morto.culturas);
+        await gravarBanco('pacientes', Object.assign({}, bancos.pacientes, sep.ativo.pacientes));
+        await gravarBanco('culturas', Object.assign({}, bancos.culturas, sep.ativo.culturas));
+        return sep.contagem;
+      });
+      area.replaceChildren(el('p', {}, `Arquivado: ${fmtInt(r.internacoes)} internações, ${fmtInt(r.pacientes)} cadastros e `
+        + `${fmtInt(r.culturas)} culturas foram para arquivo/ (lote ${lote}). Backup em backups/arquivo-morto/.`));
+    } catch (e) { area.replaceChildren(el('p', { class: 'aviso-erro-texto' }, 'Não arquivado: ' + e.message)); }
+  }
+  desenhar();
+  return carta;
 }
 
 /* Planilha do Google dos miniapps (decisão de 03/10/2026): higiene das mãos e decisão de

@@ -253,3 +253,21 @@ entrada da própria foto (igual à do censo em 216/216 conferidos); atendimento 
 lugar nenhum continua na lista, marcado "sem cadastro", em vez de sumir. Ordem da carga diária
 (POP-01) já é 2536 antes da 2396. `scripts/religar-internados-foto.js` fez o reparo único com os
 2536 arquivados (aplicado no banco local: 98.926 passagens com prontuário, 45 internações criadas).
+
+**Fase 1 do desempenho (27/11/2026).** Banco lento com 4 pessoas: cada gravação reescreve o
+arquivo inteiro e segura a trava. Decidido: (1) **arquivo morto** — ativo = ano corrente + ano
+anterior; o resto de pacientes (cadastro, internações) e culturas (+ sensibilidade) vai para
+`arquivo/<banco>-ate-AAAA.xlsx`, só consulta (`lerBanco(nome, { comArquivo: true })` na ficha,
+perfil/relatório micro e busca de pacientes; `gravarBanco` descarta linhas `_arquivo`). Exceções
+e regras em `js/arquivo-morto.js`. Uma vez por ano, em março (botão em Configurações ou
+`scripts/arquivo-morto.js`). Aplicado no banco local: 27.237 internações, 17.812 cadastros, 15.452
+culturas; leitura de pacientes 7,5→5,2 s, culturas 4,3→2,9 s; conferido linha a linha, nada perdido.
+(2) `gravarBanco` **não regrava** arquivo sem mudança (impressão digital de 64 bits do conteúdo +
+assinatura do disco). (3) **Conexão** não relê os arquivos para conferir a estrutura quando a
+assinatura e a versão do esquema são as mesmas da última conferência (memória no IndexedDB) —
+antes, cada aba aberta pelo menu lia o banco inteiro 3 vezes (~900 MB na rede).
+Descartado por ora: dividir pacientes.xlsx/denominadores.xlsx em arquivos menores — com
+computadores em versões diferentes do app, uma versão antiga gravaria por cima sem ver o
+arquivo novo. Fica para o servidor (fase 2: Python + SQLite num computador da CCIH).
+Pendência conhecida: reimportar um laudo antigo (anterior ao corte) duplicaria a cultura, porque
+a deduplicação olha só o ativo.

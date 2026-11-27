@@ -182,6 +182,15 @@ const pasta = {
       atual = await atual.getDirectoryHandle(parte, { create: true });
     }
     return atual;
+  },
+
+  /* Subpasta só se já existir (null se não) — ler o arquivo morto não cria pasta nenhuma. */
+  async subpastaExistente(caminho) {
+    try {
+      let atual = this.handle;
+      for (const parte of caminho.split('/')) atual = await atual.getDirectoryHandle(parte);
+      return atual;
+    } catch (e) { return null; }
   }
 };
 
@@ -247,7 +256,84 @@ async function _comReleitura(fn, tentativas) {
   }
 }
 
-async function lerBanco(nomeEsquema) {
+/* `opcoes.comArquivo`: junta as linhas do arquivo morto (arquivo/<banco>-*.xlsx), marcadas
+   com `_arquivo` — só para telas de CONSULTA (ficha, perfil e relatório microbiológico, busca).
+   gravarBanco descarta essas linhas: o arquivo morto nunca volta para o banco ativo. */
+async function lerBanco(nomeEsquema, opcoes) {
+  const resultado = await _lerBancoAtivo(nomeEsquema);
+  if (opcoes && opcoes.comArquivo && ESQUEMAS[nomeEsquema].arquivoMorto) {
+    for (const lote of await lerArquivoMorto(nomeEsquema)) {
+      for (const [aba, linhas] of Object.entries(lote.abas)) {
+        if (!resultado[aba]) continue;
+        for (const l of linhas) resultado[aba].push(Object.assign(l, { _arquivo: lote.nome }));
+      }
+    }
+  }
+  return resultado;
+}
+
+/* Lotes do arquivo morto de um banco: [{ nome, abas }], do mais antigo ao mais novo.
+   Cada arquivo fica na cache por assinatura, como os do banco ativo. */
+const PASTA_ARQUIVO_MORTO = 'arquivo';
+function _nomeBaseArquivo(nomeEsquema) { return ESQUEMAS[nomeEsquema].arquivo.replace(/\.xlsx$/i, ''); }
+async function lerArquivoMorto(nomeEsquema) {
+  const dir = await pasta.subpastaExistente(PASTA_ARQUIVO_MORTO);
+  if (!dir) return [];
+  const base = _nomeBaseArquivo(nomeEsquema);
+  const nomes = [];
+  for await (const [nome, h] of dir.entries()) {
+    if (h.kind === 'file' && nome.startsWith(base + '-') && /\.xlsx$/i.test(nome)) nomes.push(nome);
+  }
+  const lotes = [];
+  for (const nome of nomes.sort()) {
+    const fh = await dir.getFileHandle(nome);
+    const arquivo = await fh.getFile();
+    const assinatura = arquivo.lastModified + '-' + arquivo.size;
+    const chave = PASTA_ARQUIVO_MORTO + '/' + nome;
+    let guardado = _cacheBancos.get(chave);
+    if (!guardado || guardado.assinatura !== assinatura) {
+      const wb = XLSX.read(new Uint8Array(await arquivo.arrayBuffer()), { type: 'array' });
+      const abas = {};
+      for (const aba of Object.keys(ESQUEMAS[nomeEsquema].abas)) abas[aba] = planilhaParaObjetos(wb, aba);
+      guardado = { assinatura, dados: abas };
+      _cacheBancos.set(chave, guardado);
+    }
+    lotes.push({ nome: nome.replace(/\.xlsx$/i, ''), abas: structuredClone(guardado.dados) });
+  }
+  return lotes;
+}
+
+/* Grava (ou completa) um lote do arquivo morto: arquivo/<banco>-<lote>.xlsx. Se o lote já
+   existe, as linhas novas se juntam às que estavam, sem repetir (pela 1ª coluna da aba). */
+async function gravarArquivoMorto(nomeEsquema, lote, abas) {
+  const esquema = ESQUEMAS[nomeEsquema];
+  const dir = await pasta.subpasta(PASTA_ARQUIVO_MORTO);
+  const nome = `${_nomeBaseArquivo(nomeEsquema)}-${lote}.xlsx`;
+  let existente = {};
+  try {
+    const fh = await dir.getFileHandle(nome);
+    const wb = XLSX.read(new Uint8Array(await (await fh.getFile()).arrayBuffer()), { type: 'array' });
+    for (const aba of Object.keys(esquema.abas)) existente[aba] = planilhaParaObjetos(wb, aba);
+  } catch (e) { existente = {}; }
+  const wb = XLSX.utils.book_new();
+  let total = 0;
+  for (const { nomeAba, colunas, objetos } of _prepararAbas(esquema, Object.fromEntries(Object.keys(esquema.abas).map(aba => {
+    const chave = esquema.abas[aba][0];
+    const vistos = new Set((existente[aba] || []).map(l => String(l[chave])));
+    return [aba, (existente[aba] || []).concat((abas[aba] || []).filter(l => !vistos.has(String(l[chave]))))];
+  })), true)) {
+    total += objetos.length;
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(objetos.map(o => _linhaLimpa(o, colunas)), { header: colunas }), nomeAba);
+  }
+  const fh = await dir.getFileHandle(nome, { create: true });
+  const w = await fh.createWritable();
+  await w.write(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
+  await w.close();
+  _cacheBancos.delete(PASTA_ARQUIVO_MORTO + '/' + nome);
+  return { nome, linhas: total };
+}
+
+async function _lerBancoAtivo(nomeEsquema) {
   const esquema = ESQUEMAS[nomeEsquema];
   let assinatura = null;
   try { assinatura = await _assinaturaDe(esquema.arquivo); } catch (e) { /* arquivo ainda não existe */ }
@@ -275,16 +361,13 @@ async function lerBanco(nomeEsquema) {
    Colunas do esquema na ordem do esquema; colunas que alguém acrescentou pelo Excel são
    preservadas depois delas, e abas desconhecidas voltam intactas — gravar um lote novo
    não pode apagar anotações feitas à mão. */
-async function gravarBanco(nomeEsquema, abas) {
-  const esquema = ESQUEMAS[nomeEsquema];
-  const wb = XLSX.utils.book_new();
-  /* Primeiro só medimos (sem clonar): para cada aba, as colunas (esquema + extras que alguém
-     criou pelo Excel) e o nº de células. */
+/* Para cada aba do esquema: as colunas (esquema + extras que alguém criou pelo Excel) e as
+   linhas — sem as do arquivo morto (`_arquivo`), que nunca voltam ao banco ativo. */
+function _prepararAbas(esquema, abas, manterArquivo) {
   const preparadas = [];
-  let totalCelulas = 0;
   for (const nomeAba of Object.keys(esquema.abas)) {
     const doEsquema = esquema.abas[nomeAba];
-    const objetos = abas[nomeAba] || [];
+    const objetos = manterArquivo ? (abas[nomeAba] || []) : (abas[nomeAba] || []).filter(o => !o._arquivo);
     const extras = [];
     const conhecidas = new Set(doEsquema);
     for (const o of objetos) {
@@ -292,9 +375,59 @@ async function gravarBanco(nomeEsquema, abas) {
         if (!conhecidas.has(chave) && !chave.startsWith('_')) { conhecidas.add(chave); extras.push(chave); }
       }
     }
-    const colunas = doEsquema.concat(extras);
-    preparadas.push({ nomeAba, colunas, objetos });
-    totalCelulas += objetos.length * colunas.length;
+    preparadas.push({ nomeAba, colunas: doEsquema.concat(extras), objetos });
+  }
+  return preparadas;
+}
+function _linhaLimpa(o, colunas) {
+  const limpo = {};
+  colunas.forEach(c => { limpo[c] = o[c] == null ? '' : String(o[c]); });
+  return limpo;
+}
+/* Impressão digital (64 bits) do que iria para o arquivo: colunas + valores como texto, na
+   mesma forma da gravação. Igual à do que está no disco = nada mudou, não regrava. */
+function _hashAbas(preparadas) {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  const mix = s => {
+    for (let i = 0; i < s.length; i++) {
+      const ch = s.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+  };
+  for (const { nomeAba, colunas, objetos } of preparadas) {
+    mix('\u0001' + nomeAba + '\u0002' + colunas.join('\u0003') + '\u0002' + objetos.length);
+    for (const o of objetos) {
+      mix('\u0004');
+      for (const c of colunas) { const v = o[c]; mix(v == null ? '' : String(v)); mix('\u0003'); }
+    }
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0');
+}
+const _mesmaForma = (a, b) => a.length === b.length && a.every((p, i) => p.objetos.length === b[i].objetos.length
+  && p.colunas.length === b[i].colunas.length);
+
+async function gravarBanco(nomeEsquema, abas) {
+  const esquema = ESQUEMAS[nomeEsquema];
+  const wb = XLSX.utils.book_new();
+  /* Primeiro só medimos (sem clonar): para cada aba, as colunas e o nº de células. */
+  const preparadas = _prepararAbas(esquema, abas);
+  const totalCelulas = preparadas.reduce((s, p) => s + p.objetos.length * p.colunas.length, 0);
+  /* Nada mudou desde a leitura (e ninguém gravou o arquivo depois): não regrava. Reescrever
+     pacientes.xlsx inteiro para nada segurava a trava por dezenas de segundos na rede
+     (27/11/2026). */
+  const guardado = _cacheBancos.get(nomeEsquema);
+  if (guardado && guardado.assinatura) {
+    const doDisco = guardado.preparadas || (guardado.preparadas = _prepararAbas(esquema, guardado.dados));
+    if (_mesmaForma(preparadas, doDisco)) {
+      let assinaturaAtual = null;
+      try { assinaturaAtual = await _assinaturaDe(esquema.arquivo); } catch (e) { /* não existe */ }
+      if (assinaturaAtual === guardado.assinatura) {
+        if (!guardado.hash) guardado.hash = _hashAbas(doDisco);
+        if (_hashAbas(preparadas) === guardado.hash) return { gravado: false };
+      }
+    }
   }
   /* Guarda contra OOM: o escritor do SheetJS serializa o arquivo inteiro de uma vez e, perto
      do teto, estoura com "Invalid array length" (um out-of-memory do navegador), travando a
@@ -310,12 +443,7 @@ async function gravarBanco(nomeEsquema, abas) {
       + `volume alto a longo prazo é caso para o servidor/banco, não para o Excel.`);
   }
   for (const { nomeAba, colunas, objetos } of preparadas) {
-    const limpos = objetos.map(o => {
-      const limpo = {};
-      colunas.forEach(c => { limpo[c] = o[c] == null ? '' : String(o[c]); });
-      return limpo;
-    });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(limpos, { header: colunas }), nomeAba);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(objetos.map(o => _linhaLimpa(o, colunas)), { header: colunas }), nomeAba);
   }
   const extrasGuardadas = (_cacheBancos.get(nomeEsquema) || {}).abasExtras || {};
   for (const [nomeAba, linhas] of Object.entries(extrasGuardadas)) {
@@ -327,8 +455,9 @@ async function gravarBanco(nomeEsquema, abas) {
   let assinatura = null;
   try { assinatura = await _assinaturaDe(esquema.arquivo); } catch (e) { /* improvável */ }
   const dados = {};
-  for (const nomeAba of Object.keys(esquema.abas)) dados[nomeAba] = abas[nomeAba] || [];
+  for (const p of preparadas) dados[p.nomeAba] = p.objetos;
   _cacheBancos.set(nomeEsquema, { assinatura, dados: structuredClone(dados), abasExtras: extrasGuardadas });
+  return { gravado: true };
 }
 
 /* ---- Backup + desfazer de uma operação (usado pela unificação de vocabulário) ----
@@ -394,10 +523,39 @@ function abasIniciais(nomeEsquema) {
 /* Confere a pasta inteira ANTES de criar ou migrar qualquer arquivo: sem isto, uma pasta
    escolhida por engano ganhava um banco novo em folha antes de o erro aparecer. Lê só os
    nomes das abas (bookSheets), então é barato mesmo no culturas.xlsx grande. */
+/* ---- Estrutura já conferida (27/11/2026) ----
+   Ao conectar, cada arquivo era lido TRÊS vezes só para conferir abas e colunas (~900 MB pela
+   rede, 5–6 s de processamento) — e cada aba nova aberta pelo menu reconecta. Agora a
+   conferência fica lembrada no navegador pela assinatura do arquivo (data + tamanho) e pela
+   versão do esquema: arquivo que não mudou desde a última conferência não é relido. */
+function _versaoEstrutura(nomeEsquema) {
+  const base = JSON.stringify(ESQUEMAS[nomeEsquema].abas) + (nomeEsquema === 'config' && typeof VOCAB_VERSAO !== 'undefined' ? '|' + VOCAB_VERSAO : '');
+  let h = 0;
+  for (let i = 0; i < base.length; i++) h = Math.imul(h ^ base.charCodeAt(i), 2654435761);
+  return (h >>> 0).toString(16);
+}
+function _chaveEstrutura(nomeEsquema) {
+  return 'estrutura:' + ((pasta.handle && pasta.handle.name) || '') + ':' + ESQUEMAS[nomeEsquema].arquivo;
+}
+async function _estruturaJaConferida(nomeEsquema) {
+  try {
+    const memo = await bancoLocal.ler(_chaveEstrutura(nomeEsquema));
+    if (!memo || memo.versao !== _versaoEstrutura(nomeEsquema)) return false;
+    return memo.assinatura === await _assinaturaDe(ESQUEMAS[nomeEsquema].arquivo);
+  } catch (e) { return false; }
+}
+async function _lembrarEstrutura(nomeEsquema) {
+  try {
+    await bancoLocal.gravar(_chaveEstrutura(nomeEsquema),
+      { versao: _versaoEstrutura(nomeEsquema), assinatura: await _assinaturaDe(ESQUEMAS[nomeEsquema].arquivo) });
+  } catch (e) { /* sem IndexedDB: só não lembra */ }
+}
+
 async function conferirBancoDaPasta() {
   for (const nomeEsquema of Object.keys(ESQUEMAS)) {
     const esquema = ESQUEMAS[nomeEsquema];
     if (!await pasta.existe(esquema.arquivo)) continue;
+    if (await _estruturaJaConferida(nomeEsquema)) continue;
     const wb = XLSX.read(await pasta.lerArquivo(esquema.arquivo), { type: 'array', bookSheets: true });
     if (!Object.keys(esquema.abas).some(aba => wb.SheetNames.includes(aba))) {
       throw new Error(`"${esquema.arquivo}" existe nesta pasta, mas não é um arquivo do banco da CCIH`
@@ -412,10 +570,11 @@ async function garantirEstrutura() {
   for (const nomeEsquema of Object.keys(ESQUEMAS)) {
     const esquema = ESQUEMAS[nomeEsquema];
     if (await pasta.existe(esquema.arquivo)) {
-      await migrarSeNecessario(nomeEsquema);
+      if (!await _estruturaJaConferida(nomeEsquema)) await migrarSeNecessario(nomeEsquema);
     } else {
       await gravarBanco(nomeEsquema, abasIniciais(nomeEsquema));
     }
+    await _lembrarEstrutura(nomeEsquema);
   }
   await pasta.subpasta('importados');
 }
@@ -474,6 +633,8 @@ async function migrarSeNecessario(nomeEsquema) {
 /* Confere se as colunas esperadas existem (alguém pode ter mexido pelo Excel). */
 async function validarEsquema(nomeEsquema) {
   const esquema = ESQUEMAS[nomeEsquema];
+  /* acabou de ser conferido/migrado nesta conexão (ou numa anterior, sem mudar): nada a avisar */
+  if (await _estruturaJaConferida(nomeEsquema)) return [];
   const dados = await pasta.lerArquivo(esquema.arquivo);
   const wb = XLSX.read(dados, { type: 'array', sheetRows: 2 });
   const avisos = [];
@@ -577,5 +738,6 @@ async function registrarCarga(relatorio, tipo, nomeArquivo, linhas) {
 
 /* Exportado só para os testes em Node (o navegador usa tudo como global). */
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { gravarBanco, lerBanco, pasta, LIMITE_CELULAS_ARQUIVO };
+  module.exports = { gravarBanco, lerBanco, pasta, LIMITE_CELULAS_ARQUIVO, lerArquivoMorto, gravarArquivoMorto,
+    _hashAbas, _prepararAbas, _cacheBancos };
 }
